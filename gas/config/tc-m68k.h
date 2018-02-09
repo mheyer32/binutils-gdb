@@ -43,6 +43,11 @@ struct fix;
 #define TARGET_FORMAT "elf32-m68k"
 #endif
 
+#ifdef OBJ_AMIGAHUNK
+#define TARGET_FORMAT "amiga"
+#endif
+
+
 #ifdef TE_APOLLO
 #define COFF_MAGIC		APOLLOM68KMAGIC
 #define COFF_AOUTHDR_MAGIC	APOLLO_COFF_VERSION_NUMBER

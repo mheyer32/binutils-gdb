@@ -1042,6 +1042,7 @@ SFILES = \
 	addrmap.c \
 	agent.c \
 	annotate.c \
+	amigaread.c \
 	arch-utils.c \
 	arch/i386.c \
 	auto-load.c \
@@ -1660,6 +1661,7 @@ COMMON_OBS = $(DEPFILES) $(CONFIG_OBS) $(YYOBJ) \
 	ada-varobj.o \
 	addrmap.o \
 	agent.o \
+	amigaread.o \
 	annotate.o \
 	arch-utils.o \
 	auto-load.o \

@@ -24,6 +24,7 @@
 #include "subsegs.h"
 #include "dwarf2dbg.h"
 #include "dw2gencfi.h"
+#include "struc-symbol.h"
 
 #include "opcode/m68k.h"
 #include "m68k-parse.h"
@@ -1907,7 +1908,8 @@ m68k_ip (char *instring)
 		case 'B':	/* FOO */
 		  if (opP->mode != ABSL
 		      || (flag_long_jumps
-			  && strncmp (instring, "jbsr", 4) == 0))
+			  && opP->disp.exp.X_add_symbol->bsym && opP->disp.exp.X_add_symbol->bsym->name[0] != '.'
+			  && (strncmp (instring, "jbsr", 4) == 0 || strncmp (instring, "jra", 3) == 0)))
 		    losing++;
 		  break;
 
@@ -7427,6 +7429,8 @@ m68k_lookup_cpu (const char *arg, const struct m68k_cpu *table,
 	    arg += 2;
 	}
     }
+  else if (arg[0] == 'c' && arg[1] == 'p' && arg[2] == 'u' && arg[3] == '=')
+    arg += 4;
   else if (arg[0] == 'c' && arg[1] == '6')
     arg += 1;
 
@@ -7739,7 +7743,7 @@ md_show_usage (FILE *stream)
   fprintf (stream, _("\
 -l			use 1 word for refs to undefined symbols [default 2]\n\
 -pic, -k		generate position independent code\n\
--S			turn jbsr into jsr\n\
+-S			turn jbsr into jsr and keeps jra for non local labels.\n\
 --pcrel                 never turn PC-relative branches into absolute jumps\n\
 --register-prefix-optional\n\
 			recognize register names without prefix character\n\

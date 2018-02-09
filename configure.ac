@@ -1143,6 +1143,9 @@ case "${target}" in
   rs6000-*-*)
     noconfigdirs="$noconfigdirs gprof"
     ;;
+  m68k-*-amiga*)
+    noconfigdirs="$noconfigdirs gprof"
+    ;;
   m68k-apollo-*)
     noconfigdirs="$noconfigdirs ld binutils gprof target-libgloss"
     ;;

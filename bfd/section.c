@@ -835,6 +835,21 @@ bfd_section_init (bfd *abfd, asection *newsect)
   newsect->index = abfd->section_count;
   newsect->owner = abfd;
 
+  /* Create a symbol whose only job is to point to this section.  This
+     is useful for things like relocs which are relative to the base
+     of a section.  */
+  newsect->symbol = bfd_make_empty_symbol (abfd);
+  if (newsect->symbol == NULL)
+    return NULL;
+
+  newsect->symbol->name = newsect->name;
+  newsect->symbol->value = 0;
+  newsect->symbol->section = newsect;
+  newsect->symbol->flags = BSF_SECTION_SYM;
+
+  newsect->symbol_ptr_ptr = &newsect->symbol;
+
+
   if (! BFD_SEND (abfd, _new_section_hook, (abfd, newsect)))
     return NULL;
 
@@ -1464,6 +1479,7 @@ bfd_set_section_size (bfd *abfd, sec_ptr ptr, bfd_size_type val)
     }
 
   ptr->size = val;
+  ptr->rawsize = val;
   return TRUE;
 }
 

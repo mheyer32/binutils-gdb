@@ -68,11 +68,13 @@ extern "C" {
 #   if !GNULIB_defined_struct_timespec
 #    undef timespec
 #    define timespec rpl_timespec
+#    ifndef AMIGA
 struct timespec
 {
   time_t tv_sec;
   long int tv_nsec;
 };
+#    endif
 #    define GNULIB_defined_struct_timespec 1
 #   endif
 

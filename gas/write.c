@@ -583,6 +583,13 @@ size_seg (bfd *abfd, asection *sec, void *xxx ATTRIBUTE_UNUSED)
   if (size > 0 && ! seginfo->bss)
     flags |= SEC_HAS_CONTENTS;
 
+#ifdef OBJ_AMIGAHUNK
+  if (size == 0 && 0 == strcmp( sec->name, ".text"))
+      flags |= SEC_HAS_CONTENTS | SEC_CODE;
+//  fprintf(stderr, "%s: %d\n", sec->name, size);
+#endif
+
+
   flags &= ~SEC_RELOC;
   x = bfd_set_section_flags (abfd, sec, flags);
   gas_assert (x);
@@ -1587,7 +1594,11 @@ write_contents (bfd *abfd ATTRIBUTE_UNUSED,
       offsetT count;
 
       gas_assert (f->fr_type == rs_fill);
-      if (f->fr_fix)
+      if (f->fr_fix
+#ifdef OBJ_AMIGAHUNK
+	  || f->fr_var
+#endif
+	  )
 	{
 	  x = bfd_set_section_contents (stdoutput, sec,
 					f->fr_literal, (file_ptr) offset,

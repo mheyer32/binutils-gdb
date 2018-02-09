@@ -1941,6 +1941,19 @@ if test $gdb_cv_var_elf = yes; then
   fi
 fi
 
+# Add Amiga support to GDB, but only if BFD includes Amiga support.
+GDB_AC_CHECK_BFD([for Amiga support in BFD], gdb_cv_var_amiga,
+                 [struct amiga_symbol * asymbol], lib-amiga.h)
+if test $gdb_cv_var_amiga = yes; then
+  CONFIG_OBS="$CONFIG_OBS amigaread.o stap-probe.o dtrace-probe.o"
+  AC_DEFINE(HAVE_AMIGA, 1,
+	    [Define if AMIGA support should be included.])
+  # -ldl is provided by bfd/Makfile.am (LIBDL) <PLUGINS>.
+  if test "$plugins" = "yes"; then
+    AC_SEARCH_LIBS(dlopen, dl)
+  fi
+fi
+
 # Add macho support to GDB, but only if BFD includes it.
 GDB_AC_CHECK_BFD([for Mach-O support in BFD], gdb_cv_var_macho,
                  [bfd_mach_o_lookup_command (NULL, 0, NULL)], mach-o.h)

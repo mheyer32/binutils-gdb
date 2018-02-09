@@ -170,6 +170,9 @@ extern void s_bundle_lock (int);
 extern void s_bundle_unlock (int);
 extern void s_comm (int);
 extern void s_data (int);
+#ifdef OBJ_AMIGAHUNK
+extern void s_data_amiga (int);
+#endif
 extern void s_desc (int);
 extern void s_else (int arg);
 extern void s_elseif (int arg);

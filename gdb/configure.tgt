@@ -351,6 +351,11 @@ m68hc11*-*-*|m6811*-*-*)
 	gdb_sim=../sim/m68hc11/libsim.a
 	;;
 
+m68*-*-amiga*)
+	# Target: Motorola m68k embedded
+	gdb_target_obs="m68k-tdep.o"
+	;;
+
 m68*-*-aout* | m68*-*-coff* | m68*-*-elf* | m68*-*-rtems* | m68*-*-uclinux* | \
 fido-*-elf*)
 	# Target: Motorola m68k embedded

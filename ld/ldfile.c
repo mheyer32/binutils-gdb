@@ -54,6 +54,10 @@ static char *slash = "/";
 #endif
 #endif
 
+#ifndef PARAMS
+#define PARAMS(x) x
+#endif
+
 typedef struct search_arch
 {
   char *name;
@@ -63,6 +67,40 @@ typedef struct search_arch
 static search_dirs_type **search_tail_ptr = &search_head;
 static search_arch_type *search_arch_head;
 static search_arch_type **search_arch_tail_ptr = &search_arch_head;
+
+/* Flavour support.  */
+
+static int flavors_cmp PARAMS ((const void *f1, const void *f2));
+
+static int n_flavors, flavors_len;
+static char **flavors;
+
+static int
+flavors_cmp (f1, f2)
+     const void *f1, *f2;
+{
+  return strcmp (*(char **)f1, *(char **)f2);
+}
+
+void
+ldfile_sort_flavors (void)
+{
+  if (n_flavors > 1)
+    qsort ((void *) flavors, n_flavors, sizeof (char **), flavors_cmp);
+}
+
+void
+ldfile_add_flavor (const char * name)
+{
+  n_flavors++;
+  if (flavors)
+    flavors = (char **) xrealloc ((PTR)flavors, n_flavors * sizeof (char *));
+  else
+    flavors = (char **) xmalloc (sizeof (char *));
+  flavors [n_flavors-1] = (char *) name;
+  flavors_len += strlen (name) + 2;
+}
+
 
 /* Test whether a pathname, after canonicalization, is the same or a
    sub-directory of the sysroot directory.  */
@@ -326,12 +364,14 @@ success:
 /* Search for and open the file specified by ENTRY.  If it is an
    archive, use ARCH, LIB and SUFFIX to modify the file name.  */
 
+#pragma GCC diagnostic ignored "-Wstack-usage="
 bfd_boolean
 ldfile_open_file_search (const char *arch,
 			 lang_input_statement_type *entry,
 			 const char *lib,
 			 const char *suffix)
 {
+  char *flavor_dir = (char *) alloca (flavors_len + n_flavors + 1);
   search_dirs_type *search;
 
   /* If this is not an archive, try to open it in the current
@@ -359,6 +399,7 @@ ldfile_open_file_search (const char *arch,
   for (search = search_head; search != NULL; search = search->next)
     {
       char *string;
+      int count, i;
 
       if (entry->flags.dynamic && !bfd_link_relocatable (&link_info))
 	{
@@ -366,11 +407,20 @@ ldfile_open_file_search (const char *arch,
 	    return TRUE;
 	}
 
+      for (count=n_flavors; count>=0; count--) {
+
+	*flavor_dir = '\0';
+	for (i=0; i<count; i++) {
+	  strcat (flavor_dir, flavors[i]);
+	  strcat (flavor_dir, slash);
+	}
+
+
       if (entry->flags.maybe_archive && !entry->flags.full_name_provided)
-	string = concat (search->name, slash, lib, entry->filename,
+	string = concat (search->name, slash, flavor_dir, lib, entry->filename,
 			 arch, suffix, (const char *) NULL);
       else
-	string = concat (search->name, slash, entry->filename,
+	string = concat (search->name, slash, flavor_dir, entry->filename,
 			 (const char *) 0);
 
       if (ldfile_try_open_bfd (string, entry))
@@ -380,6 +430,7 @@ ldfile_open_file_search (const char *arch,
 	}
 
       free (string);
+    }
     }
 
   return FALSE;

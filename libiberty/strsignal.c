@@ -549,7 +549,7 @@ followed by a newline.
 */
 
 #ifndef HAVE_PSIGNAL
-
+#ifndef AMIGA
 void
 psignal (int signo, char *message)
 {
@@ -568,7 +568,7 @@ psignal (int signo, char *message)
 }
 
 #endif	/* ! HAVE_PSIGNAL */
-
+#endif
 
 /* A simple little main that does nothing but print all the signal translations
    if MAIN is defined and this file is compiled and linked. */

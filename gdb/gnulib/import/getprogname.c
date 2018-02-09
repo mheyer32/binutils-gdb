@@ -143,6 +143,10 @@ getprogname (void)
       free (buf.ps_pathptr);
     }
   return p;
+# elif defined(AMIGA)
+  static char buffer[256];
+  GetProgramName(buffer, 256);
+  return buffer;
 # else
 #  error "getprogname module not ported to this OS"
 # endif

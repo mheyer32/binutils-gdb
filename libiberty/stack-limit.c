@@ -39,8 +39,10 @@ Attempt to increase stack size limit to @var{pref} bytes if possible.
 #ifdef HAVE_STDINT_H
 #include <stdint.h>
 #endif
+#ifndef AMIGA
 #ifdef HAVE_SYS_RESOURCE_H
 #include <sys/resource.h>
+#endif
 #endif
 
 void

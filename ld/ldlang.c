@@ -7499,6 +7499,8 @@ lang_add_reloc (bfd_reloc_code_real_type reloc,
   p->section = section;
   p->name = name;
   p->addend_exp = addend;
+  if (reloc == BFD_RELOC_CTOR)
+	  p->addend_exp->value.value -= section->vma;
 
   p->addend_value = 0;
   p->output_section = NULL;

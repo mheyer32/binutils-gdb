@@ -27,7 +27,29 @@
 #include "opcode/m68k.h"
 
 /* Local function prototypes.  */
+#ifdef TARGET_AMIGA
+const char * const fpcr_names[] =
+{
+  "", "fpiar", "fpsr", "fpiar/fpsr", "fpcr",
+  "fpiar/fpcr", "fpsr/fpcr", "fpiar/fpsr/fpcr"
+};
 
+static char *const reg_names[] =
+{
+  "d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7",
+  "a0", "a1", "a2", "a3", "a4", "a5", "fp", "sp",
+  "ps", "pc"
+};
+
+/* Name of register halves for MAC/EMAC.
+   Seperate from reg_names since 'spu', 'fpl' look weird.  */
+static char *const reg_half_names[] =
+{
+  "d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7",
+  "a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7",
+  "ps", "pc"
+};
+#else
 const char * const fpcr_names[] =
 {
   "", "%fpiar", "%fpsr", "%fpiar/%fpsr", "%fpcr",
@@ -49,6 +71,7 @@ static char *const reg_half_names[] =
   "%a0", "%a1", "%a2", "%a3", "%a4", "%a5", "%a6", "%a7",
   "%ps", "%pc"
 };
+#endif
 
 /* Sign-extend an (unsigned char).  */
 #if __STDC__ == 1
@@ -508,6 +531,7 @@ print_base (int regno, bfd_vma disp, disassemble_info *info)
 {
   if (regno == -1)
     {
+#ifndef TARGET_AMIGA
       (*info->fprintf_func) (info->stream, "%%pc@(");
       (*info->print_address_func) (disp, info);
     }

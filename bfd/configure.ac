@@ -513,6 +513,8 @@ do
     m32r_elf32_linux_le_vec)	 tb="$tb elf32-m32r.lo elf32.lo $elf" ;;
     m68hc11_elf32_vec)		 tb="$tb elf32-m68hc11.lo elf32-m68hc1x.lo elf32.lo $elf" ;;
     m68hc12_elf32_vec)		 tb="$tb elf32-m68hc12.lo elf32-m68hc1x.lo elf32.lo $elf" ;;
+    amiga_vec)			tb="$tb amigaos.lo amigaoslink.lo" ;;
+    aout_amiga_vec)		tb="$tb aout-amiga.lo aout32.lo";;
     m68k_aout_4knbsd_vec)	 tb="$tb m68k4knetbsd.lo aout32.lo" ;;
     m68k_aout_hp300bsd_vec)	 tb="$tb hp300bsd.lo aout32.lo" ;;
     m68k_aout_hp300hpux_vec)	 tb="$tb hp300hpux.lo aout32.lo" ;;

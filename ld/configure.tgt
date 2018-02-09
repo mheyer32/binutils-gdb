@@ -448,6 +448,7 @@ m68hc12-*-*|m6812-*-*)	targ_emul=m68hc12elf
 m68*-sun-sunos[34]*)	targ_emul=sun3 ;;
 m68*-wrs-vxworks*)	targ_emul=sun3 ;;
 m68*-ericsson-ose)	targ_emul=sun3 ;;
+m68*-*-amigaos*)	targ_emul=amiga ; targ_extra_emuls=amiga_bss;;
 m68*-apple-aux*)	targ_emul=m68kaux ;;
 m68k-sony-*)		targ_emul=news ;;
 m68k-hp-bsd*)		targ_emul=hp300bsd ;;

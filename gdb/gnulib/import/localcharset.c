@@ -387,7 +387,9 @@ get_charset_aliases (void)
    name.  */
 
 #ifdef STATIC
+#ifndef AMIGA
 STATIC
+#endif
 #endif
 const char *
 locale_charset (void)

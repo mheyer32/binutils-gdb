@@ -146,6 +146,7 @@ DESCRIPTION
 .{
 .  {* N.B. Update bfd_flavour_name if you change this.  *}
 .  bfd_target_unknown_flavour,
+.  bfd_target_amiga_flavour,
 .  bfd_target_aout_flavour,
 .  bfd_target_coff_flavour,
 .  bfd_target_ecoff_flavour,
@@ -592,6 +593,8 @@ extern const bfd_target alpha_nlm32_vec;
 extern const bfd_target alpha_vms_vec;
 extern const bfd_target alpha_vms_lib_txt_vec;
 extern const bfd_target am33_elf32_linux_vec;
+extern const bfd_target amiga_vec;
+extern const bfd_target aout_amiga_vec;
 extern const bfd_target aout0_be_vec;
 extern const bfd_target aout64_vec;
 extern const bfd_target aout_vec;
@@ -986,6 +989,9 @@ static const bfd_target * const _bfd_target_vector[] =
 	&alpha_vms_lib_txt_vec,
 
 	&am33_elf32_linux_vec,
+
+	&amiga_vec,
+	&aout_amiga_vec,
 
 	&aout0_be_vec,
 #ifdef BFD64
@@ -1882,6 +1888,7 @@ bfd_flavour_name (enum bfd_flavour flavour)
   switch (flavour)
     {
     case bfd_target_unknown_flavour: return "unknown file format";
+    case bfd_target_amiga_flavour: return "amiga-hunk";
     case bfd_target_aout_flavour: return "a.out";
     case bfd_target_coff_flavour: return "COFF";
     case bfd_target_ecoff_flavour: return "ECOFF";

@@ -44,8 +44,11 @@
 
    Must do this before including any system header, since other system
    headers may include stdint.h/inttypes.h.  */
+#undef __STDC_CONSTANT_MACROS
 #define __STDC_CONSTANT_MACROS 1
+#undef __STDC_LIMIT_MACROS
 #define __STDC_LIMIT_MACROS 1
+#undef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS 1
 
 #include <stdarg.h>

@@ -24,6 +24,65 @@
 #undef NO_RELOC
 #include "aout/aout64.h"
 
+static void obj_section PARAMS((int));
+static char * obj_section_name PARAMS ((void));
+
+#ifndef BFD_ASSEMBLER
+/* Get name of section.  */
+static char *
+obj_section_name ()
+{
+  char *name;
+
+  SKIP_WHITESPACE ();
+  if (*input_line_pointer == '"')
+    {
+      int dummy;
+
+      name = demand_copy_C_string (&dummy);
+      if (name == NULL)
+	{
+	  ignore_rest_of_line ();
+	  return NULL;
+	}
+    }
+  else
+    {
+      char *end = input_line_pointer;
+
+      while (0 == strchr ("\n\t,; ", *end))
+	end++;
+      if (end == input_line_pointer)
+	{
+	  as_warn (_("missing name"));
+	  ignore_rest_of_line ();
+	  return NULL;
+	}
+
+      name = xmalloc (end - input_line_pointer + 1);
+      memcpy (name, input_line_pointer, end - input_line_pointer);
+      name[end - input_line_pointer] = '\0';
+      input_line_pointer = end;
+    }
+  SKIP_WHITESPACE ();
+  return name;
+}
+
+
+static void obj_section(int push) {
+	char const * name = obj_section_name();
+	if (name == NULL)
+		return;
+//printf("section: %s\r\n", name);
+	if (0 == strcmp(".rodata", name)
+//|| 0 == strncmp(".text", name, 5)
+	)
+	  s_text(push);
+	else
+	  s_data(push);
+}
+#endif
+
 void
 obj_aout_frob_symbol (symbolS *sym, int *punt ATTRIBUTE_UNUSED)
 {
@@ -332,6 +391,16 @@ const pseudo_typeS aout_pseudo_table[] =
   {"version", s_ignore, 0},
 
   {"optim", s_ignore, 0},	/* For sun386i cc (?).  */
+  {"2byte", cons, 2},
+  {"4byte", cons, 4},
+  {"8byte", cons, 8},
+  {"hidden", s_ignore, 0},
+  {"local", s_ignore, 0},
+  {"section", obj_section, 0},
+  {"section.s", obj_section, 0},
+  {"sect", obj_section, 0},
+  {"sect.s", obj_section, 0},
+  {"swbeg", s_ignore, 0},
 
   /* other stuff */
   {"ABORT", s_abort, 0},

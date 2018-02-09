@@ -580,6 +580,7 @@ TARGET_CPU_HFILES = \
 
 # OBJ files in config
 OBJ_FORMAT_CFILES = \
+	config/obj-amigahunk.c \
 	config/obj-aout.c \
 	config/obj-coff.c \
 	config/obj-ecoff.c \
@@ -591,6 +592,7 @@ OBJ_FORMAT_CFILES = \
 	config/obj-som.c
 
 OBJ_FORMAT_HFILES = \
+	config/obj-amigahunk.h \
 	config/obj-aout.h \
 	config/obj-coff.h \
 	config/obj-ecoff.h \
@@ -844,6 +846,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/m68k-parse.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/macro.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/messages.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/obj-amigahunk.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/obj-aout.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/obj-coff.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/obj-ecoff.Po@am__quote@
@@ -2010,6 +2013,20 @@ xtensa-relax.obj: config/xtensa-relax.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='config/xtensa-relax.c' object='xtensa-relax.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o xtensa-relax.obj `if test -f 'config/xtensa-relax.c'; then $(CYGPATH_W) 'config/xtensa-relax.c'; else $(CYGPATH_W) '$(srcdir)/config/xtensa-relax.c'; fi`
+
+obj-amigahunk.o: config/obj-amigahunk.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT obj-amigahunk.o -MD -MP -MF $(DEPDIR)/obj-amigahunk.Tpo -c -o obj-amigahunk.o `test -f 'config/obj-amigahunk.c' || echo '$(srcdir)/'`config/obj-amigahunk.c
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/obj-amigahunk.Tpo $(DEPDIR)/obj-amigahunk.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='config/obj-amigahunk.c' object='obj-amigahunk.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o obj-amigahunk.o `test -f 'config/obj-amigahunk.c' || echo '$(srcdir)/'`config/obj-amigahunk.c
+
+obj-amigahunk.obj: config/obj-amigahunk.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT obj-amigahunk.obj -MD -MP -MF $(DEPDIR)/obj-amigahunk.Tpo -c -o obj-amigahunk.obj `if test -f 'config/obj-amigahunk.c'; then $(CYGPATH_W) 'config/obj-amigahunk.c'; else $(CYGPATH_W) '$(srcdir)/config/obj-amigahunk.c'; fi`
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/obj-amigahunk.Tpo $(DEPDIR)/obj-amigahunk.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='config/obj-amigahunk.c' object='obj-amigahunk.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o obj-amigahunk.obj `if test -f 'config/obj-amigahunk.c'; then $(CYGPATH_W) 'config/obj-amigahunk.c'; else $(CYGPATH_W) '$(srcdir)/config/obj-amigahunk.c'; fi`
 
 obj-aout.o: config/obj-aout.c
 @am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT obj-aout.o -MD -MP -MF $(DEPDIR)/obj-aout.Tpo -c -o obj-aout.o `test -f 'config/obj-aout.c' || echo '$(srcdir)/'`config/obj-aout.c

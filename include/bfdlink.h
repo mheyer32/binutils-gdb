@@ -190,6 +190,11 @@ struct bfd_link_hash_table
 {
   /* The hash table itself.  */
   struct bfd_hash_table table;
+  /* The back end which created this hash table.  This indicates the
+     type of the entries in the hash table, which is sometimes
+     important information when linking object files of different
+     types together.  */
+  const bfd_target *creator;
   /* A linked list of undefined and common symbols, linked through the
      next field in the bfd_link_hash_entry structure.  */
   struct bfd_link_hash_entry *undefs;

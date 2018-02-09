@@ -159,6 +159,8 @@ ALL_EMULATION_SOURCES = \
 	eaixrs6.c \
 	ealpha.c \
 	ealphavms.c \
+	eamiga.c \
+	eamiga_bss.c \
 	earcv2elf.c \
 	earcv2elfx.c \
 	earcelf.c \

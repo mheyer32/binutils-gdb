@@ -108,12 +108,14 @@ getdtablesize (void)
 {
   struct rlimit lim;
 
+#ifdef RLIMIT_NOFILE
   if (getrlimit (RLIMIT_NOFILE, &lim) == 0
       && 0 <= lim.rlim_cur && lim.rlim_cur <= INT_MAX
       && lim.rlim_cur != RLIM_INFINITY
       && lim.rlim_cur != RLIM_SAVED_CUR
       && lim.rlim_cur != RLIM_SAVED_MAX)
     return lim.rlim_cur;
+#endif
 
   return INT_MAX;
 }

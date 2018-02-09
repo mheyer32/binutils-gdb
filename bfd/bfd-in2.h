@@ -7002,6 +7002,8 @@ struct bfd
       struct bfd_pef_data_struct *pef_data;
       struct bfd_pef_xlib_data_struct *pef_xlib_data;
       struct bfd_sym_data_struct *sym_data;
+      struct amiga_data_struct *amiga_data;
+      struct amiga_ardata_struct *amiga_ar_data;
       void *any;
     }
   tdata;
@@ -7286,6 +7288,7 @@ enum bfd_flavour
 {
   /* N.B. Update bfd_flavour_name if you change this.  */
   bfd_target_unknown_flavour,
+  bfd_target_amiga_flavour,
   bfd_target_aout_flavour,
   bfd_target_coff_flavour,
   bfd_target_ecoff_flavour,

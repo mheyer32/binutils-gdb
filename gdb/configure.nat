@@ -96,6 +96,14 @@ esac
 
 # This is where we actually filter by host and host CPU.
 case ${gdb_host} in
+	amiga)
+	case  ${gdb_host_cpu} in
+	    m68k)
+		# Host: Motorola m68k running AmigaOS.
+		NATDEPFILES="${NATDEPFILES} m68k-amiga-nat.o"
+	;;
+	esac
+	;;
     aix)
 	case ${gdb_host_cpu} in
 	    powerpc)

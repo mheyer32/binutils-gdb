@@ -777,6 +777,7 @@ glob (const char *pattern, int flags, int (*errfunc) (const char *, int),
                     free (name);
                   if (p != NULL)
                     {
+#   if defined HAVE_GETPWNAM_R || defined _LIBC
                       if (malloc_pwtmpbuf == NULL)
                         home_dir = p->pw_dir;
                       else
@@ -800,6 +801,9 @@ glob (const char *pattern, int flags, int (*errfunc) (const char *, int),
 
                           free (pwtmpbuf);
                         }
+# else
+                      home_dir = p->pw_dir;
+# endif
                     }
                 }
             }
@@ -1008,7 +1012,9 @@ glob (const char *pattern, int flags, int (*errfunc) (const char *, int),
                     dirname = malloc (home_len + rest_len + 1);
                     if (dirname == NULL)
                       {
+#   if defined HAVE_GETPWNAM_R || defined _LIBC
                         free (malloc_pwtmpbuf);
+#endif
                         retval = GLOB_NOSPACE;
                         goto out;
                       }
@@ -1020,11 +1026,15 @@ glob (const char *pattern, int flags, int (*errfunc) (const char *, int),
                 dirlen = home_len + rest_len;
                 dirname_modified = 1;
 
-                free (malloc_pwtmpbuf);
+#   if defined HAVE_GETPWNAM_R || defined _LIBC
+                        free (malloc_pwtmpbuf);
+#endif
               }
             else
               {
-                free (malloc_pwtmpbuf);
+#   if defined HAVE_GETPWNAM_R || defined _LIBC
+                        free (malloc_pwtmpbuf);
+#endif
 
                 if (flags & GLOB_TILDE_CHECK)
                   /* We have to regard it as an error if we cannot find the

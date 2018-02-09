@@ -1574,8 +1574,11 @@ translate_from_native_sym_flags (bfd *abfd, aout_symbol_type *cache_ptr)
 }
 
 /* Set the fields of SYM_POINTER according to CACHE_PTR.  */
-
-static bfd_boolean
+bfd_boolean
+translate_to_native_sym_flags (bfd *abfd,
+			       asymbol *cache_ptr,
+			       struct external_nlist *sym_pointer);
+bfd_boolean
 translate_to_native_sym_flags (bfd *abfd,
 			       asymbol *cache_ptr,
 			       struct external_nlist *sym_pointer)
