@@ -101,6 +101,7 @@ amiga_add_options (ns, shortopts, nl, longopts, nrl, really_longopts)
     {"attribute", required_argument, NULL, OPTION_AMIGA_ATTRIBUTE},
     {"fast", no_argument, NULL, OPTION_AMIGA_FAST},
     {"chip", no_argument, NULL, OPTION_AMIGA_CHIP},
+    {"fl", required_argument, NULL, OPTION_FLAVOR},
     {NULL, no_argument, NULL, 0}
   };
 

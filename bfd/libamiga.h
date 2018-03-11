@@ -248,3 +248,11 @@ typedef struct amiga_data_struct {
 #define MEMF_TOTAL	(1L << 19)
 #define MEMF_NO_EXPUNGE	(1L << 31)
 #endif /* MEMF_ANY */
+
+#ifndef NULL
+#define NULL 0
+#endif
+
+#ifndef PARAMS
+#define PARAMS(a) a
+#endif

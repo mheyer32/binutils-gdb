@@ -31,14 +31,18 @@
 							</tool>
 							<tool id="cdt.managedbuild.tool.gnu.assembler.base.10271149" name="GCC Assembler" superClass="cdt.managedbuild.tool.gnu.assembler.base">
 								<option id="gnu.both.asm.option.include.paths.976044285" name="Include paths (-I)" superClass="gnu.both.asm.option.include.paths" valueType="includePath">
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/amigaos-binutils-2.14/include}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/amigaos-binutils-2.14/bfd}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/amigaos-binutils-2.14/gas}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/amigaos-binutils-2.14/binutils-2.14/bfd}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/amigaos-binutils-2.14/ld}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;C:\cygwin\usr\include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils-gdb/gdb}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils-gdb/gdb/common}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/include}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/bfd}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/binutils}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/gas}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/ld}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/opcodes}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/libiberty}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/bfd}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/binutils}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/gas}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/ld}&quot;"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.assembler.input.726219361" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
 							</tool>
@@ -47,14 +51,19 @@
 								<option defaultValue="gnu.c.optimization.level.none" id="gnu.c.compiler.option.optimization.level.690344193" name="Optimization Level" superClass="gnu.c.compiler.option.optimization.level" useByScannerDiscovery="false" valueType="enumerated"/>
 								<option id="gnu.c.compiler.option.debugging.level.180312505" name="Debug Level" superClass="gnu.c.compiler.option.debugging.level" useByScannerDiscovery="false" value="gnu.c.debugging.level.max" valueType="enumerated"/>
 								<option id="gnu.c.compiler.option.include.paths.197459955" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils-gdb/_build/bfd}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils-gdb/include}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils-gdb/bfd}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils-gdb/ld}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils-gdb/gdb}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils-gdb/gdb/common}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/include}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/bfd}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/binutils}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/gas}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/ld}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/opcodes}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/libiberty}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;C:\cygwin\usr\include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;C:\cygwin\lib\gcc\i686-pc-cygwin\5.4.0\include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/bfd}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/binutils}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/gas}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/ld}&quot;"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.1174267022" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>
@@ -111,6 +120,17 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/amigaos-binutils-2.14/ld}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils-gdb/gdb}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils-gdb/gdb/common}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/include}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/bfd}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/binutils}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/gas}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/ld}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/opcodes}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/libiberty}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/bfd}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/binutils}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/gas}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/ld}&quot;"/>
 								</option>
 								<option id="gnu.c.compiler.option.preprocessor.def.symbols.652362073" name="Defined symbols (-D)" superClass="gnu.c.compiler.option.preprocessor.def.symbols" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="IN_GCC=1"/>
@@ -135,6 +155,17 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/amigaos-binutils-2.14/ld}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils-gdb/gdb}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils-gdb/gdb/common}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/include}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/bfd}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/binutils}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/gas}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/ld}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/opcodes}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/libiberty}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/bfd}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/binutils}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/gas}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/ld}&quot;"/>
 								</option>
 								<option id="gnu.cpp.compiler.option.preprocessor.def.625117841" name="Defined symbols (-D)" superClass="gnu.cpp.compiler.option.preprocessor.def" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="IN_GCC=1"/>
@@ -170,6 +201,17 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/amigaos-binutils-2.14/ld}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils-gdb/gdb}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils-gdb/gdb/common}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/include}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/bfd}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/binutils}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/gas}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/ld}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/opcodes}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/libiberty}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/bfd}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/binutils}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/gas}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/ld}&quot;"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.assembler.input.1421786104" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
 							</tool>

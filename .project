@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>binutils-gdb</name>
+	<name>binutils</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -28,7 +28,7 @@
 		<link>
 			<name>_build</name>
 			<type>2</type>
-			<location>D:/develop/workspaces/c1/.build-binutils-gdb</location>
+			<location>D:/develop/workspaces/c1/amiga-gcc/build/binutils</location>
 		</link>
 	</linkedResources>
 </projectDescription>

@@ -1,5 +1,5 @@
 /* linker.c -- BFD linker routines
-   Copyright (C) 1993-2017 Free Software Foundation, Inc.
+   Copyright (C) 1993-2018 Free Software Foundation, Inc.
    Written by Steve Chamberlain and Ian Lance Taylor, Cygnus Support
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -433,7 +433,7 @@ _bfd_link_hash_newfunc (struct bfd_hash_entry *entry,
   if (entry == NULL)
     {
       entry = (struct bfd_hash_entry *)
-          bfd_hash_allocate (table, sizeof (struct bfd_link_hash_entry));
+	  bfd_hash_allocate (table, sizeof (struct bfd_link_hash_entry));
       if (entry == NULL)
 	return entry;
     }
@@ -544,7 +544,7 @@ bfd_wrapped_link_hash_lookup (bfd *abfd,
 	  struct bfd_link_hash_entry *h;
 
 	  /* This symbol is being wrapped.  We want to replace all
-             references to SYM with references to __wrap_SYM.  */
+	     references to SYM with references to __wrap_SYM.  */
 
 	  amt = strlen (l) + sizeof WRAP + 1;
 	  n = (char *) bfd_malloc (amt);
@@ -572,8 +572,8 @@ bfd_wrapped_link_hash_lookup (bfd *abfd,
 	  struct bfd_link_hash_entry *h;
 
 	  /* This is a reference to __real_SYM, where SYM is being
-             wrapped.  We want to replace all references to __real_SYM
-             with references to SYM.  */
+	     wrapped.  We want to replace all references to __real_SYM
+	     with references to SYM.  */
 
 	  amt = strlen (l + sizeof REAL - 1) + 2;
 	  n = (char *) bfd_malloc (amt);
@@ -633,7 +633,7 @@ unwrap_hash_lookup (struct bfd_link_info *info,
 /* Traverse a generic link hash table.  Differs from bfd_hash_traverse
    in the treatment of warning symbols.  When warning symbols are
    created they replace the real symbol, so you don't get to see the
-   real symbol in a bfd_hash_travere.  This traversal calls func with
+   real symbol in a bfd_hash_traverse.  This traversal calls func with
    the real symbol.  */
 
 void
@@ -796,7 +796,7 @@ bfd_generic_link_read_symbols (bfd *abfd)
       if (symsize < 0)
 	return FALSE;
       bfd_get_outsymbols (abfd) = (struct bfd_symbol **) bfd_alloc (abfd,
-                                                                    symsize);
+								    symsize);
       if (bfd_get_outsymbols (abfd) == NULL && symsize != 0)
 	return FALSE;
       symcount = bfd_canonicalize_symtab (abfd, bfd_get_outsymbols (abfd));
@@ -1187,9 +1187,9 @@ generic_link_add_symbol_list (bfd *abfd,
 	  h = (struct generic_link_hash_entry *) bh;
 
 	  /* If this is a constructor symbol, and the linker didn't do
-             anything with it, then we want to just pass the symbol
-             through to the output file.  This will happen when
-             linking with -r.  */
+	     anything with it, then we want to just pass the symbol
+	     through to the output file.  This will happen when
+	     linking with -r.  */
 	  if ((p->flags & BSF_CONSTRUCTOR) != 0
 	      && (h == NULL || h->root.type == bfd_link_hash_new))
 	    {
@@ -1290,10 +1290,10 @@ enum link_action
 static const enum link_action link_action[8][8] =
 {
   /* current\prev    new    undef  undefw def    defw   com    indr   warn  */
-  /* UNDEF_ROW 	*/  {UND,   NOACT, UND,   REF,   REF,   NOACT, REFC,  WARNC },
+  /* UNDEF_ROW	*/  {UND,   NOACT, UND,   REF,   REF,   NOACT, REFC,  WARNC },
   /* UNDEFW_ROW	*/  {WEAK,  NOACT, NOACT, REF,   REF,   NOACT, REFC,  WARNC },
-  /* DEF_ROW 	*/  {DEF,   DEF,   DEF,   MDEF,  DEF,   CDEF,  MDEF,  CYCLE },
-  /* DEFW_ROW 	*/  {DEFW,  DEFW,  DEFW,  NOACT, NOACT, NOACT, NOACT, CYCLE },
+  /* DEF_ROW	*/  {DEF,   DEF,   DEF,   MDEF,  DEF,   CDEF,  MDEF,  CYCLE },
+  /* DEFW_ROW	*/  {DEFW,  DEFW,  DEFW,  NOACT, NOACT, NOACT, NOACT, CYCLE },
   /* COMMON_ROW	*/  {COM,   COM,   COM,   CREF,  COM,   BIG,   REFC,  WARNC },
   /* INDR_ROW	*/  {IND,   IND,   IND,   MDEF,  IND,   CIND,  MIND,  CYCLE },
   /* WARN_ROW   */  {MWARN, WARN,  WARN,  WARN,  WARN,  WARN,  WARN,  NOACT },
@@ -1452,9 +1452,14 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
   do
     {
       enum link_action action;
+      int prev;
 
+      prev = h->type;
+      /* Treat symbols defined by early linker script pass as undefined.  */
+      if (h->ldscript_def)
+	prev = bfd_link_hash_undefined;
       cycle = FALSE;
-      action = link_action[(int) row][(int) h->type];
+      action = link_action[(int) row][prev];
       switch (action)
 	{
 	case FAIL:
@@ -1498,6 +1503,7 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
 	    h->u.def.section = section;
 	    h->u.def.value = value;
 	    h->linker_def = 0;
+	    h->ldscript_def = 0;
 
 	    /* If we have been asked to, we act like collect2 and
 	       identify all functions that might be global
@@ -1530,12 +1536,12 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
 			&& s[CONS_PREFIX_LEN] == s[CONS_PREFIX_LEN + 2])
 		      {
 			/* If this is a definition of a symbol which
-                           was previously weakly defined, we are in
-                           trouble.  We have already added a
-                           constructor entry for the weak defined
-                           symbol, and now we are trying to add one
-                           for the new symbol.  Fortunately, this case
-                           should never arise in practice.  */
+			   was previously weakly defined, we are in
+			   trouble.  We have already added a
+			   constructor entry for the weak defined
+			   symbol, and now we are trying to add one
+			   for the new symbol.  Fortunately, this case
+			   should never arise in practice.  */
 			if (oldtype == bfd_link_hash_defweak)
 			  abort ();
 
@@ -1563,7 +1569,7 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
 	  h->u.c.size = value;
 
 	  /* Select a default alignment based on the size.  This may
-             be overridden by the caller.  */
+	     be overridden by the caller.  */
 	  {
 	    unsigned int power;
 
@@ -1581,15 +1587,15 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
 	  }
 
 	  /* The section of a common symbol is only used if the common
-             symbol is actually allocated.  It basically provides a
-             hook for the linker script to decide which output section
-             the common symbols should be put in.  In most cases, the
-             section of a common symbol will be bfd_com_section_ptr,
-             the code here will choose a common symbol section named
-             "COMMON", and the linker script will contain *(COMMON) in
-             the appropriate place.  A few targets use separate common
-             sections for small symbols, and they require special
-             handling.  */
+	     symbol is actually allocated.  It basically provides a
+	     hook for the linker script to decide which output section
+	     the common symbols should be put in.  In most cases, the
+	     section of a common symbol will be bfd_com_section_ptr,
+	     the code here will choose a common symbol section named
+	     "COMMON", and the linker script will contain *(COMMON) in
+	     the appropriate place.  A few targets use separate common
+	     sections for small symbols, and they require special
+	     handling.  */
 	  if (section == bfd_com_section_ptr)
 	    {
 	      h->u.c.p->section = bfd_make_section_old_way (abfd, "COMMON");
@@ -1604,6 +1610,7 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
 	  else
 	    h->u.c.p->section = section;
 	  h->linker_def = 0;
+	  h->ldscript_def = 0;
 	  break;
 
 	case REF:
@@ -2033,13 +2040,13 @@ _bfd_generic_link_output_symbols (bfd *output_bfd,
 	  else if ((sym->flags & BSF_CONSTRUCTOR) != 0)
 	    {
 	      /* This case normally means that the main linker code
-                 deliberately ignored this constructor symbol.  We
-                 should just pass it through.  This will screw up if
-                 the constructor symbol is from a different,
-                 non-generic, object file format, but the case will
-                 only arise when linking with -r, which will probably
-                 fail anyhow, since there will be no way to represent
-                 the relocs in the output format being used.  */
+		 deliberately ignored this constructor symbol.  We
+		 should just pass it through.  This will screw up if
+		 the constructor symbol is from a different,
+		 non-generic, object file format, but the case will
+		 only arise when linking with -r, which will probably
+		 fail anyhow, since there will be no way to represent
+		 the relocs in the output format being used.  */
 	      h = NULL;
 	    }
 	  else if (bfd_is_und_section (bfd_get_section (sym)))
@@ -2219,7 +2226,7 @@ set_symbol_from_hash (asymbol *sym, struct bfd_link_hash_entry *h)
       break;
     case bfd_link_hash_new:
       /* This can happen when a constructor symbol is seen but we are
-         not building constructors.  */
+	 not building constructors.  */
       if (sym->section != NULL)
 	{
 	  BFD_ASSERT ((sym->flags & BSF_CONSTRUCTOR) != 0);
@@ -2692,14 +2699,14 @@ FUNCTION
 	bfd_link_split_section
 
 SYNOPSIS
-        bfd_boolean bfd_link_split_section (bfd *abfd, asection *sec);
+	bfd_boolean bfd_link_split_section (bfd *abfd, asection *sec);
 
 DESCRIPTION
 	Return nonzero if @var{sec} should be split during a
 	reloceatable or final link.
 
 .#define bfd_link_split_section(abfd, sec) \
-.       BFD_SEND (abfd, _bfd_link_split_section, (abfd, sec))
+.	BFD_SEND (abfd, _bfd_link_split_section, (abfd, sec))
 .
 
 */
@@ -2716,7 +2723,7 @@ FUNCTION
 	bfd_section_already_linked
 
 SYNOPSIS
-        bfd_boolean bfd_section_already_linked (bfd *abfd,
+	bfd_boolean bfd_section_already_linked (bfd *abfd,
 						asection *sec,
 						struct bfd_link_info *info);
 
@@ -2725,7 +2732,7 @@ DESCRIPTION
 	or final link.  Return TRUE if it has.
 
 .#define bfd_section_already_linked(abfd, sec, info) \
-.       BFD_SEND (abfd, _section_already_linked, (abfd, sec, info))
+.	BFD_SEND (abfd, _section_already_linked, (abfd, sec, info))
 .
 
 */
@@ -3075,7 +3082,7 @@ DESCRIPTION
 	Return TRUE on success and FALSE on failure.
 
 .#define bfd_define_common_symbol(output_bfd, info, h) \
-.       BFD_SEND (output_bfd, _bfd_define_common_symbol, (output_bfd, info, h))
+.	BFD_SEND (output_bfd, _bfd_define_common_symbol, (output_bfd, info, h))
 .
 */
 
@@ -3134,7 +3141,7 @@ DESCRIPTION
 	Return the symbol or NULL if no such undefined symbol exists.
 
 .#define bfd_define_start_stop(output_bfd, info, symbol, sec) \
-.       BFD_SEND (output_bfd, _bfd_define_start_stop, (info, symbol, sec))
+.	BFD_SEND (output_bfd, _bfd_define_start_stop, (info, symbol, sec))
 .
 */
 
@@ -3317,7 +3324,7 @@ SYNOPSIS
 	  (bfd *abfd, struct bfd_link_info *info);
 
 DESCRIPTION
-        Stub function for targets that do not implement reloc checking.
+	Stub function for targets that do not implement reloc checking.
 	Return TRUE.
 	This is an internal function.  It should not be called from
 	outside the BFD library.
@@ -3347,8 +3354,8 @@ DESCRIPTION
 	Not enough memory exists to create private data for @var{obfd}.
 
 .#define bfd_merge_private_bfd_data(ibfd, info) \
-.     BFD_SEND ((info)->output_bfd, _bfd_merge_private_bfd_data, \
-.		(ibfd, info))
+.	BFD_SEND ((info)->output_bfd, _bfd_merge_private_bfd_data, \
+.		  (ibfd, info))
 */
 
 /*

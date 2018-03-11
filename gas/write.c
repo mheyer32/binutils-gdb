@@ -1,5 +1,5 @@
 /* write.c - emit .o file
-   Copyright (C) 1986-2017 Free Software Foundation, Inc.
+   Copyright (C) 1986-2018 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -150,6 +150,7 @@ fix_new_internal (fragS *frag,		/* Which frag?  */
 		  offsetT offset,	/* X_add_number.  */
 		  int pcrel,		/* TRUE if PC-relative relocation.  */
 		  RELOC_ENUM r_type	/* Relocation type.  */,
+		  int baserel ATTRIBUTE_UNUSED,
 		  int at_beginning)	/* Add to the start of the list?  */
 {
   fixS *fixP;
@@ -190,6 +191,7 @@ fix_new_internal (fragS *frag,		/* Which frag?  */
 #endif
 
 #ifdef TC_FIX_TYPE
+  fixP->tc_fix_data = baserel;
   TC_INIT_FIX_DATA (fixP);
 #endif
 
@@ -234,10 +236,11 @@ fix_new (fragS *frag,		/* Which frag?  */
 	 symbolS *add_symbol,	/* X_add_symbol.  */
 	 offsetT offset,		/* X_add_number.  */
 	 int pcrel,			/* TRUE if PC-relative relocation.  */
-	 RELOC_ENUM r_type		/* Relocation type.  */)
+	 RELOC_ENUM r_type,		/* Relocation type.  */
+	 int baserel)
 {
   return fix_new_internal (frag, where, size, add_symbol,
-			   (symbolS *) NULL, offset, pcrel, r_type, FALSE);
+			   (symbolS *) NULL, offset, pcrel, r_type, baserel, FALSE);
 }
 
 /* Create a fixup for an expression.  Currently we only support fixups
@@ -250,7 +253,8 @@ fix_new_exp (fragS *frag,		/* Which frag?  */
 	     int size,			/* 1, 2, or 4 usually.  */
 	     expressionS *exp,		/* Expression.  */
 	     int pcrel,			/* TRUE if PC-relative relocation.  */
-	     RELOC_ENUM r_type		/* Relocation type.  */)
+	     RELOC_ENUM r_type,		/* Relocation type.  */
+	     int baserel)
 {
   symbolS *add = NULL;
   symbolS *sub = NULL;
@@ -276,7 +280,7 @@ fix_new_exp (fragS *frag,		/* Which frag?  */
 	exp->X_add_symbol = stmp;
 	exp->X_add_number = 0;
 
-	return fix_new_exp (frag, where, size, exp, pcrel, r_type);
+	return fix_new_exp (frag, where, size, exp, pcrel, r_type, baserel);
       }
 
     case O_symbol_rva:
@@ -306,7 +310,7 @@ fix_new_exp (fragS *frag,		/* Which frag?  */
     }
 
   return fix_new_internal (frag, where, size, add, sub, off, pcrel,
-			   r_type, FALSE);
+			   r_type, baserel, FALSE);
 }
 
 /* Create a fixup at the beginning of FRAG.  The arguments are the same
@@ -317,7 +321,7 @@ fix_at_start (fragS *frag, int size, symbolS *add_symbol,
 	      offsetT offset, int pcrel, RELOC_ENUM r_type)
 {
   return fix_new_internal (frag, 0, size, add_symbol,
-			   (symbolS *) NULL, offset, pcrel, r_type, TRUE);
+			   (symbolS *) NULL, offset, pcrel, r_type, TRUE, 0);
 }
 
 /* Generic function to determine whether a fixup requires a relocation.  */
@@ -964,7 +968,8 @@ fixup_segment (fixS *fixP, segT this_segment)
       add_number = fixP->fx_offset;
 
       if (fixP->fx_addsy != NULL)
-	add_symbol_segment = S_GET_SEGMENT (fixP->fx_addsy);
+//	add_symbol_segment = S_GET_SEGMENT (fixP->fx_addsy);
+	add_symbol_segment = S_IS_WEAK (fixP->fx_addsy) ? undefined_section : S_GET_SEGMENT (fixP->fx_addsy);
 
       if (fixP->fx_subsy != NULL)
 	{
@@ -1113,7 +1118,11 @@ fixup_segment (fixS *fixP, segT this_segment)
 		  else
 		    sprintf (buf2, "%ld", (long) add_number);
 		  as_bad_where (fixP->fx_file, fixP->fx_line,
-				_("value of %s too large for field of %d bytes at %s"),
+				ngettext ("value of %s too large for field "
+					  "of %d byte at %s",
+					  "value of %s too large for field "
+					  "of %d bytes at %s",
+					  fixP->fx_size),
 				buf2, fixP->fx_size, buf);
 		} /* Generic error checking.  */
 	    }
@@ -1465,7 +1474,10 @@ compress_debug (bfd *abfd, asection *sec, void *xxx ATTRIBUTE_UNUSED)
   if (obstack_room (ob) < header_size)
     first_newf = frag_alloc (ob);
   if (obstack_room (ob) < header_size)
-    as_fatal (_("can't extend frag %u chars"), header_size);
+    as_fatal (ngettext ("can't extend frag %lu char",
+			"can't extend frag %lu chars",
+			(unsigned long) header_size),
+	      (unsigned long) header_size);
   last_newf = first_newf;
   obstack_blank_fast (ob, header_size);
   last_newf->fr_type = rs_fill;
@@ -1485,7 +1497,8 @@ compress_debug (bfd *abfd, asection *sec, void *xxx ATTRIBUTE_UNUSED)
       int out_size;
 
       gas_assert (f->fr_type == rs_fill);
-      if (f->fr_fix)
+      if (f->fr_fix
+	  || f->fr_var)
 	{
 	  out_size = compress_frag (strm, f->fr_literal, f->fr_fix,
 				    &last_newf, ob);
@@ -1604,9 +1617,13 @@ write_contents (bfd *abfd ATTRIBUTE_UNUSED,
 					f->fr_literal, (file_ptr) offset,
 					(bfd_size_type) f->fr_fix);
 	  if (!x)
-	    as_fatal (_("can't write %ld bytes to section %s of %s because: '%s'"),
-		      (long) f->fr_fix, sec->name,
-		      stdoutput->filename,
+	    as_fatal (ngettext ("can't write %ld byte "
+				"to section %s of %s: '%s'",
+				"can't write %ld bytes "
+				"to section %s of %s: '%s'",
+				(long) f->fr_fix),
+		      (long) f->fr_fix,
+		      sec->name, stdoutput->filename,
 		      bfd_errmsg (bfd_get_error ()));
 	  offset += f->fr_fix;
 	}
@@ -1627,9 +1644,13 @@ write_contents (bfd *abfd ATTRIBUTE_UNUSED,
 						(file_ptr) offset,
 						(bfd_size_type) fill_size);
 		  if (!x)
-		    as_fatal (_("can't fill %ld bytes in section %s of %s because '%s'"),
-			      (long) fill_size, sec->name,
-			      stdoutput->filename,
+		    as_fatal (ngettext ("can't fill %ld byte "
+					"in section %s of %s: '%s'",
+					"can't fill %ld bytes "
+					"in section %s of %s: '%s'",
+					(long) fill_size),
+			      (long) fill_size,
+			      sec->name, stdoutput->filename,
 			      bfd_errmsg (bfd_get_error ()));
 		  offset += fill_size;
 		}
@@ -1659,9 +1680,13 @@ write_contents (bfd *abfd ATTRIBUTE_UNUSED,
 		    (stdoutput, sec, buf, (file_ptr) offset,
 		     (bfd_size_type) n_per_buf * fill_size);
 		  if (!x)
-		    as_fatal (_("cannot fill %ld bytes in section %s of %s because: '%s'"),
-			      (long)(n_per_buf * fill_size), sec->name,
-			      stdoutput->filename,
+		    as_fatal (ngettext ("can't fill %ld byte "
+					"in section %s of %s: '%s'",
+					"can't fill %ld bytes "
+					"in section %s of %s: '%s'",
+					(long) (n_per_buf * fill_size)),
+			      (long) (n_per_buf * fill_size),
+			      sec->name, stdoutput->filename,
 			      bfd_errmsg (bfd_get_error ()));
 		  offset += n_per_buf * fill_size;
 		}
@@ -1952,11 +1977,11 @@ write_object_file (void)
 #ifdef TC_CONS_FIX_NEW
 	  TC_CONS_FIX_NEW (lie->frag,
 			   lie->word_goes_here - lie->frag->fr_literal,
-			   2, &exp, TC_PARSE_CONS_RETURN_NONE);
+			   2, &exp, TC_PARSE_CONS_RETURN_NONE, 0);
 #else
 	  fix_new_exp (lie->frag,
 		       lie->word_goes_here - lie->frag->fr_literal,
-		       2, &exp, 0, BFD_RELOC_16);
+		       2, &exp, 0, BFD_RELOC_16, 0);
 #endif
 	  *prevP = lie->next_broken_word;
 	}
@@ -2433,7 +2458,11 @@ relax_segment (struct frag *segment_frag_root, segT segment, int pass)
 	    if (offset % fragP->fr_var != 0)
 	      {
 		as_bad_where (fragP->fr_file, fragP->fr_line,
-			      _("alignment padding (%lu bytes) not a multiple of %ld"),
+			      ngettext ("alignment padding (%lu byte) "
+					"not a multiple of %ld",
+					"alignment padding (%lu bytes) "
+					"not a multiple of %ld",
+					(unsigned long) offset),
 			      (unsigned long) offset, (long) fragP->fr_var);
 		offset -= (offset % fragP->fr_var);
 	      }

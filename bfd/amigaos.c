@@ -878,7 +878,7 @@ parse_archive_units (
 static bfd_boolean amiga_digest_file (
   bfd *abfd)
 {
-  struct stat stat_buffer;
+  ufile_ptr file_size;
   unsigned long tmp;
 
   if (!get_long (abfd, &tmp))
@@ -891,12 +891,11 @@ static bfd_boolean amiga_digest_file (
     {
     case HUNK_UNIT:
       /* Read the unit(s) */
-      if (bfd_stat (abfd, &stat_buffer) < 0)
-	return FALSE;
+      file_size = bfd_get_file_size(abfd);
 /*
       while ((pos=bfd_tell (abfd)) < stat_buffer.st_size)
 	{*/
-      if (!amiga_read_unit (abfd, stat_buffer.st_size - abfd->origin))
+      if (!amiga_read_unit (abfd, file_size))
 	return FALSE;
       if (abfd->arelt_data)
 	arelt_size (abfd) = bfd_tell (abfd);
@@ -1611,7 +1610,7 @@ amiga_write_object_contents (
 {
   long datadata_relocs=0,bss_size=0,idx;
   int *index_map,max_hunk=-1;
-  sec_ptr data_sec, p, q, stab = 0, stabstr = 0;
+  sec_ptr data_sec = 0, p, q, stab = 0, stabstr = 0;
   unsigned long n[5];
 
   /* Distinguish UNITS, LOAD Files

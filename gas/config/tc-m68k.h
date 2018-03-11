@@ -1,5 +1,5 @@
 /* This file is tc-m68k.h
-   Copyright (C) 1987-2017 Free Software Foundation, Inc.
+   Copyright (C) 1987-2018 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -153,10 +153,14 @@ extern int m68k_parse_long_option (char *);
 
 #define md_operand(x)
 
+#define TARGET_WORD_SIZE 32
 #define TARGET_ARCH bfd_arch_m68k
 
 extern struct relax_type md_relax_table[];
 #define TC_GENERIC_RELAX_TABLE md_relax_table
+
+#define TC_FIX_TYPE char
+#define TC_INIT_FIX_DATA(p)
 
 /* We can't do a byte jump to the next instruction, so in that case
    force word mode by faking AIM.  */

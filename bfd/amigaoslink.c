@@ -68,15 +68,6 @@ the original routines from @file{linker.c} and @file{reloc.c}.
 #include "genlink.h"
 #include "libamiga.h"
 
-
-#ifndef PARAMS
-#define PARAMS(a) a
-#endif
-
-#ifndef NULL
-#define NULL 0
-#endif
-
 #ifndef alloca
 extern PTR alloca PARAMS ((size_t));
 #endif
@@ -465,7 +456,11 @@ get_relocated_section_contents (
   if (bfd_get_flavour (input_bfd) == bfd_target_amiga_flavour)
     reloc_func = amiga_perform_reloc;
   else if (bfd_get_flavour (input_bfd) == bfd_target_aout_flavour)
-    reloc_func = aout_perform_reloc;
+    {
+      reloc_func = aout_perform_reloc;
+      if (!input_section->rawsize)
+	input_section->rawsize = input_section->size;
+    }
   else
     {
       bfd_set_error (bfd_error_bad_value);
@@ -614,9 +609,13 @@ my_add_to (
 
     case 1: /* word size */
       if ((flags & ADDEND_UNSIGNED) == 0)
-	val = bfd_getb_signed_16 (p) + add;
+	val = bfd_getb_signed_16 (p);
       else
-	val = bfd_getb16 (p) + add;
+	val = bfd_getb16 (p);
+
+//      printf("%p: %04x+%04x=%05x %s %s\n", p, val, add, val + add, (*r->sym_ptr_ptr)->name, (*r->sym_ptr_ptr)->the_bfd->filename);
+      val += add;
+
       /* check for overflow */
       if ((flags & RELOC_SIGNED) != 0) {
 	if (val<-0x8000 || val>0x7fff)
@@ -955,8 +954,10 @@ aout_perform_reloc (
 		 sym->name));
       break;
 
+     case H_PC16:
+      if (r->address == 0x80000000)
+	return bfd_reloc_ok;
     case H_PC8: /* pcrel */
-    case H_PC16:
     case H_PC32:
       if (bfd_is_abs_section(target_section)) /* Ref to absolute hunk */
 	relocation=sym->value;
