@@ -1,6 +1,6 @@
 /* Trace file TFILE format support in GDB.
 
-   Copyright (C) 1997-2017 Free Software Foundation, Inc.
+   Copyright (C) 1997-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -422,7 +422,6 @@ tfile_read (gdb_byte *readbuf, int size)
 static void
 tfile_open (const char *arg, int from_tty)
 {
-  char *temp;
   int flags;
   int scratch_chan;
   char header[TRACE_HEADER_SIZE];

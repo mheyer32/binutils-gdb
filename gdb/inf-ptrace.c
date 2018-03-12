@@ -1,6 +1,6 @@
 /* Low-level child interface to ptrace.
 
-   Copyright (C) 1988-2017 Free Software Foundation, Inc.
+   Copyright (C) 1988-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -241,18 +241,14 @@ inf_ptrace_post_attach (struct target_ops *self, int pid)
 
 #endif
 
-/* Detach from the inferior, optionally passing it the signal
-   specified by ARGS.  If FROM_TTY is non-zero, be chatty about it.  */
+/* Detach from the inferior.  If FROM_TTY is non-zero, be chatty about it.  */
 
 static void
-inf_ptrace_detach (struct target_ops *ops, const char *args, int from_tty)
+inf_ptrace_detach (struct target_ops *ops, inferior *inf, int from_tty)
 {
   pid_t pid = ptid_get_pid (inferior_ptid);
-  int sig = 0;
 
   target_announce_detach (from_tty);
-  if (args)
-    sig = atoi (args);
 
 #ifdef PT_DETACH
   /* We'd better not have left any breakpoints in the program or it'll
@@ -260,25 +256,23 @@ inf_ptrace_detach (struct target_ops *ops, const char *args, int from_tty)
      previously attached to the inferior.  It *might* work if we
      started the process ourselves.  */
   errno = 0;
-  ptrace (PT_DETACH, pid, (PTRACE_TYPE_ARG3)1, sig);
+  ptrace (PT_DETACH, pid, (PTRACE_TYPE_ARG3)1, 0);
   if (errno != 0)
     perror_with_name (("ptrace"));
 #else
   error (_("This system does not support detaching from a process"));
 #endif
 
-  inf_ptrace_detach_success (ops);
+  inf_ptrace_detach_success (ops, inf);
 }
 
 /* See inf-ptrace.h.  */
 
 void
-inf_ptrace_detach_success (struct target_ops *ops)
+inf_ptrace_detach_success (struct target_ops *ops, inferior *inf)
 {
-  pid_t pid = ptid_get_pid (inferior_ptid);
-
   inferior_ptid = null_ptid;
-  detach_inferior (pid);
+  detach_inferior (inf);
 
   inf_child_maybe_unpush_target (ops);
 }
@@ -298,19 +292,6 @@ inf_ptrace_kill (struct target_ops *ops)
   waitpid (pid, &status, 0);
 
   target_mourn_inferior (inferior_ptid);
-}
-
-/* Interrupt the inferior.  */
-
-static void
-inf_ptrace_interrupt (struct target_ops *self, ptid_t ptid)
-{
-  /* Send a SIGINT to the process group.  This acts just like the user
-     typed a ^C on the controlling terminal.  Note that using a
-     negative process number in kill() is a System V-ism.  The proper
-     BSD interface is killpg().  However, all modern BSDs support the
-     System V interface too.  */
-  kill (-inferior_process_group (), SIGINT);
 }
 
 /* Return which PID to pass to ptrace in order to observe/control the
@@ -694,7 +675,6 @@ inf_ptrace_target (void)
   t->to_mourn_inferior = inf_ptrace_mourn_inferior;
   t->to_thread_alive = inf_ptrace_thread_alive;
   t->to_pid_to_str = inf_ptrace_pid_to_str;
-  t->to_interrupt = inf_ptrace_interrupt;
   t->to_xfer_partial = inf_ptrace_xfer_partial;
 #if defined (PT_IO) && defined (PIOD_READ_AUXV)
   t->to_auxv_parse = inf_ptrace_auxv_parse;

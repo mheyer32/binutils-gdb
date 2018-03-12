@@ -1,5 +1,5 @@
 /* A.out "format 1" file handling code for BFD.
-   Copyright (C) 1990-2017 Free Software Foundation, Inc.
+   Copyright (C) 1990-2018 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -775,13 +775,13 @@ static const struct aout_backend_data sunos4_aout_backend =
   MY_finish_dynamic_link
 };
 
-#define	MY_core_file_failing_command 	sunos4_core_file_failing_command
+#define	MY_core_file_failing_command	sunos4_core_file_failing_command
 #define	MY_core_file_failing_signal	sunos4_core_file_failing_signal
 #define	MY_core_file_matches_executable_p sunos4_core_file_matches_executable_p
 
-#define MY_bfd_debug_info_start		bfd_void
-#define MY_bfd_debug_info_end		bfd_void
-#define MY_bfd_debug_info_accumulate	(void (*) (bfd *, struct bfd_section *)) bfd_void
+#define MY_bfd_debug_info_start		_bfd_void_bfd
+#define MY_bfd_debug_info_end		_bfd_void_bfd
+#define MY_bfd_debug_info_accumulate	_bfd_void_bfd_asection
 #define MY_core_file_p			sunos4_core_file_p
 #define MY_write_object_contents	NAME(aout, sunos4_write_object_contents)
 #define MY_backend_data			& sunos4_aout_backend

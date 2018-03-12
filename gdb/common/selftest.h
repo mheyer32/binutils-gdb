@@ -1,5 +1,5 @@
 /* GDB self-testing.
-   Copyright (C) 2016-2017 Free Software Foundation, Inc.
+   Copyright (C) 2016-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -31,6 +31,7 @@ namespace selftests
 
 struct selftest
 {
+  virtual ~selftest () = default;
   virtual void operator() () const = 0;
 };
 

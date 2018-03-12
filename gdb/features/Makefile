@@ -1,4 +1,4 @@
-# Copyright (C) 2007-2017 Free Software Foundation, Inc.
+# Copyright (C) 2007-2018 Free Software Foundation, Inc.
 
 # This file is part of GDB.
 
@@ -93,6 +93,7 @@ mips64-expedite = r29,pc
 mips64-dsp-expedite = r29,pc
 microblaze-expedite = r1,rpc
 nios2-linux-expedite = sp,pc
+or1k-expedite = r1,npc
 powerpc-expedite = r1,pc
 rs6000/powerpc-cell32l-expedite = r1,pc,r0,orig_r3,r4
 rs6000/powerpc-cell64l-expedite = r1,pc,r0,orig_r3,r4
@@ -119,7 +120,6 @@ OUTPUTS = $(patsubst %,$(outdir)/%.dat,$(WHICH))
 # --enable-targets=all GDB.  You can override this by passing XMLTOC
 # to make on the command line.
 XMLTOC = \
-	aarch64.xml \
 	arc-v2.xml \
 	arc-arcompact.xml \
 	arm/arm-with-iwmmxt.xml \
@@ -136,8 +136,8 @@ XMLTOC = \
 	mips64-dsp-linux.xml \
 	mips64-linux.xml \
 	nds32.xml \
-	nios2-linux.xml \
 	nios2.xml \
+	or1k.xml \
 	rs6000/powerpc-32.xml \
 	rs6000/powerpc-32l.xml \
 	rs6000/powerpc-403.xml \
@@ -207,7 +207,9 @@ $(outdir)/%.dat: %.xml number-regs.xsl sort-regs.xsl gdbserver-regs.xsl
 	  $(XSLTPROC) gdbserver-regs.xsl - >> $(outdir)/$*.tmp
 	sh ../../move-if-change $(outdir)/$*.tmp $(outdir)/$*.dat
 
-FEATURE_XMLFILES = i386/32bit-core.xml \
+FEATURE_XMLFILES = aarch64-core.xml \
+	aarch64-fpu.xml \
+	i386/32bit-core.xml \
 	i386/32bit-sse.xml \
 	i386/32bit-linux.xml \
 	i386/32bit-avx.xml \
@@ -222,7 +224,10 @@ FEATURE_XMLFILES = i386/32bit-core.xml \
 	i386/64bit-linux.xml \
 	i386/64bit-pkeys.xml \
 	i386/64bit-sse.xml \
-	i386/x32-core.xml
+	i386/x32-core.xml \
+	tic6x-c6xp.xml \
+	tic6x-core.xml \
+	tic6x-gp.xml
 
 FEATURE_CFILES = $(patsubst %.xml,%.c,$(FEATURE_XMLFILES))
 

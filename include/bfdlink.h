@@ -1,5 +1,5 @@
 /* bfdlink.h -- header file for BFD link routines
-   Copyright (C) 1993-2017 Free Software Foundation, Inc.
+   Copyright (C) 1993-2018 Free Software Foundation, Inc.
    Written by Steve Chamberlain and Ian Lance Taylor, Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -390,6 +390,9 @@ struct bfd_link_info
 
   /* TRUE if PT_GNU_RELRO segment should be created.  */
   unsigned int relro: 1;
+
+  /* TRUE if separate code segment should be created.  */
+  unsigned int separate_code: 1;
 
   /* Nonzero if .eh_frame_hdr section and PT_GNU_EH_FRAME ELF segment
      should be created.  1 for DWARF2 tables, 2 for compact tables.  */

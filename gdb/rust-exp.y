@@ -1,5 +1,5 @@
 /* Bison parser for Rust expressions, for GDB.
-   Copyright (C) 2016-2017 Free Software Foundation, Inc.
+   Copyright (C) 2016-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -425,7 +425,8 @@ expr:
 |	array_expr
 |	idx_expr
 |	range_expr
-|	unop_expr /* Must precede call_expr because of ambiguity with sizeof.  */
+|	unop_expr /* Must precede call_expr because of ambiguity with
+		     sizeof.  */
 |	binop_expr
 |	paren_expr
 |	call_expr
@@ -445,9 +446,9 @@ unit_expr:
 		  struct typed_val_int val;
 
 		  val.type
-		    = language_lookup_primitive_type (current_parser->language (),
-						      current_parser->arch (),
-						      "()");
+		    = (language_lookup_primitive_type
+		       (current_parser->language (), current_parser->arch (),
+			"()"));
 		  val.val = 0;
 		  $$ = ast_literal (val);
 		}
@@ -623,8 +624,8 @@ unop_expr:
 
 |	'&' KW_MUT expr	%prec UNARY
 		{ $$ = ast_unary (UNOP_ADDR, $3); }
-|   KW_SIZEOF '(' expr ')' %prec UNARY
-        { $$ = ast_unary (UNOP_SIZEOF, $3); }
+|	KW_SIZEOF '(' expr ')' %prec UNARY
+		{ $$ = ast_unary (UNOP_SIZEOF, $3); }
 ;
 
 binop_expr:
@@ -738,9 +739,7 @@ maybe_expr_list:
 ;
 
 paren_expr_list:
-	'('
-	maybe_expr_list
-	')'
+	'(' maybe_expr_list ')'
 		{ $$ = $2; }
 ;
 
@@ -828,7 +827,7 @@ path_for_type:
 
 just_identifiers_for_type:
 	IDENT
-	  	{ $$ = ast_path ($1, NULL); }
+		{ $$ = ast_path ($1, NULL); }
 |	just_identifiers_for_type COLONCOLON IDENT
 		{
 		  $$ = ast_path (rust_concat3 ($1->left.sval.ptr, "::",
@@ -1011,7 +1010,6 @@ super_name (const struct rust_op *ident, unsigned int n_supers)
 
   if (n_supers > 0)
     {
-      int i;
       int len;
       std::vector<int> offsets;
       unsigned int current_len;
@@ -1045,15 +1043,13 @@ super_name (const struct rust_op *ident, unsigned int n_supers)
 		   ident->right.params);
 }
 
-/* A helper that updates innermost_block as appropriate.  */
+/* A helper that updates the innermost block as appropriate.  */
 
 static void
 update_innermost_block (struct block_symbol sym)
 {
-  if (symbol_read_needs_frame (sym.symbol)
-      && (innermost_block == NULL
-	  || contained_in (sym.block, innermost_block)))
-    innermost_block = sym.block;
+  if (symbol_read_needs_frame (sym.symbol))
+    innermost_block.update (sym);
 }
 
 /* A helper to look up a Rust type, or fail.  This only works for
@@ -1251,7 +1247,6 @@ lex_string (void)
 {
   int is_byte = lexptr[0] == 'b';
   int raw_length;
-  int len_in_chars = 0;
 
   if (is_byte)
     ++lexptr;
@@ -2069,7 +2064,6 @@ convert_ast_to_type (struct parser_state *state,
 	std::vector<struct type *> args
 	  (convert_params_to_types (state, operation->left.params));
 	int i;
-	struct type *type;
 	const char *name;
 
 	obstack_1grow (work_obstack, '(');
@@ -2397,7 +2391,6 @@ convert_ast_to_expression (struct parser_state *state,
 
     case OP_AGGREGATE:
       {
-	int i;
 	int length;
 	rust_set_vector *fields = operation->right.field_inits;
 	struct type *type;
@@ -2670,8 +2663,7 @@ rust_lex_tests (void)
 						       &test_obstack);
 
   // Set up dummy "parser", so that rust_type works.
-  struct parser_state ps;
-  initialize_expout (&ps, 0, &rust_language_defn, target_gdbarch ());
+  struct parser_state ps (0, &rust_language_defn, target_gdbarch ());
   rust_parser parser (&ps);
 
   rust_lex_test_one ("", 0);

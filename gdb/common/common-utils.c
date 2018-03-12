@@ -1,6 +1,6 @@
 /* Shared general utility routines for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2017 Free Software Foundation, Inc.
+   Copyright (C) 1986-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,6 +20,7 @@
 #include "common-defs.h"
 #include "common-utils.h"
 #include "host-defs.h"
+#include <sys/stat.h>
 #include <ctype.h>
 
 /* The xmalloc() (libiberty.h) family of memory management routines.
@@ -92,13 +93,6 @@ void *
 xzalloc (size_t size)
 {
   return xcalloc (1, size);
-}
-
-void
-xfree (void *ptr)
-{
-  if (ptr != NULL)
-    free (ptr);		/* ARI: free */
 }
 
 void
@@ -193,6 +187,40 @@ string_vprintf (const char* fmt, va_list args)
   vsprintf (&str[0], fmt, args);
 
   return str;
+}
+
+
+/* See documentation in common-utils.h.  */
+
+void
+string_appendf (std::string &str, const char *fmt, ...)
+{
+  va_list vp;
+
+  va_start (vp, fmt);
+  string_vappendf (str, fmt, vp);
+  va_end (vp);
+}
+
+
+/* See documentation in common-utils.h.  */
+
+void
+string_vappendf (std::string &str, const char *fmt, va_list args)
+{
+  va_list vp;
+  int grow_size;
+
+  va_copy (vp, args);
+  grow_size = vsnprintf (NULL, 0, fmt, vp);
+  va_end (vp);
+
+  size_t curr_size = str.size ();
+  str.resize (curr_size + grow_size);
+
+  /* C++11 and later guarantee std::string uses contiguous memory and
+     always includes the terminating '\0'.  */
+  vsprintf (&str[curr_size], fmt, args);
 }
 
 char *
@@ -380,4 +408,35 @@ stringify_argv (const std::vector<char *> &args)
     }
 
   return ret;
+}
+
+/* See common/common-utils.h.  */
+
+bool
+is_regular_file (const char *name, int *errno_ptr)
+{
+  struct stat st;
+  const int status = stat (name, &st);
+
+  /* Stat should never fail except when the file does not exist.
+     If stat fails, analyze the source of error and return true
+     unless the file does not exist, to avoid returning false results
+     on obscure systems where stat does not work as expected.  */
+
+  if (status != 0)
+    {
+      if (errno != ENOENT)
+	return true;
+      *errno_ptr = ENOENT;
+      return false;
+    }
+
+  if (S_ISREG (st.st_mode))
+    return true;
+
+  if (S_ISDIR (st.st_mode))
+    *errno_ptr = EISDIR;
+  else
+    *errno_ptr = EINVAL;
+  return false;
 }

@@ -1,6 +1,6 @@
 /* Perform non-arithmetic operations on values, for GDB.
 
-   Copyright (C) 1986-2017 Free Software Foundation, Inc.
+   Copyright (C) 1986-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -34,7 +34,7 @@
 #include "infcall.h"
 #include "dictionary.h"
 #include "cp-support.h"
-#include "dfp.h"
+#include "target-float.h"
 #include "tracepoint.h"
 #include "observer.h"
 #include "objfiles.h"
@@ -68,7 +68,8 @@ int find_oload_champ_namespace_loop (struct value **, int,
 				     const int no_adl);
 
 static int find_oload_champ (struct value **, int, int,
-			     struct fn_field *, VEC (xmethod_worker_ptr) *,
+			     struct fn_field *,
+			     const std::vector<xmethod_worker_up> *,
 			     struct symbol **, struct badness_vector **);
 
 static int oload_method_static_p (struct fn_field *, int);
@@ -98,7 +99,7 @@ static struct value *cast_into_complex (struct type *, struct value *);
 
 static void find_method_list (struct value **, const char *,
 			      LONGEST, struct type *, struct fn_field **, int *,
-			      VEC (xmethod_worker_ptr) **,
+			      std::vector<xmethod_worker_up> *,
 			      struct type **, LONGEST *);
 
 #if 0
@@ -462,29 +463,21 @@ value_cast (struct type *type, struct value *arg2)
 	return v;
     }
 
-  if (code1 == TYPE_CODE_FLT && scalar)
-    return value_from_double (to_type, value_as_double (arg2));
-  else if (code1 == TYPE_CODE_DECFLOAT && scalar)
+  if (is_floating_type (type) && scalar)
     {
-      enum bfd_endian byte_order = gdbarch_byte_order (get_type_arch (type));
-      int dec_len = TYPE_LENGTH (type);
-      gdb_byte dec[16];
+      if (is_floating_value (arg2))
+	{
+	  struct value *v = allocate_value (to_type);
+	  target_float_convert (value_contents (arg2), type2,
+				value_contents_raw (v), type);
+	  return v;
+	}
 
-      if (code2 == TYPE_CODE_FLT)
-	decimal_from_doublest (value_as_double (arg2),
-			       dec, dec_len, byte_order);
-      else if (code2 == TYPE_CODE_DECFLOAT)
-	decimal_convert (value_contents (arg2), TYPE_LENGTH (type2),
-			 byte_order, dec, dec_len, byte_order);
       /* The only option left is an integral type.  */
-      else if (TYPE_UNSIGNED (type2))
-	decimal_from_ulongest (value_as_long (arg2),
-			       dec, dec_len, byte_order);
+      if (TYPE_UNSIGNED (type2))
+	return value_from_ulongest (to_type, value_as_long (arg2));
       else
-	decimal_from_longest (value_as_long (arg2),
-			      dec, dec_len, byte_order);
-
-      return value_from_decfloat (to_type, dec);
+	return value_from_longest (to_type, value_as_long (arg2));
     }
   else if ((code1 == TYPE_CODE_INT || code1 == TYPE_CODE_ENUM
 	    || code1 == TYPE_CODE_RANGE)
@@ -868,19 +861,7 @@ value_one (struct type *type)
   struct type *type1 = check_typedef (type);
   struct value *val;
 
-  if (TYPE_CODE (type1) == TYPE_CODE_DECFLOAT)
-    {
-      enum bfd_endian byte_order = gdbarch_byte_order (get_type_arch (type));
-      gdb_byte v[16];
-
-      decimal_from_string (v, TYPE_LENGTH (type), byte_order, "1");
-      val = value_from_decfloat (type, v);
-    }
-  else if (TYPE_CODE (type1) == TYPE_CODE_FLT)
-    {
-      val = value_from_double (type, (DOUBLEST) 1);
-    }
-  else if (is_integral_type (type1))
+  if (is_integral_type (type1) || is_floating_type (type1))
     {
       val = value_from_longest (type, (LONGEST) 1);
     }
@@ -2276,6 +2257,50 @@ value_struct_elt_bitpos (struct value **argp, int bitpos, struct type *ftype,
   return NULL;
 }
 
+/* See value.h.  */
+
+int
+value_union_variant (struct type *union_type, const gdb_byte *contents)
+{
+  gdb_assert (TYPE_CODE (union_type) == TYPE_CODE_UNION
+	      && TYPE_FLAG_DISCRIMINATED_UNION (union_type));
+
+  struct dynamic_prop *discriminant_prop
+    = get_dyn_prop (DYN_PROP_DISCRIMINATED, union_type);
+  gdb_assert (discriminant_prop != nullptr);
+
+  struct discriminant_info *info
+    = (struct discriminant_info *) discriminant_prop->data.baton;
+  gdb_assert (info != nullptr);
+
+  /* If this is a univariant union, just return the sole field.  */
+  if (TYPE_NFIELDS (union_type) == 1)
+    return 0;
+  /* This should only happen for univariants, which we already dealt
+     with.  */
+  gdb_assert (info->discriminant_index != -1);
+
+  /* Compute the discriminant.  Note that unpack_field_as_long handles
+     sign extension when necessary, as does the DWARF reader -- so
+     signed discriminants will be handled correctly despite the use of
+     an unsigned type here.  */
+  ULONGEST discriminant = unpack_field_as_long (union_type, contents,
+						info->discriminant_index);
+
+  for (int i = 0; i < TYPE_NFIELDS (union_type); ++i)
+    {
+      if (i != info->default_index
+	  && i != info->discriminant_index
+	  && discriminant == info->discriminants[i])
+	return i;
+    }
+
+  if (info->default_index == -1)
+    error (_("Could not find variant corresponding to discriminant %s"),
+	   pulongest (discriminant));
+  return info->default_index;
+}
+
 /* Search through the methods of an object (and its bases) to find a
    specified method.  Return the pointer to the fn_field list FN_LIST of
    overloaded instances defined in the source language.  If available
@@ -2302,12 +2327,11 @@ static void
 find_method_list (struct value **argp, const char *method,
 		  LONGEST offset, struct type *type,
 		  struct fn_field **fn_list, int *num_fns,
-		  VEC (xmethod_worker_ptr) **xm_worker_vec,
+		  std::vector<xmethod_worker_up> *xm_worker_vec,
 		  struct type **basetype, LONGEST *boffset)
 {
   int i;
   struct fn_field *f = NULL;
-  VEC (xmethod_worker_ptr) *worker_vec = NULL, *new_vec = NULL;
 
   gdb_assert (fn_list != NULL && xm_worker_vec != NULL);
   type = check_typedef (type);
@@ -2348,12 +2372,7 @@ find_method_list (struct value **argp, const char *method,
      and hence there is no point restricting them with something like method
      hiding.  Moreover, if hiding is done for xmethods as well, then we will
      have to provide a mechanism to un-hide (like the 'using' construct).  */
-  worker_vec = get_matching_xmethod_workers (type, method);
-  new_vec = VEC_merge (xmethod_worker_ptr, *xm_worker_vec, worker_vec);
-
-  VEC_free (xmethod_worker_ptr, *xm_worker_vec);
-  VEC_free (xmethod_worker_ptr, worker_vec);
-  *xm_worker_vec = new_vec;
+  get_matching_xmethod_workers (type, method, xm_worker_vec);
 
   /* If source methods are not found in current class, look for them in the
      base classes.  We also have to go through the base classes to gather
@@ -2402,7 +2421,7 @@ static void
 value_find_oload_method_list (struct value **argp, const char *method,
                               LONGEST offset, struct fn_field **fn_list,
                               int *num_fns,
-                              VEC (xmethod_worker_ptr) **xm_worker_vec,
+			      std::vector<xmethod_worker_up> *xm_worker_vec,
 			      struct type **basetype, LONGEST *boffset)
 {
   struct type *t;
@@ -2429,7 +2448,7 @@ value_find_oload_method_list (struct value **argp, const char *method,
   /* Clear the lists.  */
   *fn_list = NULL;
   *num_fns = 0;
-  *xm_worker_vec = NULL;
+  xm_worker_vec->clear ();
 
   find_method_list (argp, method, 0, t, fn_list, num_fns, xm_worker_vec,
 		    basetype, boffset);
@@ -2508,8 +2527,8 @@ find_overload_match (struct value **args, int nargs,
   struct fn_field *fns_ptr = NULL;
   /* For non-methods, the list of overloaded function symbols.  */
   struct symbol **oload_syms = NULL;
-  /* For xmethods, the VEC of xmethod workers.  */
-  VEC (xmethod_worker_ptr) *xm_worker_vec = NULL;
+  /* For xmethods, the vector of xmethod workers.  */
+  std::vector<xmethod_worker_up> xm_worker_vec;
   /* Number of overloaded instances being considered.  */
   int num_fns = 0;
   struct type *basetype = NULL;
@@ -2554,8 +2573,8 @@ find_overload_match (struct value **args, int nargs,
       value_find_oload_method_list (&temp, name, 0, &fns_ptr, &num_fns,
 				    &xm_worker_vec, &basetype, &boffset);
       /* If this is a method only search, and no methods were found
-         the search has faild.  */
-      if (method == METHOD && (!fns_ptr || !num_fns) && !xm_worker_vec)
+         the search has failed.  */
+      if (method == METHOD && (!fns_ptr || !num_fns) && xm_worker_vec.empty ())
 	error (_("Couldn't find method %s%s%s"),
 	       obj_type_name,
 	       (obj_type_name && *obj_type_name) ? "::" : "",
@@ -2578,15 +2597,14 @@ find_overload_match (struct value **args, int nargs,
 	  make_cleanup (xfree, src_method_badness);
 	}
 
-      if (VEC_length (xmethod_worker_ptr, xm_worker_vec) > 0)
+      if (!xm_worker_vec.empty ())
 	{
 	  ext_method_oload_champ = find_oload_champ (args, nargs,
-						     0, NULL, xm_worker_vec,
+						     0, NULL, &xm_worker_vec,
 						     NULL, &ext_method_badness);
 	  ext_method_match_quality = classify_oload_match (ext_method_badness,
 							   nargs, 0);
 	  make_cleanup (xfree, ext_method_badness);
-	  make_cleanup (free_xmethod_worker_vec, xm_worker_vec);
 	}
 
       if (src_method_oload_champ >= 0 && ext_method_oload_champ >= 0)
@@ -2803,11 +2821,8 @@ find_overload_match (struct value **args, int nargs,
 				    basetype, boffset);
 	}
       else
-	{
-	  *valp = value_of_xmethod (clone_xmethod_worker
-	    (VEC_index (xmethod_worker_ptr, xm_worker_vec,
-			ext_method_oload_champ)));
-	}
+	*valp = value_from_xmethod
+	  (std::move (xm_worker_vec[ext_method_oload_champ]));
     }
   else
     *symp = oload_syms[func_oload_champ];
@@ -3012,12 +3027,11 @@ find_oload_champ_namespace_loop (struct value **args, int nargs,
 static int
 find_oload_champ (struct value **args, int nargs,
 		  int num_fns, struct fn_field *fns_ptr,
-		  VEC (xmethod_worker_ptr) *xm_worker_vec,
+		  const std::vector<xmethod_worker_up> *xm_worker_vec,
 		  struct symbol **oload_syms,
 		  struct badness_vector **oload_champ_bv)
 {
   int ix;
-  int fn_count;
   /* A measure of how good an overloaded instance is.  */
   struct badness_vector *bv;
   /* Index of best overloaded function.  */
@@ -3034,9 +3048,8 @@ find_oload_champ (struct value **args, int nargs,
 
   *oload_champ_bv = NULL;
 
-  fn_count = (xm_worker_vec != NULL
-	      ? VEC_length (xmethod_worker_ptr, xm_worker_vec)
-	      : num_fns);
+  int fn_count = xm_worker_vec != NULL ? xm_worker_vec->size () : num_fns;
+
   /* Consider each candidate in turn.  */
   for (ix = 0; ix < fn_count; ix++)
     {
@@ -3044,12 +3057,11 @@ find_oload_champ (struct value **args, int nargs,
       int static_offset = 0;
       int nparms;
       struct type **parm_types;
-      struct xmethod_worker *worker = NULL;
 
       if (xm_worker_vec != NULL)
 	{
-	  worker = VEC_index (xmethod_worker_ptr, xm_worker_vec, ix);
-	  parm_types = get_xmethod_arg_types (worker, &nparms);
+	  xmethod_worker *worker = (*xm_worker_vec)[ix].get ();
+	  parm_types = worker->get_arg_types (&nparms);
 	}
       else
 	{

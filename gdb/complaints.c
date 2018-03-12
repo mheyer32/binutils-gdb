@@ -1,6 +1,6 @@
 /* Support for complaint handling during symbol reading in GDB.
 
-   Copyright (C) 1990-2017 Free Software Foundation, Inc.
+   Copyright (C) 1990-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -148,7 +148,7 @@ find_complaint (struct complaints *complaints, const char *file,
    before we stop whining about it?  Default is no whining at all,
    since so many systems have ill-constructed symbol files.  */
 
-static int stop_whining = 0;
+int stop_whining = 0;
 
 /* Print a complaint, and link the complaint block into a chain for
    later handling.  */
@@ -236,7 +236,7 @@ vcomplaint (struct complaints **c, const char *file,
 }
 
 void
-complaint (struct complaints **complaints, const char *fmt, ...)
+complaint_internal (struct complaints **complaints, const char *fmt, ...)
 {
   va_list args;
 

@@ -1,6 +1,6 @@
 /* Interface between GDB and target environments, including files and processes
 
-   Copyright (C) 1990-2017 Free Software Foundation, Inc.
+   Copyright (C) 1990-2018 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.  Written by John Gilmore.
 
@@ -181,15 +181,6 @@ enum target_object
   TARGET_OBJECT_THREADS,
   /* Collected static trace data.  */
   TARGET_OBJECT_STATIC_TRACE_DATA,
-  /* The HP-UX registers (those that can be obtained or modified by using
-     the TT_LWP_RUREGS/TT_LWP_WUREGS ttrace requests).  */
-  TARGET_OBJECT_HPUX_UREGS,
-  /* The HP-UX shared library linkage pointer.  ANNEX should be a string
-     image of the code address whose linkage pointer we are looking for.
-
-     The size of the data transfered is always 8 bytes (the size of an
-     address on ia64).  */
-  TARGET_OBJECT_HPUX_SOLIB_GOT,
   /* Traceframe info, in XML format.  */
   TARGET_OBJECT_TRACEFRAME_INFO,
   /* Load maps for FDPIC systems.  */
@@ -418,11 +409,6 @@ typedef void async_callback_ftype (enum inferior_event_type event_type,
 #define TARGET_DEFAULT_RETURN(ARG)
 #define TARGET_DEFAULT_FUNC(ARG)
 
-/* Define a typedef, because make-target-delegates doesn't currently handle type
-   names with templates.  */
-
-typedef std::vector<mem_region> mem_region_vector;
-
 struct target_ops
   {
     struct target_ops *beneath;	/* To the target under this one.  */
@@ -454,7 +440,7 @@ struct target_ops
     void (*to_attach) (struct target_ops *ops, const char *, int);
     void (*to_post_attach) (struct target_ops *, int)
       TARGET_DEFAULT_IGNORE ();
-    void (*to_detach) (struct target_ops *ops, const char *, int)
+    void (*to_detach) (struct target_ops *ops, inferior *, int)
       TARGET_DEFAULT_IGNORE ();
     void (*to_disconnect) (struct target_ops *, const char *, int)
       TARGET_DEFAULT_NORETURN (tcomplain ());
@@ -575,6 +561,8 @@ struct target_ops
       TARGET_DEFAULT_IGNORE ();
     void (*to_terminal_inferior) (struct target_ops *)
       TARGET_DEFAULT_IGNORE ();
+    void (*to_terminal_save_inferior) (struct target_ops *)
+      TARGET_DEFAULT_IGNORE ();
     void (*to_terminal_ours_for_output) (struct target_ops *)
       TARGET_DEFAULT_IGNORE ();
     void (*to_terminal_ours) (struct target_ops *)
@@ -612,7 +600,8 @@ struct target_ops
     void (*to_follow_exec) (struct target_ops *, struct inferior *, char *)
       TARGET_DEFAULT_IGNORE ();
     int (*to_set_syscall_catchpoint) (struct target_ops *,
-				      int, int, int, int, int *)
+				      int, bool, int,
+				      gdb::array_view<const int>)
       TARGET_DEFAULT_RETURN (1);
     int (*to_has_exited) (struct target_ops *, int, int, int *)
       TARGET_DEFAULT_RETURN (0);
@@ -653,7 +642,7 @@ struct target_ops
       TARGET_DEFAULT_RETURN (NULL);
     void (*to_stop) (struct target_ops *, ptid_t)
       TARGET_DEFAULT_IGNORE ();
-    void (*to_interrupt) (struct target_ops *, ptid_t)
+    void (*to_interrupt) (struct target_ops *)
       TARGET_DEFAULT_IGNORE ();
     void (*to_pass_ctrlc) (struct target_ops *)
       TARGET_DEFAULT_FUNC (default_target_pass_ctrlc);
@@ -777,7 +766,7 @@ struct target_ops
        This method should not cache data; if the memory map could
        change unexpectedly, it should be invalidated, and higher
        layers will re-fetch it.  */
-    mem_region_vector (*to_memory_map) (struct target_ops *)
+    std::vector<mem_region> (*to_memory_map) (struct target_ops *)
       TARGET_DEFAULT_RETURN (std::vector<mem_region> ());
 
     /* Erases the region of flash memory starting at ADDRESS, of
@@ -944,12 +933,12 @@ struct target_ops
     /* Read value of symbolic link FILENAME on the target, in the
        filesystem as seen by INF.  If INF is NULL, use the filesystem
        seen by the debugger (GDB or, for remote targets, the remote
-       stub).  Return a null-terminated string allocated via xmalloc,
-       or NULL if an error occurs (and set *TARGET_ERRNO).  */
-    char *(*to_fileio_readlink) (struct target_ops *,
-				 struct inferior *inf,
-				 const char *filename,
-				 int *target_errno);
+       stub).  Return a string, or an empty optional if an error
+       occurs (and set *TARGET_ERRNO).  */
+    gdb::optional<std::string> (*to_fileio_readlink) (struct target_ops *,
+						      struct inferior *inf,
+						      const char *filename,
+						      int *target_errno);
 
 
     /* Implement the "info proc" command.  */
@@ -1121,10 +1110,6 @@ struct target_ops
     int (*to_can_use_agent) (struct target_ops *)
       TARGET_DEFAULT_RETURN (0);
 
-    /* Check whether the target supports branch tracing.  */
-    int (*to_supports_btrace) (struct target_ops *, enum btrace_format)
-      TARGET_DEFAULT_RETURN (0);
-
     /* Enable branch tracing for PTID using CONF configuration.
        Return a branch trace target information struct for reading and for
        disabling branch trace.  */
@@ -1232,7 +1217,7 @@ struct target_ops
     /* Print a function trace of the recorded execution trace.
        If SIZE < 0, print abs (SIZE) preceding functions; otherwise, print SIZE
        succeeding functions.  */
-    void (*to_call_history) (struct target_ops *, int size, int flags)
+    void (*to_call_history) (struct target_ops *, int size, record_print_flags flags)
       TARGET_DEFAULT_NORETURN (tcomplain ());
 
     /* Print a function trace of the recorded execution trace starting
@@ -1240,13 +1225,13 @@ struct target_ops
        If SIZE < 0, print abs (SIZE) functions before FROM; otherwise, print
        SIZE functions after FROM.  */
     void (*to_call_history_from) (struct target_ops *,
-				  ULONGEST begin, int size, int flags)
+				  ULONGEST begin, int size, record_print_flags flags)
       TARGET_DEFAULT_NORETURN (tcomplain ());
 
     /* Print a function trace of an execution trace section from function BEGIN
        (inclusive) to function END (inclusive).  */
     void (*to_call_history_range) (struct target_ops *,
-				   ULONGEST begin, ULONGEST end, int flags)
+				   ULONGEST begin, ULONGEST end, record_print_flags flags)
       TARGET_DEFAULT_NORETURN (tcomplain ());
 
     /* Nonzero if TARGET_OBJECT_LIBRARIES_SVR4 may be read with a
@@ -1336,11 +1321,10 @@ extern void target_announce_detach (int from_tty);
 /* Takes a program previously attached to and detaches it.
    The program may resume execution (some targets do, some don't) and will
    no longer stop on signals, etc.  We better not have left any breakpoints
-   in the program or it'll die when it hits one.  ARGS is arguments
-   typed by the user (e.g. a signal to send the process).  FROM_TTY
-   says whether to be verbose or not.  */
+   in the program or it'll die when it hits one.  FROM_TTY says whether to be
+   verbose or not.  */
 
-extern void target_detach (const char *, int);
+extern void target_detach (inferior *inf, int from_tty);
 
 /* Disconnect from the current target without resuming it (leaving it
    waiting for a debugger).  */
@@ -1469,7 +1453,7 @@ extern int target_write_raw_memory (CORE_ADDR memaddr, const gdb_byte *myaddr,
 std::vector<mem_region> target_memory_map (void);
 
 /* Erases all flash memory regions on the target.  */
-void flash_erase_command (char *cmd, int from_tty);
+void flash_erase_command (const char *cmd, int from_tty);
 
 /* Erase the specified flash region.  */
 void target_flash_erase (ULONGEST address, LONGEST length);
@@ -1479,18 +1463,21 @@ void target_flash_done (void);
 
 /* Describes a request for a memory write operation.  */
 struct memory_write_request
-  {
-    /* Begining address that must be written.  */
-    ULONGEST begin;
-    /* Past-the-end address.  */
-    ULONGEST end;
-    /* The data to write.  */
-    gdb_byte *data;
-    /* A callback baton for progress reporting for this request.  */
-    void *baton;
-  };
-typedef struct memory_write_request memory_write_request_s;
-DEF_VEC_O(memory_write_request_s);
+{
+  memory_write_request (ULONGEST begin_, ULONGEST end_,
+			gdb_byte *data_ = nullptr, void *baton_ = nullptr)
+    : begin (begin_), end (end_), data (data_), baton (baton_)
+  {}
+
+  /* Begining address that must be written.  */
+  ULONGEST begin;
+  /* Past-the-end address.  */
+  ULONGEST end;
+  /* The data to write.  */
+  gdb_byte *data;
+  /* A callback baton for progress reporting for this request.  */
+  void *baton;
+};
 
 /* Enumeration specifying different flash preservation behaviour.  */
 enum flash_preserve_mode
@@ -1516,9 +1503,10 @@ enum flash_preserve_mode
      with a NULL baton, when preserved flash sectors are being rewritten.
 
    The function returns 0 on success, and error otherwise.  */
-int target_write_memory_blocks (VEC(memory_write_request_s) *requests,
-				enum flash_preserve_mode preserve_flash_p,
-				void (*progress_cb) (ULONGEST, void *));
+int target_write_memory_blocks
+    (const std::vector<memory_write_request> &requests,
+     enum flash_preserve_mode preserve_flash_p,
+     void (*progress_cb) (ULONGEST, void *));
 
 /* Print a line about the current target.  */
 
@@ -1620,28 +1608,24 @@ void target_follow_exec (struct inferior *inf, char *execd_pathname);
 
 /* Syscall catch.
 
-   NEEDED is nonzero if any syscall catch (of any kind) is requested.
-   If NEEDED is zero, it means the target can disable the mechanism to
+   NEEDED is true if any syscall catch (of any kind) is requested.
+   If NEEDED is false, it means the target can disable the mechanism to
    catch system calls because there are no more catchpoints of this type.
 
    ANY_COUNT is nonzero if a generic (filter-less) syscall catch is
-   being requested.  In this case, both TABLE_SIZE and TABLE should
-   be ignored.
+   being requested.  In this case, SYSCALL_COUNTS should be ignored.
 
-   TABLE_SIZE is the number of elements in TABLE.  It only matters if
-   ANY_COUNT is zero.
-
-   TABLE is an array of ints, indexed by syscall number.  An element in
-   this array is nonzero if that syscall should be caught.  This argument
-   only matters if ANY_COUNT is zero.
+   SYSCALL_COUNTS is an array of ints, indexed by syscall number.  An
+   element in this array is nonzero if that syscall should be caught.
+   This argument only matters if ANY_COUNT is zero.
 
    Return 0 for success, 1 if syscall catchpoints are not supported or -1
    for failure.  */
 
-#define target_set_syscall_catchpoint(pid, needed, any_count, table_size, table) \
+#define target_set_syscall_catchpoint(pid, needed, any_count, syscall_counts) \
      (*current_target.to_set_syscall_catchpoint) (&current_target,	\
 						  pid, needed, any_count, \
-						  table_size, table)
+						  syscall_counts)
 
 /* Returns TRUE if PID has exited.  And, also sets EXIT_STATUS to the
    exit code of PID, if any.  */
@@ -1708,16 +1692,18 @@ extern void target_update_thread_list (void);
 
 extern void target_stop (ptid_t ptid);
 
-/* Interrupt the target just like the user typed a ^C on the
-   inferior's controlling terminal.  (For instance, under Unix, this
-   should act like SIGINT).  This function is asynchronous.  */
+/* Interrupt the target.  Unlike target_stop, this does not specify
+   which thread/process reports the stop.  For most target this acts
+   like raising a SIGINT, though that's not absolutely required.  This
+   function is asynchronous.  */
 
-extern void target_interrupt (ptid_t ptid);
+extern void target_interrupt ();
 
 /* Pass a ^C, as determined to have been pressed by checking the quit
-   flag, to the target.  Normally calls target_interrupt, but remote
-   targets may take the opportunity to detect the remote side is not
-   responding and offer to disconnect.  */
+   flag, to the target, as if the user had typed the ^C on the
+   inferior's controlling terminal while the inferior was in the
+   foreground.  Remote targets may take the opportunity to detect the
+   remote side is not responding and offer to disconnect.  */
 
 extern void target_pass_ctrlc (void);
 
@@ -2109,9 +2095,8 @@ extern int target_fileio_unlink (struct inferior *inf,
    by the debugger (GDB or, for remote targets, the remote stub).
    Return a null-terminated string allocated via xmalloc, or NULL if
    an error occurs (and set *TARGET_ERRNO).  */
-extern char *target_fileio_readlink (struct inferior *inf,
-				     const char *filename,
-				     int *target_errno);
+extern gdb::optional<std::string> target_fileio_readlink
+    (struct inferior *inf, const char *filename, int *target_errno);
 
 /* Read target file FILENAME, in the filesystem as seen by INF.  If
    INF is NULL, use the filesystem seen by the debugger (GDB or, for
@@ -2442,9 +2427,6 @@ extern void update_target_permissions (void);
 
 /* Imported from machine dependent code.  */
 
-/* See to_supports_btrace in struct target_ops.  */
-extern int target_supports_btrace (enum btrace_format);
-
 /* See to_enable_btrace in struct target_ops.  */
 extern struct btrace_target_info *
   target_enable_btrace (ptid_t ptid, const struct btrace_config *);
@@ -2509,18 +2491,34 @@ extern void target_insn_history_range (ULONGEST begin, ULONGEST end,
 				       gdb_disassembly_flags flags);
 
 /* See to_call_history.  */
-extern void target_call_history (int size, int flags);
+extern void target_call_history (int size, record_print_flags flags);
 
 /* See to_call_history_from.  */
-extern void target_call_history_from (ULONGEST begin, int size, int flags);
+extern void target_call_history_from (ULONGEST begin, int size,
+				      record_print_flags flags);
 
 /* See to_call_history_range.  */
-extern void target_call_history_range (ULONGEST begin, ULONGEST end, int flags);
+extern void target_call_history_range (ULONGEST begin, ULONGEST end,
+				       record_print_flags flags);
 
 /* See to_prepare_to_generate_core.  */
 extern void target_prepare_to_generate_core (void);
 
 /* See to_done_generating_core.  */
 extern void target_done_generating_core (void);
+
+#if GDB_SELF_TEST
+namespace selftests {
+
+/* A mock process_stratum target_ops that doesn't read/write registers
+   anywhere.  */
+
+class test_target_ops : public target_ops
+{
+public:
+  test_target_ops ();
+};
+} // namespace selftests
+#endif /* GDB_SELF_TEST */
 
 #endif /* !defined (TARGET_H) */

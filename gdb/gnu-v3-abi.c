@@ -1,7 +1,7 @@
 /* Abstraction of GNU v3 abi.
    Contributed by Jim Blandy <jimb@redhat.com>
 
-   Copyright (C) 2001-2017 Free Software Foundation, Inc.
+   Copyright (C) 2001-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -299,8 +299,9 @@ gnuv3_rtti_type (struct value *value,
   LONGEST offset_to_top;
   const char *atsign;
 
-  /* We only have RTTI for class objects.  */
-  if (TYPE_CODE (values_type) != TYPE_CODE_STRUCT)
+  /* We only have RTTI for dynamic class objects.  */
+  if (TYPE_CODE (values_type) != TYPE_CODE_STRUCT
+      || !gnuv3_dynamic_class (values_type))
     return NULL;
 
   /* Determine architecture.  */

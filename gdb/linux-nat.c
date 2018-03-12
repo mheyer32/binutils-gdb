@@ -1,6 +1,6 @@
 /* GNU/Linux native-dependent code common to multiple platforms.
 
-   Copyright (C) 2001-2017 Free Software Foundation, Inc.
+   Copyright (C) 2001-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -676,8 +676,8 @@ linux_child_remove_exec_catchpoint (struct target_ops *self, int pid)
 
 static int
 linux_child_set_syscall_catchpoint (struct target_ops *self,
-				    int pid, int needed, int any_count,
-				    int table_size, int *table)
+				    int pid, bool needed, int any_count,
+				    gdb::array_view<const int> syscall_counts)
 {
   if (!linux_supports_tracesysgood ())
     return 1;
@@ -685,7 +685,7 @@ linux_child_set_syscall_catchpoint (struct target_ops *self,
   /* On GNU/Linux, we ignore the arguments.  It means that we only
      enable the syscall catchpoints, but do not disable them.
 
-     Also, we do not use the `table' information because we do not
+     Also, we do not use the `syscall_counts' information because we do not
      filter system calls here.  We let GDB do the logic for us.  */
   return 0;
 }
@@ -1118,8 +1118,8 @@ linux_nat_create_inferior (struct target_ops *ops,
 			   const char *exec_file, const std::string &allargs,
 			   char **env, int from_tty)
 {
-  struct cleanup *restore_personality
-    = maybe_disable_address_space_randomization (disable_randomization);
+  maybe_disable_address_space_randomization restore_personality
+    (disable_randomization);
 
   /* The fork_child mechanism is synchronous and calls target_wait, so
      we have to mask the async mode.  */
@@ -1128,8 +1128,6 @@ linux_nat_create_inferior (struct target_ops *ops,
   linux_nat_pass_signals (ops, 0, NULL);
 
   linux_ops->to_create_inferior (ops, exec_file, allargs, env, from_tty);
-
-  do_cleanups (restore_personality);
 }
 
 /* Callback for linux_proc_attach_tgid_threads.  Attach to PTID if not
@@ -1169,10 +1167,11 @@ attach_proc_task_lwp_callback (ptid_t ptid)
 	    }
 	  else
 	    {
+	      std::string reason
+		= linux_ptrace_attach_fail_reason_string (ptid, err);
+
 	      warning (_("Cannot attach to lwp %d: %s"),
-		       lwpid,
-		       linux_ptrace_attach_fail_reason_string (ptid,
-							       err));
+		       lwpid, reason.c_str ());
 	    }
 	}
       else
@@ -1225,23 +1224,12 @@ linux_nat_attach (struct target_ops *ops, const char *args, int from_tty)
   CATCH (ex, RETURN_MASK_ERROR)
     {
       pid_t pid = parse_pid_to_attach (args);
-      struct buffer buffer;
-      char *message, *buffer_s;
+      std::string reason = linux_ptrace_attach_fail_reason (pid);
 
-      message = xstrdup (ex.message);
-      make_cleanup (xfree, message);
-
-      buffer_init (&buffer);
-      linux_ptrace_attach_fail_reason (pid, &buffer);
-
-      buffer_grow_str0 (&buffer, "");
-      buffer_s = buffer_finish (&buffer);
-      make_cleanup (xfree, buffer_s);
-
-      if (*buffer_s != '\0')
-	throw_error (ex.error, "warning: %s\n%s", buffer_s, message);
+      if (!reason.empty ())
+	throw_error (ex.error, "warning: %s\n%s", reason.c_str (), ex.message);
       else
-	throw_error (ex.error, "%s", message);
+	throw_error (ex.error, "%s", ex.message);
     }
   END_CATCH
 
@@ -1509,12 +1497,10 @@ detach_callback (struct lwp_info *lp, void *data)
 }
 
 static void
-linux_nat_detach (struct target_ops *ops, const char *args, int from_tty)
+linux_nat_detach (struct target_ops *ops, inferior *inf, int from_tty)
 {
-  int pid;
   struct lwp_info *main_lwp;
-
-  pid = ptid_get_pid (inferior_ptid);
+  int pid = inf->pid;
 
   /* Don't unregister from the event loop, as there may be other
      inferiors running. */
@@ -1529,7 +1515,7 @@ linux_nat_detach (struct target_ops *ops, const char *args, int from_tty)
   iterate_over_lwps (pid_to_ptid (pid), detach_callback, NULL);
 
   /* Only the initial process should be left right now.  */
-  gdb_assert (num_lwps (ptid_get_pid (inferior_ptid)) == 1);
+  gdb_assert (num_lwps (pid) == 1);
 
   main_lwp = find_lwp_pid (pid_to_ptid (pid));
 
@@ -1539,25 +1525,18 @@ linux_nat_detach (struct target_ops *ops, const char *args, int from_tty)
 	 from, but there are other viable forks to debug.  Detach from
 	 the current fork, and context-switch to the first
 	 available.  */
-      linux_fork_detach (args, from_tty);
+      linux_fork_detach (from_tty);
     }
   else
     {
-      int signo;
-
       target_announce_detach (from_tty);
 
-      /* Pass on any pending signal for the last LWP, unless the user
-	 requested detaching with a different signal (most likely 0,
-	 meaning, discard the signal).  */
-      if (args != NULL)
-	signo = atoi (args);
-      else
-	signo = get_detach_signal (main_lwp);
+      /* Pass on any pending signal for the last LWP.  */
+      int signo = get_detach_signal (main_lwp);
 
       detach_one_lwp (main_lwp, &signo);
 
-      inf_ptrace_detach_success (ops);
+      inf_ptrace_detach_success (ops, inf);
     }
 }
 
@@ -2173,6 +2152,30 @@ linux_handle_extended_wait (struct lwp_info *lp, int status)
 		  _("unknown ptrace event %d"), event);
 }
 
+/* Suspend waiting for a signal.  We're mostly interested in
+   SIGCHLD/SIGINT.  */
+
+static void
+wait_for_signal ()
+{
+  if (debug_linux_nat)
+    fprintf_unfiltered (gdb_stdlog, "linux-nat: about to sigsuspend\n");
+  sigsuspend (&suspend_mask);
+
+  /* If the quit flag is set, it means that the user pressed Ctrl-C
+     and we're debugging a process that is running on a separate
+     terminal, so we must forward the Ctrl-C to the inferior.  (If the
+     inferior is sharing GDB's terminal, then the Ctrl-C reaches the
+     inferior directly.)  We must do this here because functions that
+     need to block waiting for a signal loop forever until there's an
+     event to report before returning back to the event loop.  */
+  if (!target_terminal::is_ours ())
+    {
+      if (check_quit_flag ())
+	target_pass_ctrlc ();
+    }
+}
+
 /* Wait for LP to stop.  Returns the wait status, or 0 if the LWP has
    exited.  */
 
@@ -2238,10 +2241,7 @@ wait_lwp (struct lwp_info *lp)
 	 linux_nat_wait_1 and there if we get called my_waitpid gets called
 	 again before it gets to sigsuspend so we can safely let the handlers
 	 get executed here.  */
-
-      if (debug_linux_nat)
-	fprintf_unfiltered (gdb_stdlog, "WL: about to sigsuspend\n");
-      sigsuspend (&suspend_mask);
+      wait_for_signal ();
     }
 
   restore_child_signals_mask (&prev_mask);
@@ -2642,7 +2642,7 @@ status_callback (struct lwp_info *lp, void *data)
 	}
 
 #if !USE_SIGTRAP_SIGINFO
-      else if (!breakpoint_inserted_here_p (get_regcache_aspace (regcache), pc))
+      else if (!breakpoint_inserted_here_p (regcache->aspace (), pc))
 	{
 	  if (debug_linux_nat)
 	    fprintf_unfiltered (gdb_stdlog,
@@ -2802,7 +2802,7 @@ save_stop_reason (struct lwp_info *lp)
     }
 #else
   if ((!lp->step || lp->stop_pc == sw_bp_pc)
-      && software_breakpoint_inserted_here_p (get_regcache_aspace (regcache),
+      && software_breakpoint_inserted_here_p (regcache->aspace (),
 					      sw_bp_pc))
     {
       /* The LWP was either continued, or stepped a software
@@ -2810,7 +2810,7 @@ save_stop_reason (struct lwp_info *lp)
       lp->stop_reason = TARGET_STOPPED_BY_SW_BREAKPOINT;
     }
 
-  if (hardware_breakpoint_inserted_here_p (get_regcache_aspace (regcache), pc))
+  if (hardware_breakpoint_inserted_here_p (regcache->aspace (), pc))
     lp->stop_reason = TARGET_STOPPED_BY_HW_BREAKPOINT;
 
   if (lp->stop_reason == TARGET_STOPPED_BY_NO_REASON)
@@ -3425,9 +3425,7 @@ linux_nat_wait_1 (struct target_ops *ops,
       gdb_assert (lp == NULL);
 
       /* Block until we get an event reported with SIGCHLD.  */
-      if (debug_linux_nat)
-	fprintf_unfiltered (gdb_stdlog, "LNW: about to sigsuspend\n");
-      sigsuspend (&suspend_mask);
+      wait_for_signal ();
     }
 
   gdb_assert (lp);
@@ -3574,7 +3572,7 @@ resume_stopped_resumed_lwps (struct lwp_info *lp, void *data)
 	     immediately, and we're not waiting for this LWP.  */
 	  if (!ptid_match (lp->ptid, *wait_ptid_p))
 	    {
-	      if (breakpoint_inserted_here_p (get_regcache_aspace (regcache), pc))
+	      if (breakpoint_inserted_here_p (regcache->aspace (), pc))
 		leave_stopped = 1;
 	    }
 
@@ -4450,49 +4448,6 @@ linux_nat_supports_disable_randomization (struct target_ops *self)
 #endif
 }
 
-static int async_terminal_is_ours = 1;
-
-/* target_terminal_inferior implementation.
-
-   This is a wrapper around child_terminal_inferior to add async support.  */
-
-static void
-linux_nat_terminal_inferior (struct target_ops *self)
-{
-  child_terminal_inferior (self);
-
-  /* Calls to target_terminal_*() are meant to be idempotent.  */
-  if (!async_terminal_is_ours)
-    return;
-
-  async_terminal_is_ours = 0;
-  set_sigint_trap ();
-}
-
-/* target_terminal::ours implementation.
-
-   This is a wrapper around child_terminal_ours to add async support (and
-   implement the target_terminal::ours vs target_terminal::ours_for_output
-   distinction).  child_terminal_ours is currently no different than
-   child_terminal_ours_for_output.
-   We leave target_terminal::ours_for_output alone, leaving it to
-   child_terminal_ours_for_output.  */
-
-static void
-linux_nat_terminal_ours (struct target_ops *self)
-{
-  /* GDB should never give the terminal to the inferior if the
-     inferior is running in the background (run&, continue&, etc.),
-     but claiming it sure should.  */
-  child_terminal_ours (self);
-
-  if (async_terminal_is_ours)
-    return;
-
-  clear_sigint_trap ();
-  async_terminal_is_ours = 1;
-}
-
 /* SIGCHLD handler that serves two purposes: In non-stop/async mode,
    so we notice when any child changes state, and notify the
    event-loop; it allows us to use sigsuspend in linux_nat_wait_1
@@ -4754,27 +4709,23 @@ linux_nat_fileio_open (struct target_ops *self,
 
 /* Implementation of to_fileio_readlink.  */
 
-static char *
+static gdb::optional<std::string>
 linux_nat_fileio_readlink (struct target_ops *self,
 			   struct inferior *inf, const char *filename,
 			   int *target_errno)
 {
   char buf[PATH_MAX];
   int len;
-  char *ret;
 
   len = linux_mntns_readlink (linux_nat_fileio_pid_of (inf),
 			      filename, buf, sizeof (buf));
   if (len < 0)
     {
       *target_errno = host_to_fileio_error (errno);
-      return NULL;
+      return {};
     }
 
-  ret = (char *) xmalloc (len + 1);
-  memcpy (ret, buf, len);
-  ret[len] = '\0';
-  return ret;
+  return std::string (buf, len);
 }
 
 /* Implementation of to_fileio_unlink.  */
@@ -4841,8 +4792,6 @@ linux_nat_add_target (struct target_ops *t)
   t->to_supports_non_stop = linux_nat_supports_non_stop;
   t->to_always_non_stop_p = linux_nat_always_non_stop_p;
   t->to_async = linux_nat_async;
-  t->to_terminal_inferior = linux_nat_terminal_inferior;
-  t->to_terminal_ours = linux_nat_terminal_ours;
 
   super_close = t->to_close;
   t->to_close = linux_nat_close;

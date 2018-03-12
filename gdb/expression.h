@@ -1,6 +1,6 @@
 /* Definitions for expressions stored in reversed prefix form, for GDB.
 
-   Copyright (C) 1986-2017 Free Software Foundation, Inc.
+   Copyright (C) 1986-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -101,8 +101,8 @@ extern expression_up parse_expression (const char *);
 extern expression_up parse_expression_with_language (const char *string,
 						     enum language lang);
 
-extern struct type *parse_expression_for_completion (const char *, char **,
-						     enum type_code *);
+extern struct type *parse_expression_for_completion
+    (const char *, gdb::unique_xmalloc_ptr<char> *, enum type_code *);
 
 extern expression_up parse_exp_1 (const char **, CORE_ADDR pc,
 				  const struct block *, int);
@@ -110,11 +110,6 @@ extern expression_up parse_exp_1 (const char **, CORE_ADDR pc,
 /* For use by parsers; set if we want to parse an expression and
    attempt completion.  */
 extern int parse_completion;
-
-/* The innermost context required by the stack and register variables
-   we've encountered so far.  To use this, set it to NULL, then call
-   parse_<whatever>, then look at it.  */
-extern const struct block *innermost_block;
 
 /* From eval.c */
 

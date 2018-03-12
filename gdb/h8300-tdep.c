@@ -1,6 +1,6 @@
 /* Target-machine dependent code for Renesas H8/300, for GDB.
 
-   Copyright (C) 1988-2017 Free Software Foundation, Inc.
+   Copyright (C) 1988-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -662,18 +662,17 @@ h8300_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
   for (argument = 0; argument < nargs; argument++)
     {
-      struct cleanup *back_to;
       struct type *type = value_type (args[argument]);
       int len = TYPE_LENGTH (type);
       char *contents = (char *) value_contents (args[argument]);
 
       /* Pad the argument appropriately.  */
       int padded_len = align_up (len, wordsize);
-      gdb_byte *padded = (gdb_byte *) xmalloc (padded_len);
-      back_to = make_cleanup (xfree, padded);
+      /* Use std::vector here to get zero initialization.  */
+      std::vector<gdb_byte> padded (padded_len);
 
-      memset (padded, 0, padded_len);
-      memcpy (len < wordsize ? padded + padded_len - len : padded,
+      memcpy ((len < wordsize ? padded.data () + padded_len - len
+	       : padded.data ()),
 	      contents, len);
 
       /* Could the argument fit in the remaining registers?  */
@@ -684,7 +683,7 @@ h8300_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	  if (len > wordsize && len % wordsize)
 	    {
 	      /* I feel so unclean.  */
-	      write_memory (sp + stack_offset, padded, padded_len);
+	      write_memory (sp + stack_offset, padded.data (), padded_len);
 	      stack_offset += padded_len;
 
 	      /* That's right --- even though we passed the argument
@@ -702,7 +701,7 @@ h8300_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	      for (offset = 0; offset < padded_len; offset += wordsize)
 		{
 		  ULONGEST word
-		    = extract_unsigned_integer (padded + offset,
+		    = extract_unsigned_integer (&padded[offset],
 						wordsize, byte_order);
 		  regcache_cooked_write_unsigned (regcache, reg++, word);
 		}
@@ -711,15 +710,13 @@ h8300_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       else
 	{
 	  /* It doesn't fit in registers!  Onto the stack it goes.  */
-	  write_memory (sp + stack_offset, padded, padded_len);
+	  write_memory (sp + stack_offset, padded.data (), padded_len);
 	  stack_offset += padded_len;
 
 	  /* Once one argument has spilled onto the stack, all
 	     subsequent arguments go on the stack.  */
 	  reg = E_ARGLAST_REGNUM + 1;
 	}
-
-      do_cleanups (back_to);
     }
 
   /* Store return address.  */
@@ -1163,14 +1160,14 @@ h8300_register_type (struct gdbarch *gdbarch, int regno)
    raw registers.  These helpers extend/narrow the values.  */
 
 static enum register_status
-pseudo_from_raw_register (struct gdbarch *gdbarch, struct regcache *regcache,
+pseudo_from_raw_register (struct gdbarch *gdbarch, readable_regcache *regcache,
 			  gdb_byte *buf, int pseudo_regno, int raw_regno)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   enum register_status status;
   ULONGEST val;
 
-  status = regcache_raw_read_unsigned (regcache, raw_regno, &val);
+  status = regcache->raw_read (raw_regno, &val);
   if (status == REG_VALID)
     store_unsigned_integer (buf,
 			    register_size (gdbarch, pseudo_regno),
@@ -1194,7 +1191,7 @@ raw_from_pseudo_register (struct gdbarch *gdbarch, struct regcache *regcache,
 
 static enum register_status
 h8300_pseudo_register_read (struct gdbarch *gdbarch,
-			    struct regcache *regcache, int regno,
+			    readable_regcache *regcache, int regno,
 			    gdb_byte *buf)
 {
   if (regno == E_PSEUDO_CCR_REGNUM (gdbarch))
@@ -1208,7 +1205,7 @@ h8300_pseudo_register_read (struct gdbarch *gdbarch,
 				       regno, E_EXR_REGNUM);
     }
   else
-    return regcache_raw_read (regcache, regno, buf);
+    return regcache->raw_read (regno, buf);
 }
 
 static void

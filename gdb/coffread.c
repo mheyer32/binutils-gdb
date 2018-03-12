@@ -1,5 +1,5 @@
 /* Read coff symbol tables and convert to internal format, for GDB.
-   Copyright (C) 1987-2017 Free Software Foundation, Inc.
+   Copyright (C) 1987-2018 Free Software Foundation, Inc.
    Contributed by David D. Johnson, Brown University (ddj@cs.brown.edu).
 
    This file is part of GDB.
@@ -392,7 +392,9 @@ coff_start_symtab (struct objfile *objfile, const char *name)
 		 NULL,
   /* The start address is irrelevant, since we set
      last_source_start_addr in coff_end_symtab.  */
-		 0);
+		 0,
+  /* Let buildsym.c deduce the language for this symtab.  */
+		 language_unknown);
   record_debugformat ("COFF");
 }
 
@@ -697,7 +699,8 @@ coff_symfile_read (struct objfile *objfile, symfile_add_flags symfile_flags)
 	}
     }
 
-  bfd_map_over_sections (abfd, coff_locate_sections, (void *) info);
+  if (!(objfile->flags & OBJF_READNEVER))
+    bfd_map_over_sections (abfd, coff_locate_sections, (void *) info);
 
   if (info->stabsects)
     {
@@ -730,20 +733,17 @@ coff_symfile_read (struct objfile *objfile, symfile_add_flags symfile_flags)
   /* Try to add separate debug file if no symbols table found.   */
   if (!objfile_has_partial_symbols (objfile))
     {
-      char *debugfile;
+      std::string debugfile = find_separate_debug_file_by_buildid (objfile);
 
-      debugfile = find_separate_debug_file_by_buildid (objfile);
-
-      if (debugfile == NULL)
+      if (debugfile.empty ())
 	debugfile = find_separate_debug_file_by_debuglink (objfile);
-      make_cleanup (xfree, debugfile);
 
-      if (debugfile)
+      if (!debugfile.empty ())
 	{
-	  gdb_bfd_ref_ptr abfd (symfile_bfd_open (debugfile));
+	  gdb_bfd_ref_ptr abfd (symfile_bfd_open (debugfile.c_str ()));
 
-	  symbol_file_add_separate (abfd.get (), debugfile, symfile_flags,
-				    objfile);
+	  symbol_file_add_separate (abfd.get (), debugfile.c_str (),
+				    symfile_flags, objfile);
 	}
     }
 

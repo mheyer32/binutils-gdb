@@ -1,6 +1,6 @@
 /* Generic remote debugging interface for simulators.
 
-   Copyright (C) 1993-2017 Free Software Foundation, Inc.
+   Copyright (C) 1993-2018 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.
    Steve Chamberlain (sac@cygnus.com).
@@ -77,8 +77,7 @@ static void gdbsim_open (const char *args, int from_tty);
 
 static void gdbsim_close (struct target_ops *self);
 
-static void gdbsim_detach (struct target_ops *ops, const char *args,
-			   int from_tty);
+static void gdbsim_detach (struct target_ops *ops, inferior *inf, int from_tty);
 
 static void gdbsim_prepare_to_store (struct target_ops *self,
 				     struct regcache *regcache);
@@ -87,7 +86,7 @@ static void gdbsim_files_info (struct target_ops *target);
 
 static void gdbsim_mourn_inferior (struct target_ops *target);
 
-static void gdbsim_interrupt (struct target_ops *self, ptid_t ptid);
+static void gdbsim_interrupt (struct target_ops *self);
 
 void simulator_command (char *args, int from_tty);
 
@@ -377,8 +376,8 @@ gdb_os_flush_stderr (host_callback *p)
 
 /* GDB version of printf_filtered callback.  */
 
-static void
-gdb_os_printf_filtered (host_callback * p, const char *format,...)
+static void ATTRIBUTE_PRINTF (2, 3)
+gdb_os_printf_filtered (host_callback * p, const char *format, ...)
 {
   va_list args;
 
@@ -389,7 +388,7 @@ gdb_os_printf_filtered (host_callback * p, const char *format,...)
 
 /* GDB version of error vprintf_filtered.  */
 
-static void
+static void ATTRIBUTE_PRINTF (2, 0)
 gdb_os_vprintf_filtered (host_callback * p, const char *format, va_list ap)
 {
   vfprintf_filtered (gdb_stdout, format, ap);
@@ -397,7 +396,7 @@ gdb_os_vprintf_filtered (host_callback * p, const char *format, va_list ap)
 
 /* GDB version of error evprintf_filtered.  */
 
-static void
+static void ATTRIBUTE_PRINTF (2, 0)
 gdb_os_evprintf_filtered (host_callback * p, const char *format, va_list ap)
 {
   vfprintf_filtered (gdb_stderr, format, ap);
@@ -405,7 +404,7 @@ gdb_os_evprintf_filtered (host_callback * p, const char *format, va_list ap)
 
 /* GDB version of error callback.  */
 
-static void
+static void ATTRIBUTE_PRINTF (2, 3)
 gdb_os_error (host_callback * p, const char *format, ...)
 {
   va_list args;
@@ -815,17 +814,16 @@ gdbsim_close (struct target_ops *self)
 /* Takes a program previously attached to and detaches it.
    The program may resume execution (some targets do, some don't) and will
    no longer stop on signals, etc.  We better not have left any breakpoints
-   in the program or it'll die when it hits one.  ARGS is arguments
-   typed by the user (e.g. a signal to send the process).  FROM_TTY
-   says whether to be verbose or not.  */
+   in the program or it'll die when it hits one.  FROM_TTY says whether to be
+   verbose or not.  */
 /* Terminate the open connection to the remote debugger.
    Use this when you want to detach and do something else with your gdb.  */
 
 static void
-gdbsim_detach (struct target_ops *ops, const char *args, int from_tty)
+gdbsim_detach (struct target_ops *ops, inferior *inf, int from_tty)
 {
   if (remote_debug)
-    fprintf_unfiltered (gdb_stdlog, "gdbsim_detach: args \"%s\"\n", args);
+    fprintf_unfiltered (gdb_stdlog, "gdbsim_detach\n");
 
   unpush_target (ops);		/* calls gdbsim_close to do the real work */
   if (from_tty)
@@ -922,24 +920,9 @@ gdbsim_interrupt_inferior (struct inferior *inf, void *arg)
 }
 
 static void
-gdbsim_interrupt (struct target_ops *self, ptid_t ptid)
+gdbsim_interrupt (struct target_ops *self)
 {
-  struct sim_inferior_data *sim_data;
-
-  if (ptid_equal (ptid, minus_one_ptid))
-    {
-      iterate_over_inferiors (gdbsim_interrupt_inferior, NULL);
-    }
-  else
-    {
-      struct inferior *inf = find_inferior_ptid (ptid);
-
-      if (inf == NULL)
-	error (_("Can't stop pid %d.  No inferior found."),
-	       ptid_get_pid (ptid));
-
-      gdbsim_interrupt_inferior (inf, NULL);
-    }
+  iterate_over_inferiors (gdbsim_interrupt_inferior, NULL);
 }
 
 /* GDB version of os_poll_quit callback.
@@ -963,7 +946,7 @@ gdb_os_poll_quit (host_callback *p)
 static void
 gdbsim_cntrl_c (int signo)
 {
-  gdbsim_interrupt (NULL, minus_one_ptid);
+  gdbsim_interrupt (NULL);
 }
 
 static ptid_t
@@ -1179,7 +1162,7 @@ gdbsim_mourn_inferior (struct target_ops *target)
    simulator must do any command interpretation work.  */
 
 void
-simulator_command (char *args, int from_tty)
+simulator_command (const char *args, int from_tty)
 {
   struct sim_inferior_data *sim_data;
 

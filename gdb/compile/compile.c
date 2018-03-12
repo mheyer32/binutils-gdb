@@ -1,6 +1,6 @@
 /* General Compile and inject code
 
-   Copyright (C) 2014-2017 Free Software Foundation, Inc.
+   Copyright (C) 2014-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -41,6 +41,7 @@
 #include "valprint.h"
 #include "common/gdb_optional.h"
 #include "common/gdb_unlinker.h"
+#include "common/pathstuff.h"
 
 
 
@@ -302,7 +303,7 @@ static char **compile_args_argv;
 /* Implement 'set compile-args'.  */
 
 static void
-set_compile_args (char *args, int from_tty, struct cmd_list_element *c)
+set_compile_args (const char *args, int from_tty, struct cmd_list_element *c)
 {
   freeargv (compile_args_argv);
   build_argc_argv (compile_args, &compile_args_argc, &compile_args_argv);
@@ -393,9 +394,25 @@ filter_args (int *argcp, char **argv)
   *destv = NULL;
 }
 
-/* Produce final vector of GCC compilation options.  First element is target
-   size ("-m64", "-m32" etc.), optionally followed by DW_AT_producer options
-   and then compile-args string GDB variable.  */
+/* Produce final vector of GCC compilation options.
+
+   The first element of the combined argument vector are arguments
+   relating to the target size ("-m64", "-m32" etc.).  These are
+   sourced from the inferior's architecture.
+
+   The second element of the combined argument vector are arguments
+   stored in the inferior DW_AT_producer section.  If these are stored
+   in the inferior (there is no guarantee that they are), they are
+   added to the vector.
+
+   The third element of the combined argument vector are argument
+   supplied by the language implementation provided by
+   compile-{lang}-support.  These contain language specific arguments.
+
+   The final element of the combined argument vector are arguments
+   supplied by the "set compile-args" command.  These are always
+   appended last so as to override any of the arguments automatically
+   generated above.  */
 
 static void
 get_args (const struct compile_instance *compiler, struct gdbarch *gdbarch,
@@ -462,9 +479,8 @@ compile_to_object (struct command_line *cmd, const char *cmd_string,
   int argc;
   char **argv;
   int ok;
-  FILE *src;
   struct gdbarch *gdbarch = get_current_arch ();
-  char *triplet_rx;
+  std::string triplet_rx;
   char *error_message;
 
   if (!target_has_execution)
@@ -532,11 +548,11 @@ compile_to_object (struct command_line *cmd, const char *cmd_string,
       const char *arch_rx = gdbarch_gnu_triplet_regexp (gdbarch);
 
       /* Allow triplets with or without vendor set.  */
-      triplet_rx = concat (arch_rx, "(-[^-]*)?-", os_rx, (char *) NULL);
-      make_cleanup (xfree, triplet_rx);
+      triplet_rx = std::string (arch_rx) + "(-[^-]*)?-" + os_rx;
 
       if (compiler->fe->ops->version >= GCC_FE_VERSION_1)
-	compiler->fe->ops->set_triplet_regexp (compiler->fe, triplet_rx);
+	compiler->fe->ops->set_triplet_regexp (compiler->fe,
+					       triplet_rx.c_str ());
     }
 
   /* Set compiler command-line arguments.  */
@@ -546,7 +562,8 @@ compile_to_object (struct command_line *cmd, const char *cmd_string,
   if (compiler->fe->ops->version >= GCC_FE_VERSION_1)
     error_message = compiler->fe->ops->set_arguments (compiler->fe, argc, argv);
   else
-    error_message = compiler->fe->ops->set_arguments_v0 (compiler->fe, triplet_rx,
+    error_message = compiler->fe->ops->set_arguments_v0 (compiler->fe,
+							 triplet_rx.c_str (),
 							 argc, argv);
   if (error_message != NULL)
     {

@@ -1,5 +1,5 @@
 /* i370-specific support for 32-bit ELF
-   Copyright (C) 1994-2017 Free Software Foundation, Inc.
+   Copyright (C) 1994-2018 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support.
    Hacked by Linas Vepstas for i370 linas@linas.org
 
@@ -289,8 +289,8 @@ i370_elf_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
 
 /* Set the howto pointer for an i370 ELF reloc.  */
 
-static void
-i370_elf_info_to_howto (bfd *abfd ATTRIBUTE_UNUSED,
+static bfd_boolean
+i370_elf_info_to_howto (bfd *abfd,
 			arelent *cache_ptr,
 			Elf_Internal_Rela *dst)
 {
@@ -304,12 +304,13 @@ i370_elf_info_to_howto (bfd *abfd ATTRIBUTE_UNUSED,
   if (r_type >= R_I370_max)
     {
       /* xgettext:c-format */
-      _bfd_error_handler (_("%B: unrecognised I370 reloc number: %d"),
+      _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
 			  abfd, r_type);
       bfd_set_error (bfd_error_bad_value);
-      r_type = R_I370_NONE;
+      return FALSE;
     }
   cache_ptr->howto = i370_elf_howto_table[r_type];
+  return TRUE;
 }
 
 /* Hack alert --  the following several routines look generic to me ...
@@ -356,7 +357,7 @@ i370_elf_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
     {
       _bfd_error_handler
 	/* xgettext:c-format */
-	(_("%B: uses different e_flags (%#x) fields than previous modules (%#x)"),
+	(_("%pB: uses different e_flags (%#x) fields than previous modules (%#x)"),
 	 ibfd, new_flags, old_flags);
 
       bfd_set_error (bfd_error_bad_value);
@@ -478,7 +479,7 @@ i370_elf_adjust_dynamic_symbol (struct bfd_link_info *info,
   /* Make sure we know what is going on here.  */
   BFD_ASSERT (dynobj != NULL
 	      && (h->needs_plt
-		  || h->u.weakdef != NULL
+		  || h->is_weakalias
 		  || (h->def_dynamic
 		      && h->ref_regular
 		      && !h->def_regular)));
@@ -490,12 +491,12 @@ i370_elf_adjust_dynamic_symbol (struct bfd_link_info *info,
   /* If this is a weak symbol, and there is a real definition, the
      processor independent code will have arranged for us to see the
      real definition first, and we can just use the same value.  */
-  if (h->u.weakdef != NULL)
+  if (h->is_weakalias)
     {
-      BFD_ASSERT (h->u.weakdef->root.type == bfd_link_hash_defined
-		  || h->u.weakdef->root.type == bfd_link_hash_defweak);
-      h->root.u.def.section = h->u.weakdef->root.u.def.section;
-      h->root.u.def.value = h->u.weakdef->root.u.def.value;
+      struct elf_link_hash_entry *def = weakdef (h);
+      BFD_ASSERT (def->root.type == bfd_link_hash_defined);
+      h->root.u.def.section = def->root.u.def.section;
+      h->root.u.def.value = def->root.u.def.value;
       return TRUE;
     }
 
@@ -811,7 +812,7 @@ i370_elf_check_relocs (bfd *abfd,
     return TRUE;
 
 #ifdef DEBUG
-  _bfd_error_handler ("i370_elf_check_relocs called for section %A in %B",
+  _bfd_error_handler ("i370_elf_check_relocs called for section %pA in %pB",
 		      sec, abfd);
 #endif
 
@@ -836,10 +837,6 @@ i370_elf_check_relocs (bfd *abfd,
 	  while (h->root.type == bfd_link_hash_indirect
 		 || h->root.type == bfd_link_hash_warning)
 	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
-
-	  /* PR15323, ref flags aren't set for references in the same
-	     object.  */
-	  h->root.non_ir_ref_regular = 1;
 	}
 
       if (bfd_link_pic (info))
@@ -1053,7 +1050,7 @@ i370_elf_relocate_section (bfd *output_bfd,
   bfd_boolean ret = TRUE;
 
 #ifdef DEBUG
-  _bfd_error_handler ("i370_elf_relocate_section called for %B section %A, %u relocations%s",
+  _bfd_error_handler ("i370_elf_relocate_section called for %pB section %pA, %u relocations%s",
 		      input_bfd, input_section,
 		      input_section->reloc_count,
 		      (bfd_link_relocatable (info)) ? " (relocatable)" : "");
@@ -1072,7 +1069,6 @@ i370_elf_relocate_section (bfd *output_bfd,
       Elf_Internal_Sym *sym	     = NULL;
       asection *sec		     = NULL;
       struct elf_link_hash_entry * h = NULL;
-      const char *sym_name	     = NULL;
       reloc_howto_type *howto;
       unsigned long r_symndx;
       bfd_vma relocation;
@@ -1082,7 +1078,7 @@ i370_elf_relocate_section (bfd *output_bfd,
 	  || !i370_elf_howto_table[(int)r_type])
 	{
 	  /* xgettext:c-format */
-	  _bfd_error_handler (_("%B: unknown relocation type %d"),
+	  _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
 			      input_bfd, (int) r_type);
 
 	  bfd_set_error (bfd_error_bad_value);
@@ -1098,7 +1094,6 @@ i370_elf_relocate_section (bfd *output_bfd,
 	{
 	  sym = local_syms + r_symndx;
 	  sec = local_sections[r_symndx];
-	  sym_name = "<local symbol>";
 
 	  relocation = _bfd_elf_rela_local_sym (output_bfd, sym, & sec, rel);
 	  addend = rel->r_addend;
@@ -1115,7 +1110,6 @@ i370_elf_relocate_section (bfd *output_bfd,
 	  while (h->root.type == bfd_link_hash_indirect
 		 || h->root.type == bfd_link_hash_warning)
 	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
-	  sym_name = h->root.root.string;
 	  if (h->root.type == bfd_link_hash_defined
 	      || h->root.type == bfd_link_hash_defweak)
 	    {
@@ -1165,8 +1159,8 @@ i370_elf_relocate_section (bfd *output_bfd,
 	{
 	default:
 	  _bfd_error_handler
-	    (_("%B: unknown relocation type %d for symbol %s"),
-	     input_bfd, (int) r_type, sym_name);
+	    (_("%pB: unsupported relocation type %#x"),
+	     input_bfd, (int) r_type);
 
 	  bfd_set_error (bfd_error_bad_value);
 	  ret = FALSE;
@@ -1305,27 +1299,14 @@ i370_elf_relocate_section (bfd *output_bfd,
 
 	case (int) R_I370_COPY:
 	case (int) R_I370_RELATIVE:
-	  _bfd_error_handler
-	    /* xgettext:c-format */
-	    (_("%B: Relocation %s is not yet supported for symbol %s."),
-	     input_bfd,
-	     i370_elf_howto_table[(int) r_type]->name,
-	     sym_name);
-
+	  /* xgettext:c-format */
+	  _bfd_error_handler (_("%pB: %s unsupported"),
+			      input_bfd,
+			      i370_elf_howto_table[(int) r_type]->name);
 	  bfd_set_error (bfd_error_invalid_operation);
 	  ret = FALSE;
 	  continue;
 	}
-
-#ifdef DEBUG
-      fprintf (stderr, "\ttype = %s (%d), name = %s, symbol index = %ld, offset = %ld, addend = %ld\n",
-	       howto->name,
-	       (int)r_type,
-	       sym_name,
-	       r_symndx,
-	       (long) offset,
-	       (long) addend);
-#endif
 
       r = _bfd_final_link_relocate (howto, input_bfd, input_section, contents,
 				    offset, relocation, addend);
@@ -1409,10 +1390,10 @@ i370_elf_relocate_section (bfd *output_bfd,
 #define elf_backend_adjust_dynamic_symbol	i370_elf_adjust_dynamic_symbol
 #define elf_backend_check_relocs		i370_elf_check_relocs
 
-static int
-i370_noop (void)
+static bfd_boolean
+i370_noop (bfd * abfd ATTRIBUTE_UNUSED, ...)
 {
-  return 1;
+  return TRUE;
 }
 
 #define elf_backend_finish_dynamic_symbol \

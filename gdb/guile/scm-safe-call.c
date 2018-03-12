@@ -1,6 +1,6 @@
 /* GDB/Scheme support for safe calls into the Guile interpreter.
 
-   Copyright (C) 2014-2017 Free Software Foundation, Inc.
+   Copyright (C) 2014-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,6 +23,7 @@
 #include "defs.h"
 #include "filenames.h"
 #include "guile-internal.h"
+#include "common/pathstuff.h"
 
 /* Struct to marshall args to scscm_safe_call_body.  */
 

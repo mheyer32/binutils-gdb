@@ -1,5 +1,5 @@
 /* Xtensa-specific support for 32-bit ELF.
-   Copyright (C) 2003-2017 Free Software Foundation, Inc.
+   Copyright (C) 2003-2018 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -214,11 +214,11 @@ static reloc_howto_type elf_howto_table[] =
 
   /* GNU extension to record C++ vtable hierarchy.  */
   HOWTO (R_XTENSA_GNU_VTINHERIT, 0, 2, 0, FALSE, 0, complain_overflow_dont,
-         NULL, "R_XTENSA_GNU_VTINHERIT",
+	 NULL, "R_XTENSA_GNU_VTINHERIT",
 	 FALSE, 0, 0, FALSE),
   /* GNU extension to record C++ vtable member usage.  */
   HOWTO (R_XTENSA_GNU_VTENTRY, 0, 2, 0, FALSE, 0, complain_overflow_dont,
-         _bfd_elf_rel_vtable_reloc_fn, "R_XTENSA_GNU_VTENTRY",
+	 _bfd_elf_rel_vtable_reloc_fn, "R_XTENSA_GNU_VTENTRY",
 	 FALSE, 0, 0, FALSE),
 
   /* Relocations for supporting difference of symbols.  */
@@ -450,6 +450,9 @@ elf_xtensa_reloc_type_lookup (bfd *abfd ATTRIBUTE_UNUSED,
       break;
     }
 
+  /* xgettext:c-format */
+  _bfd_error_handler (_("%pB: unsupported relocation type %#x"), abfd, (int) code);
+  bfd_set_error (bfd_error_bad_value);
   TRACE ("Unknown");
   return NULL;
 }
@@ -472,8 +475,8 @@ elf_xtensa_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
 /* Given an ELF "rela" relocation, find the corresponding howto and record
    it in the BFD internal arelent representation of the relocation.  */
 
-static void
-elf_xtensa_info_to_howto_rela (bfd *abfd ATTRIBUTE_UNUSED,
+static bfd_boolean
+elf_xtensa_info_to_howto_rela (bfd *abfd,
 			       arelent *cache_ptr,
 			       Elf_Internal_Rela *dst)
 {
@@ -482,10 +485,13 @@ elf_xtensa_info_to_howto_rela (bfd *abfd ATTRIBUTE_UNUSED,
   if (r_type >= (unsigned int) R_XTENSA_max)
     {
       /* xgettext:c-format */
-      _bfd_error_handler (_("%B: invalid XTENSA reloc number: %d"), abfd, r_type);
-      r_type = 0;
+      _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
+			  abfd, r_type);
+      bfd_set_error (bfd_error_bad_value);
+      return FALSE;
     }
   cache_ptr->howto = &elf_howto_table[r_type];
+  return TRUE;
 }
 
 
@@ -912,7 +918,7 @@ xtensa_read_table_entries (bfd *abfd,
 	     property_table_compare);
 
       /* Check that the table contents are valid.  Problems may occur,
-         for example, if an unrelocated object file is stripped.  */
+	 for example, if an unrelocated object file is stripped.  */
       for (blk = 1; blk < block_count; blk++)
 	{
 	  /* The only circumstance where two entries may legitimately
@@ -923,7 +929,7 @@ xtensa_read_table_entries (bfd *abfd,
 	      blocks[blk - 1].size != 0)
 	    {
 	      /* xgettext:c-format */
-	      _bfd_error_handler (_("%B(%A): invalid property table"),
+	      _bfd_error_handler (_("%pB(%pA): invalid property table"),
 				  abfd, section);
 	      bfd_set_error (bfd_error_bad_value);
 	      free (blocks);
@@ -1015,7 +1021,7 @@ elf_xtensa_check_relocs (bfd *abfd,
       if (r_symndx >= NUM_SHDR_ENTRIES (symtab_hdr))
 	{
 	  /* xgettext:c-format */
-	  _bfd_error_handler (_("%B: bad symbol index: %d"),
+	  _bfd_error_handler (_("%pB: bad symbol index: %d"),
 			      abfd, r_symndx);
 	  return FALSE;
 	}
@@ -1026,10 +1032,6 @@ elf_xtensa_check_relocs (bfd *abfd,
 	  while (h->root.type == bfd_link_hash_indirect
 		 || h->root.type == bfd_link_hash_warning)
 	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
-
-	  /* PR15323, ref flags aren't set for references in the same
-	     object.  */
-	  h->root.non_ir_ref_regular = 1;
 	}
       eh = elf_xtensa_hash_entry (h);
 
@@ -1193,7 +1195,7 @@ elf_xtensa_check_relocs (bfd *abfd,
 	    {
 	      _bfd_error_handler
 		/* xgettext:c-format */
-		(_("%B: `%s' accessed both as normal and thread local symbol"),
+		(_("%pB: `%s' accessed both as normal and thread local symbol"),
 		 abfd,
 		 h ? h->root.root.string : "<local>");
 	      return FALSE;
@@ -1215,19 +1217,19 @@ elf_xtensa_check_relocs (bfd *abfd,
 
 static void
 elf_xtensa_make_sym_local (struct bfd_link_info *info,
-                           struct elf_link_hash_entry *h)
+			   struct elf_link_hash_entry *h)
 {
   if (bfd_link_pic (info))
     {
       if (h->plt.refcount > 0)
-        {
+	{
 	  /* For shared objects, there's no need for PLT entries for local
 	     symbols (use RELATIVE relocs instead of JMP_SLOT relocs).  */
-          if (h->got.refcount < 0)
-            h->got.refcount = 0;
-          h->got.refcount += h->plt.refcount;
-          h->plt.refcount = 0;
-        }
+	  if (h->got.refcount < 0)
+	    h->got.refcount = 0;
+	  h->got.refcount += h->plt.refcount;
+	  h->plt.refcount = 0;
+	}
     }
   else
     {
@@ -1240,8 +1242,8 @@ elf_xtensa_make_sym_local (struct bfd_link_info *info,
 
 static void
 elf_xtensa_hide_symbol (struct bfd_link_info *info,
-                        struct elf_link_hash_entry *h,
-                        bfd_boolean force_local)
+			struct elf_link_hash_entry *h,
+			bfd_boolean force_local)
 {
   /* For a shared link, move the plt refcount to the got refcount to leave
      space for RELATIVE relocs.  */
@@ -1387,12 +1389,12 @@ elf_xtensa_adjust_dynamic_symbol (struct bfd_link_info *info ATTRIBUTE_UNUSED,
   /* If this is a weak symbol, and there is a real definition, the
      processor independent code will have arranged for us to see the
      real definition first, and we can just use the same value.  */
-  if (h->u.weakdef)
+  if (h->is_weakalias)
     {
-      BFD_ASSERT (h->u.weakdef->root.type == bfd_link_hash_defined
-		  || h->u.weakdef->root.type == bfd_link_hash_defweak);
-      h->root.u.def.section = h->u.weakdef->root.u.def.section;
-      h->root.u.def.value = h->u.weakdef->root.u.def.value;
+      struct elf_link_hash_entry *def = weakdef (h);
+      BFD_ASSERT (def->root.type == bfd_link_hash_defined);
+      h->root.u.def.section = def->root.u.def.section;
+      h->root.u.def.value = def->root.u.def.value;
       return TRUE;
     }
 
@@ -1863,7 +1865,7 @@ elf_xtensa_do_reloc (reloc_howto_type *howto,
 
     case R_XTENSA_ASM_SIMPLIFY:
       {
-        /* Convert the L32R/CALLX to CALL.  */
+	/* Convert the L32R/CALLX to CALL.  */
 	bfd_reloc_status_type retval =
 	  elf_xtensa_do_asm_simplify (contents, address, input_size,
 				      error_message);
@@ -2404,7 +2406,7 @@ replace_tls_insn (Elf_Internal_Rela *rel,
 
   xtensa_format_set_slot (isa, fmt, 0, ibuff, sbuff);
   xtensa_insnbuf_to_chars (isa, ibuff, contents + rel->r_offset,
-                           input_size - rel->r_offset);
+			   input_size - rel->r_offset);
 
   return TRUE;
 }
@@ -2656,8 +2658,10 @@ elf_xtensa_relocate_section (bfd *output_bfd,
 	{
 	  _bfd_error_handler
 	    /* xgettext:c-format */
-	    (_("%B(%A+%#Lx): relocation offset out of range (size=%#Lx)"),
-	     input_bfd, input_section, rel->r_offset, input_size);
+	    (_("%pB(%pA+%#" PRIx64 "): "
+	       "relocation offset out of range (size=%#" PRIx64 ")"),
+	     input_bfd, input_section, (uint64_t) rel->r_offset,
+	     (uint64_t) input_size);
 	  bfd_set_error (bfd_error_bad_value);
 	  return FALSE;
 	}
@@ -2682,12 +2686,12 @@ elf_xtensa_relocate_section (bfd *output_bfd,
 	  _bfd_error_handler
 	    ((sym_type == STT_TLS
 	      /* xgettext:c-format */
-	      ? _("%B(%A+%#Lx): %s used with TLS symbol %s")
+	      ? _("%pB(%pA+%#" PRIx64 "): %s used with TLS symbol %s")
 	      /* xgettext:c-format */
-	      : _("%B(%A+%#Lx): %s used with non-TLS symbol %s")),
+	      : _("%pB(%pA+%#" PRIx64 "): %s used with non-TLS symbol %s")),
 	     input_bfd,
 	     input_section,
-	     rel->r_offset,
+	     (uint64_t) rel->r_offset,
 	     howto->name,
 	     name);
 	}
@@ -2940,10 +2944,11 @@ elf_xtensa_relocate_section (bfd *output_bfd,
 	{
 	  _bfd_error_handler
 	    /* xgettext:c-format */
-	    (_("%B(%A+%#Lx): unresolvable %s relocation against symbol `%s'"),
+	    (_("%pB(%pA+%#" PRIx64 "): "
+	       "unresolvable %s relocation against symbol `%s'"),
 	     input_bfd,
 	     input_section,
-	     rel->r_offset,
+	     (uint64_t) rel->r_offset,
 	     howto->name,
 	     name);
 	  return FALSE;
@@ -3351,7 +3356,7 @@ elf_xtensa_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
     {
       _bfd_error_handler
 	/* xgettext:c-format */
-	(_("%B: incompatible machine type. Output is 0x%x. Input is 0x%x"),
+	(_("%pB: incompatible machine type; output is 0x%x; input is 0x%x"),
 	 ibfd, out_mach, in_mach);
       bfd_set_error (bfd_error_wrong_format);
       return FALSE;
@@ -4582,7 +4587,7 @@ elf_xtensa_do_asm_simplify (bfd_byte *contents,
 
   if (content_length < address)
     {
-      *error_message = _("Attempt to convert L32R/CALLX to CALL failed");
+      *error_message = _("attempt to convert L32R/CALLX to CALL failed");
       return bfd_reloc_other;
     }
 
@@ -4590,7 +4595,7 @@ elf_xtensa_do_asm_simplify (bfd_byte *contents,
   direct_call_opcode = swap_callx_for_call_opcode (opcode);
   if (direct_call_opcode == XTENSA_UNDEFINED)
     {
-      *error_message = _("Attempt to convert L32R/CALLX to CALL failed");
+      *error_message = _("attempt to convert L32R/CALLX to CALL failed");
       return bfd_reloc_other;
     }
 
@@ -5236,23 +5241,23 @@ add_value_map (value_map_hash_table *map,
 
 /* The following text actions are generated:
 
-   "ta_remove_insn"         remove an instruction or instructions
-   "ta_remove_longcall"     convert longcall to call
+   "ta_remove_insn"	    remove an instruction or instructions
+   "ta_remove_longcall"	    convert longcall to call
    "ta_convert_longcall"    convert longcall to nop/call
-   "ta_narrow_insn"         narrow a wide instruction
-   "ta_widen"               widen a narrow instruction
-   "ta_fill"                add fill or remove fill
+   "ta_narrow_insn"	    narrow a wide instruction
+   "ta_widen"		    widen a narrow instruction
+   "ta_fill"		    add fill or remove fill
       removed < 0 is a fill; branches to the fill address will be
 	changed to address + fill size (e.g., address - removed)
       removed >= 0 branches to the fill address will stay unchanged
-   "ta_remove_literal"      remove a literal; this action is
+   "ta_remove_literal"	    remove a literal; this action is
 			    indicated when a literal is removed
-                            or replaced.
-   "ta_add_literal"         insert a new literal; this action is
-                            indicated when a literal has been moved.
-                            It may use a virtual_offset because
+			    or replaced.
+   "ta_add_literal"	    insert a new literal; this action is
+			    indicated when a literal has been moved.
+			    It may use a virtual_offset because
 			    multiple literals can be placed at the
-                            same location.
+			    same location.
 
    For each of these text actions, we also record the number of bytes
    removed by performing the text action.  In the case of a "ta_widen"
@@ -5265,12 +5270,12 @@ typedef enum text_action_enum_t text_action_t;
 enum text_action_enum_t
 {
   ta_none,
-  ta_remove_insn,        /* removed = -size */
-  ta_remove_longcall,    /* removed = -size */
-  ta_convert_longcall,   /* removed = 0 */
-  ta_narrow_insn,        /* removed = -1 */
-  ta_widen_insn,         /* removed = +1 */
-  ta_fill,               /* removed = +size */
+  ta_remove_insn,	 /* removed = -size */
+  ta_remove_longcall,	 /* removed = -size */
+  ta_convert_longcall,	 /* removed = 0 */
+  ta_narrow_insn,	 /* removed = -1 */
+  ta_widen_insn,	 /* removed = +1 */
+  ta_fill,		 /* removed = +size */
   ta_remove_literal,
   ta_add_literal
 };
@@ -6418,9 +6423,10 @@ extend_ebb_bounds_forward (ebb_t *ebb)
 	{
 	  _bfd_error_handler
 	    /* xgettext:c-format */
-	    (_("%B(%A+%#Lx): could not decode instruction; "
+	    (_("%pB(%pA+%#" PRIx64 "): could not decode instruction; "
 	       "possible configuration mismatch"),
-	     ebb->sec->owner, ebb->sec, ebb->end_offset + insn_block_len);
+	     ebb->sec->owner, ebb->sec,
+	     (uint64_t) (ebb->end_offset + insn_block_len));
 	  return FALSE;
 	}
       ebb->end_offset += insn_block_len;
@@ -6496,9 +6502,10 @@ extend_ebb_bounds_backward (ebb_t *ebb)
 	{
 	  _bfd_error_handler
 	    /* xgettext:c-format */
-	    (_("%B(%A+%#Lx): could not decode instruction; "
+	    (_("%pB(%pA+%#" PRIx64 "): could not decode instruction; "
 	       "possible configuration mismatch"),
-	     ebb->sec->owner, ebb->sec, ebb->end_offset + insn_block_len);
+	     ebb->sec->owner, ebb->sec,
+	     (uint64_t) (ebb->end_offset + insn_block_len));
 	  return FALSE;
 	}
       ebb->start_offset -= insn_block_len;
@@ -6968,7 +6975,7 @@ find_relaxable_sections (bfd *abfd,
 	continue;
 
       /* Count PC-relative operand relocations against the target section.
-         Note: The conditions tested here must match the conditions under
+	 Note: The conditions tested here must match the conditions under
 	 which init_source_reloc is called in collect_source_relocs().  */
       is_l32r_reloc = FALSE;
       if (is_operand_relocation (ELF32_R_TYPE (irel->r_info)))
@@ -7415,7 +7422,7 @@ build_reloc_ranges (bfd *abfd, asection *sec,
       reloc[i].irel = irel;
 
       /* Every relocation won't possibly be checked in the optimized version of
-         check_section_ebb_pcrels_fit, so this needs to be done here.  */
+	 check_section_ebb_pcrels_fit, so this needs to be done here.  */
       if (is_alt_relocation (ELF32_R_TYPE (irel->r_info)))
 	{
 	  /* None of the current alternate relocs are PC-relative,
@@ -7611,10 +7618,10 @@ compute_text_actions (bfd *abfd,
 	{
 	  _bfd_error_handler
 	    /* xgettext:c-format */
-	    (_("%B(%A+%#Lx): could not decode instruction for "
+	    (_("%pB(%pA+%#" PRIx64 "): could not decode instruction for "
 	       "XTENSA_ASM_SIMPLIFY relocation; "
 	       "possible configuration mismatch"),
-	     sec->owner, sec, r_offset);
+	     sec->owner, sec, (uint64_t) r_offset);
 	  continue;
 	}
 
@@ -7872,9 +7879,9 @@ compute_ebb_proposed_actions (ebb_constraint *ebb_table)
  decode_error:
   _bfd_error_handler
     /* xgettext:c-format */
-    (_("%B(%A+%#Lx): could not decode instruction; "
+    (_("%pB(%pA+%#" PRIx64 "): could not decode instruction; "
        "possible configuration mismatch"),
-     ebb->sec->owner, ebb->sec, offset);
+     ebb->sec->owner, ebb->sec, (uint64_t) offset);
   return FALSE;
 }
 
@@ -8995,7 +9002,7 @@ relocations_reach (source_reloc *reloc,
 	continue;
 
       /* The original and new output section for these must be the same
-         in order to coalesce.  */
+	 in order to coalesce.  */
       if (r_reloc_get_section (&reloc[i].r_rel)->output_section
 	  != sec->output_section)
 	return FALSE;
@@ -9365,7 +9372,7 @@ relax_section (bfd *abfd, asection *sec, struct bfd_link_info *link_info)
 		      /* Update the action so that the code that moves
 			 the contents will do the right thing.  */
 		      /* ta_remove_longcall and ta_remove_insn actions are
-		         grouped together in the tree as well as
+			 grouped together in the tree as well as
 			 ta_convert_longcall and ta_none, so that changes below
 			 can be done w/o removing and reinserting action into
 			 the tree.  */
@@ -10349,7 +10356,7 @@ relax_property_section (bfd *abfd,
       predef_flags = xtensa_get_property_predef_flags (sec);
 
       /* Walk over memory and relocations at the same time.
-         This REQUIRES that the internal_relocs be sorted by offset.  */
+	 This REQUIRES that the internal_relocs be sorted by offset.  */
       qsort (internal_relocs, sec->reloc_count, sizeof (Elf_Internal_Rela),
 	     internal_reloc_compare);
 
@@ -10650,8 +10657,8 @@ do_fix_for_relocatable_link (Elf_Internal_Rela *rel,
 	{
 	  _bfd_error_handler
 	    /* xgettext:c-format */
-	    (_("%B(%A+%#Lx): unexpected fix for %s relocation"),
-	     input_bfd, input_section, rel->r_offset,
+	    (_("%pB(%pA+%#" PRIx64 "): unexpected fix for %s relocation"),
+	     input_bfd, input_section, (uint64_t) rel->r_offset,
 	     elf_howto_table[r_type].name);
 	  return FALSE;
 	}
@@ -10772,8 +10779,8 @@ get_elf_r_symndx_section (bfd *abfd, unsigned long r_symndx)
       struct elf_link_hash_entry *h = elf_sym_hashes (abfd)[indx];
 
       while (h->root.type == bfd_link_hash_indirect
-             || h->root.type == bfd_link_hash_warning)
-        h = (struct elf_link_hash_entry *) h->root.u.i.link;
+	     || h->root.type == bfd_link_hash_warning)
+	h = (struct elf_link_hash_entry *) h->root.u.i.link;
 
       switch (h->root.type)
 	{
@@ -10837,10 +10844,10 @@ get_elf_r_symndx_offset (bfd *abfd, unsigned long r_symndx)
 	elf_sym_hashes (abfd)[indx];
 
       while (h->root.type == bfd_link_hash_indirect
-             || h->root.type == bfd_link_hash_warning)
+	     || h->root.type == bfd_link_hash_warning)
 	h = (struct elf_link_hash_entry *) h->root.u.i.link;
       if (h->root.type == bfd_link_hash_defined
-          || h->root.type == bfd_link_hash_defweak)
+	  || h->root.type == bfd_link_hash_defweak)
 	offset = h->root.u.def.value;
     }
   return offset;
@@ -11010,9 +11017,9 @@ xtensa_property_section_name (asection *sec, const char *base_name)
 
       suffix = sec->name + linkonce_len;
       /* For backward compatibility, replace "t." instead of inserting
-         the new linkonce_kind (but not for "prop" sections).  */
+	 the new linkonce_kind (but not for "prop" sections).  */
       if (CONST_STRNEQ (suffix, "t.") && linkonce_kind[1] == '.')
-        suffix += 2;
+	suffix += 2;
       strcat (prop_sec_name + linkonce_len, suffix);
     }
   else
@@ -11189,9 +11196,9 @@ static const struct bfd_elf_special_section elf_xtensa_special_sections[] =
 {
   { STRING_COMMA_LEN (".fini.literal"), 0, SHT_PROGBITS, SHF_ALLOC + SHF_EXECINSTR },
   { STRING_COMMA_LEN (".init.literal"), 0, SHT_PROGBITS, SHF_ALLOC + SHF_EXECINSTR },
-  { STRING_COMMA_LEN (".literal"),      0, SHT_PROGBITS, SHF_ALLOC + SHF_EXECINSTR },
-  { STRING_COMMA_LEN (".xtensa.info"),  0, SHT_NOTE,     0 },
-  { NULL,                       0,      0, 0,            0 }
+  { STRING_COMMA_LEN (".literal"),	0, SHT_PROGBITS, SHF_ALLOC + SHF_EXECINSTR },
+  { STRING_COMMA_LEN (".xtensa.info"),	0, SHT_NOTE,	 0 },
+  { NULL,			0,	0, 0,		 0 }
 };
 
 #define ELF_TARGET_ID			XTENSA_ELF_DATA
@@ -11247,8 +11254,7 @@ static const struct bfd_elf_special_section elf_xtensa_special_sections[] =
 #define elf_backend_relocate_section	     elf_xtensa_relocate_section
 #define elf_backend_size_dynamic_sections    elf_xtensa_size_dynamic_sections
 #define elf_backend_always_size_sections     elf_xtensa_always_size_sections
-#define elf_backend_omit_section_dynsym \
-  ((bfd_boolean (*) (bfd *, struct bfd_link_info *, asection *)) bfd_true)
+#define elf_backend_omit_section_dynsym      _bfd_elf_omit_section_dynsym_all
 #define elf_backend_special_sections	     elf_xtensa_special_sections
 #define elf_backend_action_discarded	     elf_xtensa_action_discarded
 #define elf_backend_copy_indirect_symbol     elf_xtensa_copy_indirect_symbol

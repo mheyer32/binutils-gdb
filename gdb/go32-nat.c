@@ -1,5 +1,5 @@
 /* Native debugging support for Intel x86 running DJGPP.
-   Copyright (C) 1997-2017 Free Software Foundation, Inc.
+   Copyright (C) 1997-2018 Free Software Foundation, Inc.
    Written by Robert Hoehne.
 
    This file is part of GDB.
@@ -937,6 +937,11 @@ go32_terminal_ours (struct target_ops *self)
   }
 }
 
+static void
+go32_pass_ctrlc (struct target_ops *self)
+{
+}
+
 static int
 go32_thread_alive (struct target_ops *ops, ptid_t ptid)
 {
@@ -968,6 +973,7 @@ go32_target (void)
   t->to_terminal_ours_for_output = go32_terminal_ours;
   t->to_terminal_ours = go32_terminal_ours;
   t->to_terminal_info = go32_terminal_info;
+  t->to_pass_ctrlc = go32_pass_ctrlc;
   t->to_kill = go32_kill_inferior;
   t->to_create_inferior = go32_create_inferior;
   t->to_mourn_inferior = go32_mourn_inferior;
@@ -1061,7 +1067,7 @@ print_mem (unsigned long datum, const char *header, int in_pages_p)
 
 /* Display assorted information about the underlying OS.  */
 static void
-go32_sysinfo (char *arg, int from_tty)
+go32_sysinfo (const char *arg, int from_tty)
 {
   static const char test_pattern[] =
     "deadbeafdeadbeafdeadbeafdeadbeafdeadbeaf"
@@ -1658,7 +1664,7 @@ display_descriptor (unsigned type, unsigned long base_addr, int idx, int force)
 }
 
 static void
-go32_sldt (char *arg, int from_tty)
+go32_sldt (const char *arg, int from_tty)
 {
   struct dtr_reg gdtr;
   unsigned short ldtr = 0;
@@ -1731,7 +1737,7 @@ go32_sldt (char *arg, int from_tty)
 }
 
 static void
-go32_sgdt (char *arg, int from_tty)
+go32_sgdt (const char *arg, int from_tty)
 {
   struct dtr_reg gdtr;
   long gdt_entry = -1L;
@@ -1772,7 +1778,7 @@ go32_sgdt (char *arg, int from_tty)
 }
 
 static void
-go32_sidt (char *arg, int from_tty)
+go32_sidt (const char *arg, int from_tty)
 {
   struct dtr_reg idtr;
   long idt_entry = -1L;
@@ -1944,7 +1950,7 @@ display_ptable_entry (unsigned long entry, int is_dir, int force, unsigned off)
 }
 
 static void
-go32_pde (char *arg, int from_tty)
+go32_pde (const char *arg, int from_tty)
 {
   long pde_idx = -1, i;
 
@@ -1994,7 +2000,7 @@ display_page_table (long n, int force)
 }
 
 static void
-go32_pte (char *arg, int from_tty)
+go32_pte (const char *arg, int from_tty)
 {
   long pde_idx = -1L, i;
 
@@ -2021,7 +2027,7 @@ go32_pte (char *arg, int from_tty)
 }
 
 static void
-go32_pte_for_address (char *arg, int from_tty)
+go32_pte_for_address (const char *arg, int from_tty)
 {
   CORE_ADDR addr = 0, i;
 

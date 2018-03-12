@@ -1,6 +1,6 @@
 /* Intel 386 target-dependent stuff.
 
-   Copyright (C) 1988-2017 Free Software Foundation, Inc.
+   Copyright (C) 1988-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,7 +23,6 @@
 #include "command.h"
 #include "dummy-frame.h"
 #include "dwarf2-frame.h"
-#include "doublest.h"
 #include "frame.h"
 #include "frame-base.h"
 #include "frame-unwind.h"
@@ -40,6 +39,7 @@
 #include "symfile.h"
 #include "symtab.h"
 #include "target.h"
+#include "target-float.h"
 #include "value.h"
 #include "dis-asm.h"
 #include "disasm.h"
@@ -2802,7 +2802,7 @@ i386_extract_return_value (struct gdbarch *gdbarch, struct type *type,
 	 exactly how it would happen on the target itself, but it is
 	 the best we can do.  */
       regcache_raw_read (regcache, I386_ST0_REGNUM, buf);
-      convert_typed_floating (buf, i387_ext_type (gdbarch), valbuf, type);
+      target_float_convert (buf, i387_ext_type (gdbarch), valbuf, type);
     }
   else
     {
@@ -2857,7 +2857,7 @@ i386_store_return_value (struct gdbarch *gdbarch, struct type *type,
 	 floating-point format used by the FPU.  This is probably
 	 not exactly how it would happen on the target itself, but
 	 it is the best we can do.  */
-      convert_typed_floating (valbuf, type, buf, i387_ext_type (gdbarch));
+      target_float_convert (valbuf, type, buf, i387_ext_type (gdbarch));
       regcache_raw_write (regcache, I386_ST0_REGNUM, buf);
 
       /* Set the top of the floating-point register stack to 7.  The
@@ -3248,7 +3248,7 @@ i386_pseudo_register_type (struct gdbarch *gdbarch, int regnum)
    the MMX registers need to be mapped onto floating point registers.  */
 
 static int
-i386_mmx_regnum_to_fp_regnum (struct regcache *regcache, int regnum)
+i386_mmx_regnum_to_fp_regnum (readable_regcache *regcache, int regnum)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (regcache->arch ());
   int mmxreg, fpreg;
@@ -3256,7 +3256,7 @@ i386_mmx_regnum_to_fp_regnum (struct regcache *regcache, int regnum)
   int tos;
 
   mmxreg = regnum - tdep->mm0_regnum;
-  regcache_raw_read_unsigned (regcache, I387_FSTAT_REGNUM (tdep), &fstat);
+  regcache->raw_read (I387_FSTAT_REGNUM (tdep), &fstat);
   tos = (fstat >> 11) & 0x7;
   fpreg = (mmxreg + tos) % 8;
 
@@ -3269,7 +3269,7 @@ i386_mmx_regnum_to_fp_regnum (struct regcache *regcache, int regnum)
 
 void
 i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
-				      struct regcache *regcache,
+				      readable_regcache *regcache,
 				      int regnum,
 				      struct value *result_value)
 {
@@ -3282,7 +3282,7 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
       int fpnum = i386_mmx_regnum_to_fp_regnum (regcache, regnum);
 
       /* Extract (always little endian).  */
-      status = regcache_raw_read (regcache, fpnum, raw_buf);
+      status = regcache->raw_read (fpnum, raw_buf);
       if (status != REG_VALID)
 	mark_value_bytes_unavailable (result_value, 0,
 				      TYPE_LENGTH (value_type (result_value)));
@@ -3297,9 +3297,8 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
 	  regnum -= tdep->bnd0_regnum;
 
 	  /* Extract (always little endian).  Read lower 128bits.  */
-	  status = regcache_raw_read (regcache,
-				      I387_BND0R_REGNUM (tdep) + regnum,
-				      raw_buf);
+	  status = regcache->raw_read (I387_BND0R_REGNUM (tdep) + regnum,
+				       raw_buf);
 	  if (status != REG_VALID)
 	    mark_value_bytes_unavailable (result_value, 0, 16);
 	  else
@@ -3321,9 +3320,7 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
 	  regnum -= tdep->k0_regnum;
 
 	  /* Extract (always little endian).  */
-	  status = regcache_raw_read (regcache,
-				      tdep->k0_regnum + regnum,
-				      raw_buf);
+	  status = regcache->raw_read (tdep->k0_regnum + regnum, raw_buf);
 	  if (status != REG_VALID)
 	    mark_value_bytes_unavailable (result_value, 0, 8);
 	  else
@@ -3336,18 +3333,16 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
 	  if (regnum < num_lower_zmm_regs)
 	    {
 	      /* Extract (always little endian).  Read lower 128bits.  */
-	      status = regcache_raw_read (regcache,
-					  I387_XMM0_REGNUM (tdep) + regnum,
-					  raw_buf);
+	      status = regcache->raw_read (I387_XMM0_REGNUM (tdep) + regnum,
+					   raw_buf);
 	      if (status != REG_VALID)
 		mark_value_bytes_unavailable (result_value, 0, 16);
 	      else
 		memcpy (buf, raw_buf, 16);
 
 	      /* Extract (always little endian).  Read upper 128bits.  */
-	      status = regcache_raw_read (regcache,
-					  tdep->ymm0h_regnum + regnum,
-					  raw_buf);
+	      status = regcache->raw_read (tdep->ymm0h_regnum + regnum,
+					   raw_buf);
 	      if (status != REG_VALID)
 		mark_value_bytes_unavailable (result_value, 16, 16);
 	      else
@@ -3356,20 +3351,18 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
 	  else
 	    {
 	      /* Extract (always little endian).  Read lower 128bits.  */
-	      status = regcache_raw_read (regcache,
-					  I387_XMM16_REGNUM (tdep) + regnum
-					  - num_lower_zmm_regs,
-					  raw_buf);
+	      status = regcache->raw_read (I387_XMM16_REGNUM (tdep) + regnum
+					   - num_lower_zmm_regs,
+					   raw_buf);
 	      if (status != REG_VALID)
 		mark_value_bytes_unavailable (result_value, 0, 16);
 	      else
 		memcpy (buf, raw_buf, 16);
 
 	      /* Extract (always little endian).  Read upper 128bits.  */
-	      status = regcache_raw_read (regcache,
-					  I387_YMM16H_REGNUM (tdep) + regnum
-					  - num_lower_zmm_regs,
-					  raw_buf);
+	      status = regcache->raw_read (I387_YMM16H_REGNUM (tdep) + regnum
+					   - num_lower_zmm_regs,
+					   raw_buf);
 	      if (status != REG_VALID)
 		mark_value_bytes_unavailable (result_value, 16, 16);
 	      else
@@ -3377,9 +3370,8 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
 	    }
 
 	  /* Read upper 256bits.  */
-	  status = regcache_raw_read (regcache,
-				      tdep->zmm0h_regnum + regnum,
-				      raw_buf);
+	  status = regcache->raw_read (tdep->zmm0h_regnum + regnum,
+				       raw_buf);
 	  if (status != REG_VALID)
 	    mark_value_bytes_unavailable (result_value, 32, 32);
 	  else
@@ -3390,17 +3382,15 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
 	  regnum -= tdep->ymm0_regnum;
 
 	  /* Extract (always little endian).  Read lower 128bits.  */
-	  status = regcache_raw_read (regcache,
-				      I387_XMM0_REGNUM (tdep) + regnum,
-				      raw_buf);
+	  status = regcache->raw_read (I387_XMM0_REGNUM (tdep) + regnum,
+				       raw_buf);
 	  if (status != REG_VALID)
 	    mark_value_bytes_unavailable (result_value, 0, 16);
 	  else
 	    memcpy (buf, raw_buf, 16);
 	  /* Read upper 128bits.  */
-	  status = regcache_raw_read (regcache,
-				      tdep->ymm0h_regnum + regnum,
-				      raw_buf);
+	  status = regcache->raw_read (tdep->ymm0h_regnum + regnum,
+				       raw_buf);
 	  if (status != REG_VALID)
 	    mark_value_bytes_unavailable (result_value, 16, 32);
 	  else
@@ -3410,17 +3400,15 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
 	{
 	  regnum -= tdep->ymm16_regnum;
 	  /* Extract (always little endian).  Read lower 128bits.  */
-	  status = regcache_raw_read (regcache,
-				      I387_XMM16_REGNUM (tdep) + regnum,
-				      raw_buf);
+	  status = regcache->raw_read (I387_XMM16_REGNUM (tdep) + regnum,
+				       raw_buf);
 	  if (status != REG_VALID)
 	    mark_value_bytes_unavailable (result_value, 0, 16);
 	  else
 	    memcpy (buf, raw_buf, 16);
 	  /* Read upper 128bits.  */
-	  status = regcache_raw_read (regcache,
-				      tdep->ymm16h_regnum + regnum,
-				      raw_buf);
+	  status = regcache->raw_read (tdep->ymm16h_regnum + regnum,
+				       raw_buf);
 	  if (status != REG_VALID)
 	    mark_value_bytes_unavailable (result_value, 16, 16);
 	  else
@@ -3431,7 +3419,7 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
 	  int gpnum = regnum - tdep->ax_regnum;
 
 	  /* Extract (always little endian).  */
-	  status = regcache_raw_read (regcache, gpnum, raw_buf);
+	  status = regcache->raw_read (gpnum, raw_buf);
 	  if (status != REG_VALID)
 	    mark_value_bytes_unavailable (result_value, 0,
 					  TYPE_LENGTH (value_type (result_value)));
@@ -3444,7 +3432,7 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
 
 	  /* Extract (always little endian).  We read both lower and
 	     upper registers.  */
-	  status = regcache_raw_read (regcache, gpnum % 4, raw_buf);
+	  status = regcache->raw_read (gpnum % 4, raw_buf);
 	  if (status != REG_VALID)
 	    mark_value_bytes_unavailable (result_value, 0,
 					  TYPE_LENGTH (value_type (result_value)));
@@ -3460,7 +3448,7 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
 
 static struct value *
 i386_pseudo_register_read_value (struct gdbarch *gdbarch,
-				 struct regcache *regcache,
+				 readable_regcache *regcache,
 				 int regnum)
 {
   struct value *result;
@@ -4518,8 +4506,8 @@ i386_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
   const struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int fp_regnum_p, mmx_regnum_p, xmm_regnum_p, mxcsr_regnum_p,
       ymm_regnum_p, ymmh_regnum_p, ymm_avx512_regnum_p, ymmh_avx512_regnum_p,
-      bndr_regnum_p, bnd_regnum_p, k_regnum_p, zmm_regnum_p, zmmh_regnum_p,
-      zmm_avx512_regnum_p, mpx_ctrl_regnum_p, xmm_avx512_regnum_p,
+      bndr_regnum_p, bnd_regnum_p, zmm_regnum_p, zmmh_regnum_p,
+      mpx_ctrl_regnum_p, xmm_avx512_regnum_p,
       avx512_p, avx_p, sse_p, pkru_regnum_p;
 
   /* Don't include pseudo registers, except for MMX, in any register
@@ -8123,7 +8111,7 @@ static const int i386_record_regmap[] =
 
 static int
 i386_fast_tracepoint_valid_at (struct gdbarch *gdbarch, CORE_ADDR addr,
-			       char **msg)
+			       std::string *msg)
 {
   int len, jumplen;
 
@@ -8156,15 +8144,15 @@ i386_fast_tracepoint_valid_at (struct gdbarch *gdbarch, CORE_ADDR addr,
       /* Return a bit of target-specific detail to add to the caller's
 	 generic failure message.  */
       if (msg)
-	*msg = xstrprintf (_("; instruction is only %d bytes long, "
-			     "need at least %d bytes for the jump"),
-			   len, jumplen);
+	*msg = string_printf (_("; instruction is only %d bytes long, "
+				"need at least %d bytes for the jump"),
+			      len, jumplen);
       return 0;
     }
   else
     {
       if (msg)
-	*msg = NULL;
+	msg->clear ();
       return 1;
     }
 }

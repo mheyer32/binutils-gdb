@@ -1,5 +1,5 @@
 /* Header file for GDB CLI command implementation library.
-   Copyright (C) 2000-2017 Free Software Foundation, Inc.
+   Copyright (C) 2000-2018 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -114,7 +114,7 @@ extern void cd_command (const char *, int);
 
 /* Exported to gdb/top.c and gdb/main.c */
 
-extern void quit_command (char *, int);
+extern void quit_command (const char *, int);
 
 extern void source_script (const char *, int);
 

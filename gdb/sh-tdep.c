@@ -1,6 +1,6 @@
 /* Target-dependent code for Renesas Super-H, for GDB.
 
-   Copyright (C) 1993-2017 Free Software Foundation, Inc.
+   Copyright (C) 1993-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -34,7 +34,7 @@
 #include "inferior.h"
 #include "arch-utils.h"
 #include "regcache.h"
-#include "doublest.h"
+#include "target-float.h"
 #include "osabi.h"
 #include "reggroups.h"
 #include "regset.h"
@@ -1576,8 +1576,8 @@ sh_register_convert_to_virtual (struct gdbarch *gdbarch, int regnum,
     }
 
   if (regnum >= DR0_REGNUM && regnum <= DR_LAST_REGNUM)
-    convert_typed_floating (from, sh_littlebyte_bigword_type (gdbarch),
-			    to, type);
+    target_float_convert (from, sh_littlebyte_bigword_type (gdbarch),
+			  to, type);
   else
     error
       ("sh_register_convert_to_virtual called with non DR register number");
@@ -1595,8 +1595,8 @@ sh_register_convert_to_raw (struct gdbarch *gdbarch, struct type *type,
     }
 
   if (regnum >= DR0_REGNUM && regnum <= DR_LAST_REGNUM)
-    convert_typed_floating (from, type,
-			    to, sh_littlebyte_bigword_type (gdbarch));
+    target_float_convert (from, type,
+			  to, sh_littlebyte_bigword_type (gdbarch));
   else
     error (_("sh_register_convert_to_raw called with non DR register number"));
 }
@@ -1628,7 +1628,7 @@ dr_reg_base_num (struct gdbarch *gdbarch, int dr_regnum)
 
 static enum register_status
 pseudo_register_read_portions (struct gdbarch *gdbarch,
-			       struct regcache *regcache,
+			       readable_regcache *regcache,
 			       int portions,
 			       int base_regnum, gdb_byte *buffer)
 {
@@ -1640,7 +1640,7 @@ pseudo_register_read_portions (struct gdbarch *gdbarch,
       gdb_byte *b;
 
       b = buffer + register_size (gdbarch, base_regnum) * portion;
-      status = regcache_raw_read (regcache, base_regnum + portion, b);
+      status = regcache->raw_read (base_regnum + portion, b);
       if (status != REG_VALID)
 	return status;
     }
@@ -1649,14 +1649,14 @@ pseudo_register_read_portions (struct gdbarch *gdbarch,
 }
 
 static enum register_status
-sh_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
+sh_pseudo_register_read (struct gdbarch *gdbarch, readable_regcache *regcache,
 			 int reg_nr, gdb_byte *buffer)
 {
   int base_regnum;
   enum register_status status;
 
   if (reg_nr == PSEUDO_BANK_REGNUM)
-    return regcache_raw_read (regcache, BANK_REGNUM, buffer);
+    return regcache->raw_read (BANK_REGNUM, buffer);
   else if (reg_nr >= DR0_REGNUM && reg_nr <= DR_LAST_REGNUM)
     {
       /* Enough space for two float registers.  */

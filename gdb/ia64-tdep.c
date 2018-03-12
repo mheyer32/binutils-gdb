@@ -1,6 +1,6 @@
 /* Target-dependent code for the IA-64 for GDB, the GNU debugger.
 
-   Copyright (C) 1999-2017 Free Software Foundation, Inc.
+   Copyright (C) 1999-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -28,7 +28,7 @@
 #include "frame.h"
 #include "frame-base.h"
 #include "frame-unwind.h"
-#include "doublest.h"
+#include "target-float.h"
 #include "value.h"
 #include "objfiles.h"
 #include "elf/common.h"		/* for DT_PLTGOT value */
@@ -876,13 +876,13 @@ ia64_breakpoint_from_pc (struct gdbarch *gdbarch,
 }
 
 static CORE_ADDR
-ia64_read_pc (struct regcache *regcache)
+ia64_read_pc (readable_regcache *regcache)
 {
   ULONGEST psr_value, pc_value;
   int slot_num;
 
-  regcache_cooked_read_unsigned (regcache, IA64_PSR_REGNUM, &psr_value);
-  regcache_cooked_read_unsigned (regcache, IA64_IP_REGNUM, &pc_value);
+  regcache->cooked_read (IA64_PSR_REGNUM, &psr_value);
+  regcache->cooked_read (IA64_IP_REGNUM, &pc_value);
   slot_num = (psr_value >> 41) & 3;
 
   return pc_value | (slot_num * SLOT_MULTIPLIER);
@@ -927,7 +927,7 @@ rse_address_add(CORE_ADDR addr, int nslots)
 }
 
 static enum register_status
-ia64_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
+ia64_pseudo_register_read (struct gdbarch *gdbarch, readable_regcache *regcache,
                            int regnum, gdb_byte *buf)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
@@ -951,13 +951,11 @@ ia64_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
 	  ULONGEST bsp;
 	  CORE_ADDR reg;
 
-	  status = regcache_cooked_read_unsigned (regcache,
-						  IA64_BSP_REGNUM, &bsp);
+	  status = regcache->cooked_read (IA64_BSP_REGNUM, &bsp);
 	  if (status != REG_VALID)
 	    return status;
 
-	  status = regcache_cooked_read_unsigned (regcache,
-						  IA64_CFM_REGNUM, &cfm);
+	  status = regcache->cooked_read (IA64_CFM_REGNUM, &cfm);
 	  if (status != REG_VALID)
 	    return status;
 
@@ -982,7 +980,8 @@ ia64_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
     {
       ULONGEST unatN_val;
       ULONGEST unat;
-      status = regcache_cooked_read_unsigned (regcache, IA64_UNAT_REGNUM, &unat);
+
+      status = regcache->cooked_read (IA64_UNAT_REGNUM, &unat);
       if (status != REG_VALID)
 	return status;
       unatN_val = (unat & (1LL << (regnum - IA64_NAT0_REGNUM))) != 0;
@@ -995,10 +994,12 @@ ia64_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
       ULONGEST bsp;
       ULONGEST cfm;
       CORE_ADDR gr_addr = 0;
-      status = regcache_cooked_read_unsigned (regcache, IA64_BSP_REGNUM, &bsp);
+
+      status = regcache->cooked_read (IA64_BSP_REGNUM, &bsp);
       if (status != REG_VALID)
 	return status;
-      status = regcache_cooked_read_unsigned (regcache, IA64_CFM_REGNUM, &cfm);
+
+      status = regcache->cooked_read (IA64_CFM_REGNUM, &cfm);
       if (status != REG_VALID)
 	return status;
 
@@ -1013,14 +1014,13 @@ ia64_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
 	{
 	  /* Compute address of nat collection bits.  */
 	  CORE_ADDR nat_addr = gr_addr | 0x1f8;
-	  CORE_ADDR nat_collection;
+	  ULONGEST nat_collection;
 	  int nat_bit;
 	  /* If our nat collection address is bigger than bsp, we have to get
 	     the nat collection from rnat.  Otherwise, we fetch the nat
 	     collection from the computed address.  */
 	  if (nat_addr >= bsp)
-	    regcache_cooked_read_unsigned (regcache, IA64_RNAT_REGNUM,
-					   &nat_collection);
+	    regcache->cooked_read (IA64_RNAT_REGNUM, &nat_collection);
 	  else
 	    nat_collection = read_memory_integer (nat_addr, 8, byte_order);
 	  nat_bit = (gr_addr >> 3) & 0x3f;
@@ -1036,10 +1036,11 @@ ia64_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
          It can be calculated as the bsp - sof (sizeof frame).  */
       ULONGEST bsp, vbsp;
       ULONGEST cfm;
-      status = regcache_cooked_read_unsigned (regcache, IA64_BSP_REGNUM, &bsp);
+
+      status = regcache->cooked_read (IA64_BSP_REGNUM, &bsp);
       if (status != REG_VALID)
 	return status;
-      status = regcache_cooked_read_unsigned (regcache, IA64_CFM_REGNUM, &cfm);
+      status = regcache->cooked_read (IA64_CFM_REGNUM, &cfm);
       if (status != REG_VALID)
 	return status;
 
@@ -1054,10 +1055,11 @@ ia64_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
       ULONGEST pr;
       ULONGEST cfm;
       ULONGEST prN_val;
-      status = regcache_cooked_read_unsigned (regcache, IA64_PR_REGNUM, &pr);
+
+      status = regcache->cooked_read (IA64_PR_REGNUM, &pr);
       if (status != REG_VALID)
 	return status;
-      status = regcache_cooked_read_unsigned (regcache, IA64_CFM_REGNUM, &cfm);
+      status = regcache->cooked_read (IA64_CFM_REGNUM, &cfm);
       if (status != REG_VALID)
 	return status;
 
@@ -1228,7 +1230,7 @@ ia64_register_to_value (struct frame_info *frame, int regnum,
 				 in, optimizedp, unavailablep))
     return 0;
 
-  convert_typed_floating (in, ia64_ext_type (gdbarch), out, valtype);
+  target_float_convert (in, ia64_ext_type (gdbarch), out, valtype);
   *optimizedp = *unavailablep = 0;
   return 1;
 }
@@ -1239,7 +1241,7 @@ ia64_value_to_register (struct frame_info *frame, int regnum,
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
   gdb_byte out[IA64_FP_REGISTER_SIZE];
-  convert_typed_floating (in, valtype, out, ia64_ext_type (gdbarch));
+  target_float_convert (in, valtype, out, ia64_ext_type (gdbarch));
   put_frame_register (frame, regnum, out);
 }
 
@@ -3209,8 +3211,8 @@ ia64_extract_return_value (struct type *type, struct regcache *regcache,
       while (n-- > 0)
 	{
 	  regcache_cooked_read (regcache, regnum, from);
-	  convert_typed_floating (from, ia64_ext_type (gdbarch),
-				  (char *)valbuf + offset, float_elt_type);
+	  target_float_convert (from, ia64_ext_type (gdbarch),
+				valbuf + offset, float_elt_type);
 	  offset += TYPE_LENGTH (float_elt_type);
 	  regnum++;
 	}
@@ -3273,8 +3275,8 @@ ia64_store_return_value (struct type *type, struct regcache *regcache,
 
       while (n-- > 0)
 	{
-	  convert_typed_floating ((char *)valbuf + offset, float_elt_type,
-				  to, ia64_ext_type (gdbarch));
+	  target_float_convert (valbuf + offset, float_elt_type,
+				to, ia64_ext_type (gdbarch));
 	  regcache_cooked_write (regcache, regnum, to);
 	  offset += TYPE_LENGTH (float_elt_type);
 	  regnum++;
@@ -3829,9 +3831,9 @@ ia64_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	  while (len > 0 && floatreg < IA64_FR16_REGNUM)
 	    {
 	      gdb_byte to[IA64_FP_REGISTER_SIZE];
-	      convert_typed_floating (value_contents (arg) + argoffset,
-				      float_elt_type, to,
-				      ia64_ext_type (gdbarch));
+	      target_float_convert (value_contents (arg) + argoffset,
+				    float_elt_type, to,
+				    ia64_ext_type (gdbarch));
 	      regcache_cooked_write (regcache, floatreg, to);
 	      floatreg++;
 	      argoffset += TYPE_LENGTH (float_elt_type);

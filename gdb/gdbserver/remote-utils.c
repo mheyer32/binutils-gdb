@@ -1,5 +1,5 @@
 /* Remote utility routines for the remote server for GDB.
-   Copyright (C) 1986-2017 Free Software Foundation, Inc.
+   Copyright (C) 1986-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,9 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "server.h"
-#include "gdb_termios.h"
+#if HAVE_TERMIOS_H
+#include <termios.h>
+#endif
 #include "target.h"
 #include "gdbthread.h"
 #include "tdesc.h"
@@ -325,7 +327,7 @@ remote_open (const char *name)
       if (remote_desc < 0)
 	perror_with_name ("Could not open remote device");
 
-#ifdef HAVE_TERMIOS
+#if HAVE_TERMIOS_H
       {
 	struct termios termios;
 	tcgetattr (remote_desc, &termios);
@@ -339,33 +341,6 @@ remote_open (const char *name)
 	termios.c_cc[VTIME] = 0;
 
 	tcsetattr (remote_desc, TCSANOW, &termios);
-      }
-#endif
-
-#ifdef HAVE_TERMIO
-      {
-	struct termio termio;
-	ioctl (remote_desc, TCGETA, &termio);
-
-	termio.c_iflag = 0;
-	termio.c_oflag = 0;
-	termio.c_lflag = 0;
-	termio.c_cflag &= ~(CSIZE | PARENB);
-	termio.c_cflag |= CLOCAL | CS8;
-	termio.c_cc[VMIN] = 1;
-	termio.c_cc[VTIME] = 0;
-
-	ioctl (remote_desc, TCSETA, &termio);
-      }
-#endif
-
-#ifdef HAVE_SGTTY
-      {
-	struct sgttyb sg;
-
-	ioctl (remote_desc, TIOCGETP, &sg);
-	sg.sg_flags = RAW;
-	ioctl (remote_desc, TIOCSETP, &sg);
       }
 #endif
 
@@ -403,10 +378,7 @@ remote_close (void)
 {
   delete_file_handler (remote_desc);
 
-#ifndef USE_WIN32API
-  /* Remove SIGIO handler.  */
-  signal (SIGIO, SIG_IGN);
-#endif
+  disable_async_io ();
 
 #ifdef USE_WIN32API
   closesocket (remote_desc);
@@ -1201,7 +1173,7 @@ prepare_resume_reply (char *buf, ptid_t ptid,
 	    CORE_ADDR addr;
 	    int i;
 
-	    strncpy (buf, "watch:", 6);
+	    memcpy (buf, "watch:", 6);
 	    buf += 6;
 
 	    addr = (*the_target->stopped_data_address) ();

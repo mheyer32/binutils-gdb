@@ -1,6 +1,6 @@
 /* GDB target debugging macros
 
-   Copyright (C) 2014-2017 Free Software Foundation, Inc.
+   Copyright (C) 2014-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -56,6 +56,8 @@
   target_debug_do_print (((X) ? (X) : "(null)"))
 #define target_debug_print_int(X)		\
   target_debug_do_print (plongest (X))
+#define target_debug_print_bool(X)		\
+  target_debug_do_print ((X) ? "true" : "false")
 #define target_debug_print_long(X)		\
   target_debug_do_print (plongest (X))
 #define target_debug_print_enum_target_xfer_status(X)	\
@@ -114,9 +116,9 @@
   target_debug_do_print (host_address_to_string (X))
 #define target_debug_print_bfd_p(X) \
   target_debug_do_print (host_address_to_string (X))
-#define target_debug_print_mem_region_vector(X) \
+#define target_debug_print_std_vector_mem_region(X) \
   target_debug_do_print (host_address_to_string (X.data ()))
-#define target_debug_print_VEC_static_tracepoint_marker_p__p(X)	\
+#define target_debug_print_VEC_static_tracepoint_marker_p_p(X)	\
   target_debug_do_print (host_address_to_string (X))
 #define target_debug_print_const_struct_target_desc_p(X)	\
   target_debug_do_print (host_address_to_string (X))
@@ -166,6 +168,12 @@
   target_debug_do_print (plongest (X))
 #define target_debug_print_traceframe_info_up(X) \
   target_debug_do_print (host_address_to_string (X.get ()))
+#define target_debug_print_gdb_array_view_const_int(X)	\
+  target_debug_do_print (host_address_to_string (X.data ()))
+#define target_debug_print_inferior_p(inf) \
+  target_debug_do_print (host_address_to_string (inf))
+#define target_debug_print_record_print_flags(X) \
+  target_debug_do_print (plongest (X))
 
 static void
 target_debug_print_struct_target_waitstatus_p (struct target_waitstatus *status)

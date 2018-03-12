@@ -1,5 +1,5 @@
 /* Register support routines for the remote server for GDB.
-   Copyright (C) 2001-2017 Free Software Foundation, Inc.
+   Copyright (C) 2001-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -93,24 +93,13 @@ regcache_invalidate_thread (struct thread_info *thread)
   regcache->registers_valid = 0;
 }
 
-static int
-regcache_invalidate_one (thread_info *thread, void *pid_p)
-{
-  int pid = *(int *) pid_p;
-
-  /* Only invalidate the regcaches of threads of this process.  */
-  if (thread->id.pid () == pid)
-    regcache_invalidate_thread (thread);
-
-  return 0;
-}
-
 /* See regcache.h.  */
 
 void
 regcache_invalidate_pid (int pid)
 {
-  find_inferior (&all_threads, regcache_invalidate_one, &pid);
+  /* Only invalidate the regcaches of threads of this process.  */
+  for_each_thread (pid, regcache_invalidate_thread);
 }
 
 /* See regcache.h.  */
@@ -218,8 +207,6 @@ registers_to_string (struct regcache *regcache, char *buf)
 
   for (int i = 0; i < tdesc->reg_defs.size (); ++i)
     {
-      struct reg *reg = tdesc->reg_defs[i];
-
       if (regcache->register_status[i] == REG_VALID)
 	{
 	  bin2hex (registers, buf, register_size (tdesc, i));
@@ -292,7 +279,7 @@ void
 regcache_release (void)
 {
   /* Flush and release all pre-existing register caches.  */
-  for_each_inferior (&all_threads, free_register_cache_thread);
+  for_each_thread (free_register_cache_thread);
 }
 #endif
 

@@ -1,6 +1,6 @@
 /* Trace file support in GDB.
 
-   Copyright (C) 1997-2017 Free Software Foundation, Inc.
+   Copyright (C) 1997-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -306,7 +306,7 @@ trace_save (const char *filename, struct trace_file_writer *writer,
 }
 
 static void
-tsave_command (char *args, int from_tty)
+tsave_command (const char *args, int from_tty)
 {
   int target_does_save = 0;
   char **argv;

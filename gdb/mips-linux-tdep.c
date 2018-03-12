@@ -1,6 +1,6 @@
 /* Target-dependent code for GNU/Linux on MIPS processors.
 
-   Copyright (C) 2001-2017 Free Software Foundation, Inc.
+   Copyright (C) 2001-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -530,7 +530,6 @@ mips64_fill_fpregset (const struct regcache *regcache,
 		      mips64_elf_fpregset_t *fpregsetp, int regno)
 {
   struct gdbarch *gdbarch = regcache->arch ();
-  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   gdb_byte *to;
 
   if ((regno >= gdbarch_fp0_regnum (gdbarch))

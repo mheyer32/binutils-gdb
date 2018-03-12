@@ -1,5 +1,5 @@
 /* Low level interface to SPUs, for the remote server for GDB.
-   Copyright (C) 2006-2017 Free Software Foundation, Inc.
+   Copyright (C) 2006-2018 Free Software Foundation, Inc.
 
    Contributed by Ulrich Weigand <uweigand@de.ibm.com>.
 
@@ -280,7 +280,7 @@ spu_ptrace_fun ()
 
 static int
 spu_create_inferior (const char *program,
-		     const std::vector<char *> &program_argv)
+		     const std::vector<char *> &program_args)
 {
   int pid;
   ptid_t ptid;
@@ -717,7 +717,6 @@ static struct target_ops spu_target_ops = {
   NULL, /* get_min_fast_tracepoint_insn_len */
   NULL, /* qxfer_libraries_svr4 */
   NULL, /* support_agent */
-  NULL, /* support_btrace */
   NULL, /* enable_btrace */
   NULL, /* disable_btrace */
   NULL, /* read_btrace */

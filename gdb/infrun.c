@@ -1,7 +1,7 @@
 /* Target-struct-independent code to start (run) and stop an inferior
    process.
 
-   Copyright (C) 1986-2017 Free Software Foundation, Inc.
+   Copyright (C) 1986-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -70,24 +70,15 @@
 
 /* Prototypes for local functions */
 
-static void info_signals_command (char *, int);
-
-static void handle_command (char *, int);
-
 static void sig_print_info (enum gdb_signal);
 
 static void sig_print_header (void);
-
-static void resume_cleanups (void *);
 
 static int follow_fork (void);
 
 static int follow_fork_inferior (int follow_child, int detach_fork);
 
 static void follow_inferior_reset_breakpoints (void);
-
-static void set_schedlock_func (char *args, int from_tty,
-				struct cmd_list_element *c);
 
 static int currently_stepping (struct thread_info *tp);
 
@@ -199,7 +190,7 @@ show_disable_randomization (struct ui_file *file, int from_tty,
 }
 
 static void
-set_disable_randomization (char *args, int from_tty,
+set_disable_randomization (const char *args, int from_tty,
 			   struct cmd_list_element *c)
 {
   if (!target_supports_disable_randomization ())
@@ -214,7 +205,7 @@ int non_stop = 0;
 static int non_stop_1 = 0;
 
 static void
-set_non_stop (char *args, int from_tty,
+set_non_stop (const char *args, int from_tty,
 	      struct cmd_list_element *c)
 {
   if (target_has_execution)
@@ -243,7 +234,7 @@ int observer_mode = 0;
 static int observer_mode_1 = 0;
 
 static void
-set_observer_mode (char *args, int from_tty,
+set_observer_mode (const char *args, int from_tty,
 		   struct cmd_list_element *c)
 {
   if (target_has_execution)
@@ -368,7 +359,8 @@ int stop_on_solib_events;
    as appropriate when the above flag is changed.  */
 
 static void
-set_stop_on_solib_events (char *args, int from_tty, struct cmd_list_element *c)
+set_stop_on_solib_events (const char *args,
+			  int from_tty, struct cmd_list_element *c)
 {
   update_solib_breakpoints ();
 }
@@ -519,7 +511,7 @@ holding the child stopped.  Try \"set detach-on-fork\" or \
 	  else
 	    {
 	      child_inf->aspace = new_address_space ();
-	      child_inf->pspace = add_program_space (child_inf->aspace);
+	      child_inf->pspace = new program_space (child_inf->aspace);
 	      child_inf->removable = 1;
 	      set_current_program_space (child_inf->pspace);
 	      clone_program_space (child_inf->pspace, parent_inf->pspace);
@@ -614,7 +606,7 @@ holding the child stopped.  Try \"set detach-on-fork\" or \
 				target_pid_to_str (process_ptid));
 	    }
 
-	  target_detach (NULL, 0);
+	  target_detach (parent_inf, 0);
 	}
 
       /* Note that the detach above makes PARENT_INF dangling.  */
@@ -638,7 +630,7 @@ holding the child stopped.  Try \"set detach-on-fork\" or \
       else
 	{
 	  child_inf->aspace = new_address_space ();
-	  child_inf->pspace = add_program_space (child_inf->aspace);
+	  child_inf->pspace = new program_space (child_inf->aspace);
 	  child_inf->removable = 1;
 	  child_inf->symfile_flags = SYMFILE_NO_READ;
 	  set_current_program_space (child_inf->pspace);
@@ -984,7 +976,7 @@ handle_vfork_child_exec_or_exit (int exec)
 		}
 	    }
 
-	  target_detach (NULL, 0);
+	  target_detach (inf->vfork_parent, 0);
 
 	  /* Put it back.  */
 	  inf->pspace = pspace;
@@ -994,7 +986,7 @@ handle_vfork_child_exec_or_exit (int exec)
 	{
 	  /* We're staying attached to the parent, so, really give the
 	     child a new address space.  */
-	  inf->pspace = add_program_space (maybe_new_address_space ());
+	  inf->pspace = new program_space (maybe_new_address_space ());
 	  inf->aspace = inf->pspace->aspace;
 	  inf->removable = 1;
 	  set_current_program_space (inf->pspace);
@@ -1028,7 +1020,7 @@ handle_vfork_child_exec_or_exit (int exec)
 	     program space resets breakpoints).  */
 	  inf->aspace = NULL;
 	  inf->pspace = NULL;
-	  pspace = add_program_space (maybe_new_address_space ());
+	  pspace = new program_space (maybe_new_address_space ());
 	  set_current_program_space (pspace);
 	  inf->removable = 1;
 	  inf->symfile_flags = SYMFILE_NO_READ;
@@ -1089,8 +1081,6 @@ follow_exec (ptid_t ptid, char *exec_file_target)
   struct inferior *inf = current_inferior ();
   int pid = ptid_get_pid (ptid);
   ptid_t process_ptid;
-  char *exec_file_host;
-  struct cleanup *old_chain;
 
   /* This is an exec event that we actually wish to pay attention to.
      Refresh our symbol table to the newly exec'd program, remove any
@@ -1169,8 +1159,8 @@ follow_exec (ptid_t ptid, char *exec_file_target)
 
   breakpoint_init_inferior (inf_execd);
 
-  exec_file_host = exec_file_find (exec_file_target, NULL);
-  old_chain = make_cleanup (xfree, exec_file_host);
+  gdb::unique_xmalloc_ptr<char> exec_file_host
+    = exec_file_find (exec_file_target, NULL);
 
   /* If we were unable to map the executable target pathname onto a host
      pathname, tell the user that.  Otherwise GDB's subsequent behavior
@@ -1224,9 +1214,7 @@ follow_exec (ptid_t ptid, char *exec_file_target)
      Executable) main symbol file will only be computed by
      solib_create_inferior_hook below.  breakpoint_re_set would fail
      to insert the breakpoints with the zero displacement.  */
-  try_open_exec_file (exec_file_host, inf, SYMFILE_DEFER_BP_RESET);
-
-  do_cleanups (old_chain);
+  try_open_exec_file (exec_file_host.get (), inf, SYMFILE_DEFER_BP_RESET);
 
   /* If the target can specify a description, read it.  Must do this
      after flipping to the new executable (because the target supplied
@@ -1289,7 +1277,7 @@ struct step_over_info
      and address of the instruction the breakpoint is set at.  We'll
      skip inserting all breakpoints here.  Valid iff ASPACE is
      non-NULL.  */
-  struct address_space *aspace;
+  const address_space *aspace;
   CORE_ADDR address;
 
   /* The instruction being stepped over triggers a nonsteppable
@@ -1332,7 +1320,7 @@ static struct step_over_info step_over_info;
    because when we need the info later the thread may be running.  */
 
 static void
-set_step_over_info (struct address_space *aspace, CORE_ADDR address,
+set_step_over_info (const address_space *aspace, CORE_ADDR address,
 		    int nonsteppable_watchpoint_p,
 		    int thread)
 {
@@ -1760,7 +1748,7 @@ displaced_step_prepare_throw (ptid_t ptid)
   struct thread_info *tp = find_thread_ptid (ptid);
   struct regcache *regcache = get_thread_regcache (ptid);
   struct gdbarch *gdbarch = regcache->arch ();
-  struct address_space *aspace = get_regcache_aspace (regcache);
+  const address_space *aspace = regcache->aspace ();
   CORE_ADDR original, copy;
   ULONGEST len;
   struct displaced_step_closure *closure;
@@ -2198,17 +2186,6 @@ infrun_thread_ptid_changed (ptid_t old_ptid, ptid_t new_ptid)
 }
 
 
-/* Resuming.  */
-
-/* Things to clean up if we QUIT out of resume ().  */
-static void
-resume_cleanups (void *ignore)
-{
-  if (!ptid_equal (inferior_ptid, null_ptid))
-    delete_single_step_breakpoints (inferior_thread ());
-
-  normal_stop ();
-}
 
 static const char schedlock_off[] = "off";
 static const char schedlock_on[] = "on";
@@ -2233,7 +2210,7 @@ show_scheduler_mode (struct ui_file *file, int from_tty,
 }
 
 static void
-set_schedlock_func (char *args, int from_tty, struct cmd_list_element *c)
+set_schedlock_func (const char *args, int from_tty, struct cmd_list_element *c)
 {
   if (!target_can_lock_scheduler)
     {
@@ -2373,22 +2350,18 @@ do_target_resume (ptid_t resume_ptid, int step, enum gdb_signal sig)
   target_commit_resume ();
 }
 
-/* Resume the inferior, but allow a QUIT.  This is useful if the user
-   wants to interrupt some lengthy single-stepping operation
-   (for child processes, the SIGINT goes to the inferior, and so
-   we get a SIGINT random_signal, but for remote debugging and perhaps
-   other targets, that's not true).
+/* Resume the inferior.  SIG is the signal to give the inferior
+   (GDB_SIGNAL_0 for none).  Note: don't call this directly; instead
+   call 'resume', which handles exceptions.  */
 
-   SIG is the signal to give the inferior (zero for none).  */
-void
-resume (enum gdb_signal sig)
+static void
+resume_1 (enum gdb_signal sig)
 {
-  struct cleanup *old_cleanups = make_cleanup (resume_cleanups, 0);
   struct regcache *regcache = get_current_regcache ();
   struct gdbarch *gdbarch = regcache->arch ();
   struct thread_info *tp = inferior_thread ();
   CORE_ADDR pc = regcache_read_pc (regcache);
-  struct address_space *aspace = get_regcache_aspace (regcache);
+  const address_space *aspace = regcache->aspace ();
   ptid_t resume_ptid;
   /* This represents the user's step vs continue request.  When
      deciding whether "set scheduler-locking step" applies, it's the
@@ -2402,8 +2375,6 @@ resume (enum gdb_signal sig)
 
   gdb_assert (!tp->stop_requested);
   gdb_assert (!thread_is_in_step_over_chain (tp));
-
-  QUIT;
 
   if (tp->suspend.waitstatus_pending_p)
     {
@@ -2431,7 +2402,6 @@ resume (enum gdb_signal sig)
 	}
 
       tp->suspend.stop_signal = GDB_SIGNAL_0;
-      discard_cleanups (old_cleanups);
 
       if (target_can_async_p ())
 	target_async (1);
@@ -2543,7 +2513,6 @@ resume (enum gdb_signal sig)
 
 	      resume_ptid = internal_resume_ptid (user_step);
 	      do_target_resume (resume_ptid, 0, GDB_SIGNAL_0);
-	      discard_cleanups (old_cleanups);
 	      tp->resumed = 1;
 	      return;
 	    }
@@ -2581,7 +2550,6 @@ resume (enum gdb_signal sig)
 				"Got placed in step-over queue\n");
 
 	  tp->control.trap_expected = 0;
-	  discard_cleanups (old_cleanups);
 	  return;
 	}
       else if (prepared < 0)
@@ -2591,7 +2559,7 @@ resume (enum gdb_signal sig)
 	  if (target_is_non_stop_p ())
 	    stop_all_threads ();
 
-	  set_step_over_info (get_regcache_aspace (regcache),
+	  set_step_over_info (regcache->aspace (),
 			      regcache_read_pc (regcache), 0, tp->global_num);
 
 	  step = maybe_software_singlestep (gdbarch, pc);
@@ -2758,8 +2726,33 @@ resume (enum gdb_signal sig)
 
   do_target_resume (resume_ptid, step, sig);
   tp->resumed = 1;
-  discard_cleanups (old_cleanups);
 }
+
+/* Resume the inferior.  SIG is the signal to give the inferior
+   (GDB_SIGNAL_0 for none).  This is a wrapper around 'resume_1' that
+   rolls back state on error.  */
+
+void
+resume (gdb_signal sig)
+{
+  TRY
+    {
+      resume_1 (sig);
+    }
+  CATCH (ex, RETURN_MASK_ALL)
+    {
+      /* If resuming is being aborted for any reason, delete any
+	 single-step breakpoint resume_1 may have created, to avoid
+	 confusing the following resumption, and to avoid leaving
+	 single-step breakpoints perturbing other threads, in case
+	 we're running in non-stop mode.  */
+      if (inferior_ptid != null_ptid)
+	delete_single_step_breakpoints (inferior_thread ());
+      throw_exception (ex);
+    }
+  END_CATCH
+}
+
 
 /* Proceeding.  */
 
@@ -2920,7 +2913,7 @@ thread_still_needs_step_over_bp (struct thread_info *tp)
     {
       struct regcache *regcache = get_thread_regcache (tp->ptid);
 
-      if (breakpoint_here_p (get_regcache_aspace (regcache),
+      if (breakpoint_here_p (regcache->aspace (),
 			     regcache_read_pc (regcache))
 	  == ordinary_breakpoint_here)
 	return 1;
@@ -2983,7 +2976,6 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
   struct gdbarch *gdbarch;
   struct thread_info *tp;
   CORE_ADDR pc;
-  struct address_space *aspace;
   ptid_t resume_ptid;
   struct execution_control_state ecss;
   struct execution_control_state *ecs = &ecss;
@@ -3007,7 +2999,8 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 
   regcache = get_current_regcache ();
   gdbarch = regcache->arch ();
-  aspace = get_regcache_aspace (regcache);
+  const address_space *aspace = regcache->aspace ();
+
   pc = regcache_read_pc (regcache);
   tp = inferior_thread ();
 
@@ -3072,6 +3065,12 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
   /* Make sure that output from GDB appears before output from the
      inferior.  */
   gdb_flush (gdb_stdout);
+
+  /* Since we've marked the inferior running, give it the terminal.  A
+     QUIT/Ctrl-C from here on is forwarded to the target (which can
+     still detect attempts to unblock a stuck connection with repeated
+     Ctrl-C from within target_pass_ctrlc).  */
+  target_terminal::inferior ();
 
   /* In a multi-threaded task we may select another thread and
      then continue or step.
@@ -3535,7 +3534,7 @@ do_target_wait (ptid_t ptid, struct target_waitstatus *status, int options)
 				paddress (gdbarch, pc));
 	  discard = 1;
 	}
-      else if (!breakpoint_inserted_here_p (get_regcache_aspace (regcache), pc))
+      else if (!breakpoint_inserted_here_p (regcache->aspace (), pc))
 	{
 	  if (debug_infrun)
 	    fprintf_unfiltered (gdb_stdlog,
@@ -4070,7 +4069,6 @@ adjust_pc_after_break (struct thread_info *thread,
 {
   struct regcache *regcache;
   struct gdbarch *gdbarch;
-  struct address_space *aspace;
   CORE_ADDR breakpoint_pc, decr_pc;
 
   /* If we've hit a breakpoint, we'll normally be stopped with SIGTRAP.  If
@@ -4150,7 +4148,7 @@ adjust_pc_after_break (struct thread_info *thread,
   if (decr_pc == 0)
     return;
 
-  aspace = get_regcache_aspace (regcache);
+  const address_space *aspace = regcache->aspace ();
 
   /* Find the location where (if we've hit a breakpoint) the
      breakpoint would be.  */
@@ -4266,7 +4264,7 @@ handle_syscall_event (struct execution_control_state *ecs)
                             syscall_number);
 
       ecs->event_thread->control.stop_bpstat
-	= bpstat_stop_status (get_regcache_aspace (regcache),
+	= bpstat_stop_status (regcache->aspace (),
 			      stop_pc, ecs->ptid, &ecs->ws);
 
       if (handle_stop_requested (ecs))
@@ -4385,7 +4383,6 @@ static void
 save_waitstatus (struct thread_info *tp, struct target_waitstatus *ws)
 {
   struct regcache *regcache;
-  struct address_space *aspace;
 
   if (debug_infrun)
     {
@@ -4404,7 +4401,7 @@ save_waitstatus (struct thread_info *tp, struct target_waitstatus *ws)
   tp->suspend.waitstatus_pending_p = 1;
 
   regcache = get_thread_regcache (tp->ptid);
-  aspace = get_regcache_aspace (regcache);
+  const address_space *aspace = regcache->aspace ();
 
   if (ws->kind == TARGET_WAITKIND_STOPPED
       && ws->value.sig == GDB_SIGNAL_TRAP)
@@ -4888,7 +4885,7 @@ handle_inferior_event_1 (struct execution_control_state *ecs)
     {
       struct regcache *regcache = get_thread_regcache (ecs->ptid);
 
-      if (breakpoint_inserted_here_p (get_regcache_aspace (regcache),
+      if (breakpoint_inserted_here_p (regcache->aspace (),
 				      regcache_read_pc (regcache)))
 	{
 	  if (debug_infrun)
@@ -4958,7 +4955,7 @@ handle_inferior_event_1 (struct execution_control_state *ecs)
 	  handle_solib_event ();
 
 	  ecs->event_thread->control.stop_bpstat
-	    = bpstat_stop_status (get_regcache_aspace (regcache),
+	    = bpstat_stop_status (regcache->aspace (),
 				  stop_pc, ecs->ptid, &ecs->ws);
 
 	  if (handle_stop_requested (ecs))
@@ -5212,7 +5209,7 @@ Cannot fill $_exitsignal with the correct signal number.\n"));
       stop_pc = regcache_read_pc (get_thread_regcache (ecs->ptid));
 
       ecs->event_thread->control.stop_bpstat
-	= bpstat_stop_status (get_regcache_aspace (get_current_regcache ()),
+	= bpstat_stop_status (get_current_regcache ()->aspace (),
 			      stop_pc, ecs->ptid, &ecs->ws);
 
       if (handle_stop_requested (ecs))
@@ -5327,7 +5324,7 @@ Cannot fill $_exitsignal with the correct signal number.\n"));
       ecs->event_thread = inferior_thread ();
 
       ecs->event_thread->control.stop_bpstat
-	= bpstat_stop_status (get_regcache_aspace (get_current_regcache ()),
+	= bpstat_stop_status (get_current_regcache ()->aspace (),
 			      stop_pc, ecs->ptid, &ecs->ws);
 
       /* Note that this may be referenced from inside
@@ -5776,11 +5773,11 @@ handle_signal_stop (struct execution_control_state *ecs)
   if (ecs->event_thread->suspend.stop_signal == GDB_SIGNAL_TRAP)
     {
       struct regcache *regcache;
-      struct address_space *aspace;
       CORE_ADDR pc;
 
       regcache = get_thread_regcache (ecs->ptid);
-      aspace = get_regcache_aspace (regcache);
+      const address_space *aspace = regcache->aspace ();
+
       pc = regcache_read_pc (regcache);
 
       /* However, before doing so, if this single-step breakpoint was
@@ -5871,8 +5868,8 @@ handle_signal_stop (struct execution_control_state *ecs)
      inline function call sites).  */
   if (ecs->event_thread->control.step_range_end != 1)
     {
-      struct address_space *aspace = 
-	get_regcache_aspace (get_thread_regcache (ecs->ptid));
+      const address_space *aspace =
+	get_thread_regcache (ecs->ptid)->aspace ();
 
       /* skip_inline_frames is expensive, so we avoid it if we can
 	 determine that the address is one where functions cannot have
@@ -5944,7 +5941,7 @@ handle_signal_stop (struct execution_control_state *ecs)
   /* See if there is a breakpoint/watchpoint/catchpoint/etc. that
      handles this event.  */
   ecs->event_thread->control.stop_bpstat
-    = bpstat_stop_status (get_regcache_aspace (get_current_regcache ()),
+    = bpstat_stop_status (get_current_regcache ()->aspace (),
 			  stop_pc, ecs->ptid, &ecs->ws);
 
   /* Following in case break condition called a
@@ -7404,7 +7401,7 @@ insert_step_resume_breakpoint_at_sal_1 (struct gdbarch *gdbarch,
 			paddress (gdbarch, sr_sal.pc));
 
   inferior_thread ()->control.step_resume_breakpoint
-    = set_momentary_breakpoint (gdbarch, sr_sal, sr_id, sr_type);
+    = set_momentary_breakpoint (gdbarch, sr_sal, sr_id, sr_type).release ();
 }
 
 void
@@ -7493,7 +7490,7 @@ insert_longjmp_resume_breakpoint (struct gdbarch *gdbarch, CORE_ADDR pc)
 			paddress (gdbarch, pc));
 
   inferior_thread ()->control.exception_resume_breakpoint =
-    set_momentary_breakpoint_at_pc (gdbarch, pc, bp_longjmp_resume);
+    set_momentary_breakpoint_at_pc (gdbarch, pc, bp_longjmp_resume).release ();
 }
 
 /* Insert an exception resume breakpoint.  TP is the thread throwing
@@ -7515,7 +7512,8 @@ insert_exception_resume_breakpoint (struct thread_info *tp,
       CORE_ADDR handler;
       struct breakpoint *bp;
 
-      vsym = lookup_symbol (SYMBOL_LINKAGE_NAME (sym), b, VAR_DOMAIN, NULL);
+      vsym = lookup_symbol_search_name (SYMBOL_SEARCH_NAME (sym),
+					b, VAR_DOMAIN);
       value = read_var_value (vsym.symbol, vsym.block, frame);
       /* If the value was optimized out, revert to the old behavior.  */
       if (! value_optimized_out (value))
@@ -7528,7 +7526,8 @@ insert_exception_resume_breakpoint (struct thread_info *tp,
 				(unsigned long) handler);
 
 	  bp = set_momentary_breakpoint_at_pc (get_frame_arch (frame),
-					       handler, bp_exception_resume);
+					       handler,
+					       bp_exception_resume).release ();
 
 	  /* set_momentary_breakpoint_at_pc invalidates FRAME.  */
 	  frame = NULL;
@@ -7569,7 +7568,7 @@ insert_exception_resume_from_probe (struct thread_info *tp,
 				  handler));
 
   bp = set_momentary_breakpoint_at_pc (get_frame_arch (frame),
-				       handler, bp_exception_resume);
+				       handler, bp_exception_resume).release ();
   bp->thread = tp->global_num;
   inferior_thread ()->control.exception_resume_breakpoint = bp;
 }
@@ -7590,7 +7589,7 @@ check_exception_resume (struct execution_control_state *ecs,
      CFA and the HANDLER.  We ignore the CFA, extract the handler, and
      set a breakpoint there.  */
   probe = find_probe_by_pc (get_frame_pc (frame));
-  if (probe.probe)
+  if (probe.prob)
     {
       insert_exception_resume_from_probe (ecs->event_thread, &probe, frame);
       return;
@@ -7664,10 +7663,6 @@ stop_waiting (struct execution_control_state *ecs)
 static void
 keep_going_pass_signal (struct execution_control_state *ecs)
 {
-  /* Make sure normal_stop is called if we get a QUIT handled before
-     reaching resume.  */
-  struct cleanup *old_cleanups = make_cleanup (resume_cleanups, 0);
-
   gdb_assert (ptid_equal (ecs->event_thread->ptid, inferior_ptid));
   gdb_assert (!ecs->event_thread->resumed);
 
@@ -7689,7 +7684,6 @@ keep_going_pass_signal (struct execution_control_state *ecs)
 	 non-signal event (e.g., a fork); or took a signal which we
 	 are supposed to pass through to the inferior.  Simply
 	 continue.  */
-      discard_cleanups (old_cleanups);
       resume (ecs->event_thread->suspend.stop_signal);
     }
   else if (step_over_info_valid_p ())
@@ -7717,8 +7711,6 @@ keep_going_pass_signal (struct execution_control_state *ecs)
 				"resume of %s deferred\n",
 				target_pid_to_str (tp->ptid));
 	}
-
-      discard_cleanups (old_cleanups);
     }
   else
     {
@@ -7758,7 +7750,7 @@ keep_going_pass_signal (struct execution_control_state *ecs)
       if (remove_bp
 	  && (remove_wps || !use_displaced_stepping (ecs->event_thread)))
 	{
-	  set_step_over_info (get_regcache_aspace (regcache),
+	  set_step_over_info (regcache->aspace (),
 			      regcache_read_pc (regcache), remove_wps,
 			      ecs->event_thread->global_num);
 	}
@@ -7782,14 +7774,13 @@ keep_going_pass_signal (struct execution_control_state *ecs)
 	{
 	  exception_print (gdb_stderr, e);
 	  stop_waiting (ecs);
-	  discard_cleanups (old_cleanups);
+	  clear_step_over_info ();
 	  return;
 	}
       END_CATCH
 
       ecs->event_thread->control.trap_expected = (remove_bp || remove_wps);
 
-      discard_cleanups (old_cleanups);
       resume (ecs->event_thread->suspend.stop_signal);
     }
 
@@ -8469,7 +8460,7 @@ sig_print_info (enum gdb_signal oursig)
 /* Specify how various signals in the inferior should be handled.  */
 
 static void
-handle_command (char *args, int from_tty)
+handle_command (const char *args, int from_tty)
 {
   int digits, wordlen;
   int sigfirst, signum, siglast;
@@ -8682,7 +8673,7 @@ Use \"info signals\" for a list of symbolic signals."));
    targets, all signals should be in the signal tables).  */
 
 static void
-info_signals_command (char *signum_exp, int from_tty)
+info_signals_command (const char *signum_exp, int from_tty)
 {
   enum gdb_signal oursig;
 
@@ -8814,7 +8805,7 @@ struct infcall_suspend_state
 
   /* Other fields:  */
   CORE_ADDR stop_pc;
-  struct regcache *registers;
+  readonly_detached_regcache *registers;
 
   /* Format of SIGINFO_DATA or NULL if it is not present.  */
   struct gdbarch *siginfo_gdbarch;
@@ -8870,7 +8861,7 @@ save_infcall_suspend_state (void)
 
   inf_state->stop_pc = stop_pc;
 
-  inf_state->registers = regcache_dup (regcache);
+  inf_state->registers = new readonly_detached_regcache (*regcache);
 
   return inf_state;
 }
@@ -8901,7 +8892,7 @@ restore_infcall_suspend_state (struct infcall_suspend_state *inf_state)
      (and perhaps other times).  */
   if (target_has_execution)
     /* NB: The register write goes through to the target.  */
-    regcache_cpy (regcache, inf_state->registers);
+    regcache->restore (inf_state->registers);
 
   discard_infcall_suspend_state (inf_state);
 }
@@ -8927,7 +8918,7 @@ discard_infcall_suspend_state (struct infcall_suspend_state *inf_state)
   xfree (inf_state);
 }
 
-struct regcache *
+readonly_detached_regcache *
 get_infcall_suspend_state_regcache (struct infcall_suspend_state *inf_state)
 {
   return inf_state->registers;
@@ -9101,7 +9092,7 @@ static const char *const exec_direction_names[] = {
 };
 
 static void
-set_exec_direction_func (char *args, int from_tty,
+set_exec_direction_func (const char *args, int from_tty,
 			 struct cmd_list_element *cmd)
 {
   if (target_can_execute_reverse)

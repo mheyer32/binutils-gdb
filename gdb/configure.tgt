@@ -29,6 +29,7 @@ case $targ in
  hppa*-*-hpux* | \
  ia64-*-hpux* | \
  *-*-vxworks* | \
+ mt-*-* | \
  null)
     echo "*** Configuration $targ is obsolete." >&2
     echo "*** Support has been REMOVED." >&2
@@ -46,7 +47,7 @@ amd64_tobjs="amd64-tdep.o arch/amd64.o"
 
 case "${targ}" in
 aarch64*-*-*)
-	cpu_obs="aarch64-tdep.o arch/aarch64-insn.o";;
+	cpu_obs="aarch64-tdep.o arch/aarch64-insn.o arch/aarch64.o";;
 
 alpha*-*-*)
 	# Target: Alpha
@@ -114,7 +115,7 @@ aarch64*-*-freebsd*)
 
 aarch64*-*-linux*)
 	# Target: AArch64 linux
-	gdb_target_obs="aarch64-linux-tdep.o \
+	gdb_target_obs="aarch64-linux-tdep.o arch/aarch64.o\
 			arch/arm.o arch/arm-linux.o arch/arm-get-next-pcs.o \
 			arm-tdep.o arm-linux-tdep.o \
 			glibc-tdep.o linux-tdep.o solib-svr4.o \
@@ -447,11 +448,6 @@ msp430*-*-elf)
 	gdb_sim=../sim/msp430/libsim.a
 	;;
 
-mt-*-*)
-	# Target: Morpho Technologies ms1 processor
-	gdb_target_obs="mt-tdep.o"
-	;;
-
 nds32*-*-elf)
 	# Target: AndesTech NDS32 core
 	gdb_target_obs="nds32-tdep.o"
@@ -466,6 +462,12 @@ nios2*-*-linux*)
 nios2*-*-*)
 	# Target: Altera Nios II bare-metal
 	gdb_target_obs="nios2-tdep.o"
+	;;
+
+or1k-*-* | or1knd-*-*)
+	# Target: OpenCores OpenRISC 1000 32-bit implementation bare metal
+	gdb_target_obs="or1k-tdep.o"
+	gdb_sim=../sim/or1k/libsim.a
 	;;
 
 powerpc*-*-freebsd*)
@@ -518,9 +520,14 @@ powerpc*-*-*)
 
 s390*-*-linux*)
 	# Target: S390 running Linux
-	gdb_target_obs="s390-linux-tdep.o solib-svr4.o linux-tdep.o \
-			linux-record.o"
+	gdb_target_obs="s390-linux-tdep.o s390-tdep.o solib-svr4.o \
+			linux-tdep.o linux-record.o symfile-mem.o"
 	build_gdbserver=yes
+	;;
+
+riscv*-*-*)
+	# Target: RISC-V architecture
+	gdb_target_obs="riscv-tdep.o"
 	;;
 
 rl78-*-elf)

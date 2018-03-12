@@ -1,6 +1,6 @@
 /* Target-dependent code for GNU/Linux, architecture independent.
 
-   Copyright (C) 2009-2017 Free Software Foundation, Inc.
+   Copyright (C) 2009-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -92,6 +92,11 @@ struct smaps_vmflags
    generating a corefile.  */
 
 static int use_coredump_filter = 1;
+
+/* Whether the value of smaps_vmflags->exclude_coredump should be
+   ignored, including mappings marked with the VM_DONTDUMP flag in
+   the dump.  */
+static int dump_excluded_mappings = 0;
 
 /* This enum represents the signals' numbers on a generic architecture
    running the Linux kernel.  The definition of "generic" comes from
@@ -655,7 +660,7 @@ dump_mapping_p (filter_flags filterflags, const struct smaps_vmflags *v,
 	return 0;
 
       /* Check if we should exclude this mapping.  */
-      if (v->exclude_coredump)
+      if (!dump_excluded_mappings && v->exclude_coredump)
 	return 0;
 
       /* Update our notion of whether this mapping is shared or
@@ -759,26 +764,20 @@ linux_info_proc (struct gdbarch *gdbarch, const char *args,
   if (cwd_f)
     {
       xsnprintf (filename, sizeof filename, "/proc/%ld/cwd", pid);
-      data = target_fileio_readlink (NULL, filename, &target_errno);
-      if (data)
-	{
-	  struct cleanup *cleanup = make_cleanup (xfree, data);
-          printf_filtered ("cwd = '%s'\n", data);
-	  do_cleanups (cleanup);
-	}
+      gdb::optional<std::string> contents
+	= target_fileio_readlink (NULL, filename, &target_errno);
+      if (contents.has_value ())
+	printf_filtered ("cwd = '%s'\n", contents->c_str ());
       else
 	warning (_("unable to read link '%s'"), filename);
     }
   if (exe_f)
     {
       xsnprintf (filename, sizeof filename, "/proc/%ld/exe", pid);
-      data = target_fileio_readlink (NULL, filename, &target_errno);
-      if (data)
-	{
-	  struct cleanup *cleanup = make_cleanup (xfree, data);
-          printf_filtered ("exe = '%s'\n", data);
-	  do_cleanups (cleanup);
-	}
+      gdb::optional<std::string> contents
+	= target_fileio_readlink (NULL, filename, &target_errno);
+      if (contents.has_value ())
+	printf_filtered ("exe = '%s'\n", contents->c_str ());
       else
 	warning (_("unable to read link '%s'"), filename);
     }
@@ -998,10 +997,9 @@ linux_core_info_proc_mappings (struct gdbarch *gdbarch, const char *args)
 {
   asection *section;
   ULONGEST count, page_size;
-  unsigned char *descdata, *filenames, *descend, *contents;
+  unsigned char *descdata, *filenames, *descend;
   size_t note_size;
   unsigned int addr_size_bits, addr_size;
-  struct cleanup *cleanup;
   struct gdbarch *core_gdbarch = gdbarch_from_bfd (core_bfd);
   /* We assume this for reading 64-bit core files.  */
   gdb_static_assert (sizeof (ULONGEST) >= 8);
@@ -1020,12 +1018,12 @@ linux_core_info_proc_mappings (struct gdbarch *gdbarch, const char *args)
   if (note_size < 2 * addr_size)
     error (_("malformed core note - too short for header"));
 
-  contents = (unsigned char *) xmalloc (note_size);
-  cleanup = make_cleanup (xfree, contents);
-  if (!bfd_get_section_contents (core_bfd, section, contents, 0, note_size))
+  gdb::def_vector<unsigned char> contents (note_size);
+  if (!bfd_get_section_contents (core_bfd, section, contents.data (),
+				 0, note_size))
     error (_("could not get core note contents"));
 
-  descdata = contents;
+  descdata = contents.data ();
   descend = descdata + note_size;
 
   if (descdata[note_size - 1] != '\0')
@@ -1090,8 +1088,6 @@ linux_core_info_proc_mappings (struct gdbarch *gdbarch, const char *args)
 
       filenames += 1 + strlen ((char *) filenames);
     }
-
-  do_cleanups (cleanup);
 }
 
 /* Implement "info proc" for a corefile.  */
@@ -1516,7 +1512,6 @@ static char *
 linux_make_mappings_corefile_notes (struct gdbarch *gdbarch, bfd *obfd,
 				    char *note_data, int *note_size)
 {
-  struct cleanup *cleanup;
   struct linux_make_mappings_data mapping_data;
   struct type *long_type
     = arch_integer_type (gdbarch, gdbarch_long_bit (gdbarch), 0, "long");
@@ -1641,43 +1636,29 @@ linux_collect_thread_registers (const struct regcache *regcache,
 }
 
 /* Fetch the siginfo data for the specified thread, if it exists.  If
-   there is no data, or we could not read it, return NULL.  Otherwise,
-   return a newly malloc'd buffer holding the data and fill in *SIZE
-   with the size of the data.  The caller is responsible for freeing
-   the data.  */
+   there is no data, or we could not read it, return an empty
+   buffer.  */
 
-static gdb_byte *
-linux_get_siginfo_data (thread_info *thread, struct gdbarch *gdbarch,
-			LONGEST *size)
+static gdb::byte_vector
+linux_get_siginfo_data (thread_info *thread, struct gdbarch *gdbarch)
 {
   struct type *siginfo_type;
-  gdb_byte *buf;
   LONGEST bytes_read;
-  struct cleanup *cleanups;
 
   if (!gdbarch_get_siginfo_type_p (gdbarch))
-    return NULL;
-  
+    return gdb::byte_vector ();
+
   scoped_restore save_inferior_ptid = make_scoped_restore (&inferior_ptid);
   inferior_ptid = thread->ptid;
 
   siginfo_type = gdbarch_get_siginfo_type (gdbarch);
 
-  buf = (gdb_byte *) xmalloc (TYPE_LENGTH (siginfo_type));
-  cleanups = make_cleanup (xfree, buf);
+  gdb::byte_vector buf (TYPE_LENGTH (siginfo_type));
 
   bytes_read = target_read (&current_target, TARGET_OBJECT_SIGNAL_INFO, NULL,
-			    buf, 0, TYPE_LENGTH (siginfo_type));
-  if (bytes_read == TYPE_LENGTH (siginfo_type))
-    {
-      discard_cleanups (cleanups);
-      *size = bytes_read;
-    }
-  else
-    {
-      do_cleanups (cleanups);
-      buf = NULL;
-    }
+			    buf.data (), 0, TYPE_LENGTH (siginfo_type));
+  if (bytes_read != TYPE_LENGTH (siginfo_type))
+    buf.clear ();
 
   return buf;
 }
@@ -1698,17 +1679,12 @@ static void
 linux_corefile_thread (struct thread_info *info,
 		       struct linux_corefile_thread_data *args)
 {
-  struct cleanup *old_chain;
   struct regcache *regcache;
-  gdb_byte *siginfo_data;
-  LONGEST siginfo_size = 0;
 
   regcache = get_thread_arch_regcache (info->ptid, args->gdbarch);
 
   target_fetch_registers (regcache, -1);
-  siginfo_data = linux_get_siginfo_data (info, args->gdbarch, &siginfo_size);
-
-  old_chain = make_cleanup (xfree, siginfo_data);
+  gdb::byte_vector siginfo_data = linux_get_siginfo_data (info, args->gdbarch);
 
   args->note_data = linux_collect_thread_registers
     (regcache, info->ptid, args->obfd, args->note_data,
@@ -1717,14 +1693,13 @@ linux_corefile_thread (struct thread_info *info,
   /* Don't return anything if we got no register information above,
      such a core file is useless.  */
   if (args->note_data != NULL)
-    if (siginfo_data != NULL)
+    if (!siginfo_data.empty ())
       args->note_data = elfcore_write_note (args->obfd,
 					    args->note_data,
 					    args->note_size,
 					    "CORE", NT_SIGINFO,
-					    siginfo_data, siginfo_size);
-
-  do_cleanups (old_chain);
+					    siginfo_data.data (),
+					    siginfo_data.size ());
 }
 
 /* Fill the PRPSINFO structure with information about the process being
@@ -2493,6 +2468,17 @@ show_use_coredump_filter (struct ui_file *file, int from_tty,
 			    " corefiles is %s.\n"), value);
 }
 
+/* Display whether the gcore command is dumping mappings marked with
+   the VM_DONTDUMP flag.  */
+
+static void
+show_dump_excluded_mappings (struct ui_file *file, int from_tty,
+			     struct cmd_list_element *c, const char *value)
+{
+  fprintf_filtered (file, _("Dumping of mappings marked with the VM_DONTDUMP"
+			    " flag is %s.\n"), value);
+}
+
 /* To be called from the various GDB_OSABI_LINUX handlers for the
    various GNU/Linux architectures and machine types.  */
 
@@ -2540,5 +2526,17 @@ Use this command to set whether gcore should consider the contents\n\
 of /proc/PID/coredump_filter when generating the corefile.  For more information\n\
 about this file, refer to the manpage of core(5)."),
 			   NULL, show_use_coredump_filter,
+			   &setlist, &showlist);
+
+  add_setshow_boolean_cmd ("dump-excluded-mappings", class_files,
+			   &dump_excluded_mappings, _("\
+Set whether gcore should dump mappings marked with the VM_DONTDUMP flag."),
+			   _("\
+Show whether gcore should dump mappings marked with the VM_DONTDUMP flag."),
+			   _("\
+Use this command to set whether gcore should dump mappings marked with the\n\
+VM_DONTDUMP flag (\"dd\" in /proc/PID/smaps) when generating the corefile.  For\n\
+more information about this file, refer to the manpage of proc(5) and core(5)."),
+			   NULL, show_dump_excluded_mappings,
 			   &setlist, &showlist);
 }

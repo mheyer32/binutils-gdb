@@ -1,6 +1,6 @@
 /* General utility routines for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2017 Free Software Foundation, Inc.
+   Copyright (C) 1986-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -68,6 +68,9 @@
 #include "job-control.h"
 #include "common/selftest.h"
 #include "common/gdb_optional.h"
+#include "cp-support.h"
+#include <algorithm>
+#include "common/pathstuff.h"
 
 #if !HAVE_DECL_MALLOC
 extern PTR malloc ();		/* ARI: PTR */
@@ -728,8 +731,6 @@ print_sys_errmsg (const char *string, int errcode)
 void
 quit (void)
 {
-  struct ui *ui = current_ui;
-
   if (sync_quit_force_run)
     {
       sync_quit_force_run = 0;
@@ -890,7 +891,6 @@ private:
 static int ATTRIBUTE_PRINTF (1, 0)
 defaulted_query (const char *ctlstr, const char defchar, va_list args)
 {
-  int ans2;
   int retval;
   int def_value;
   char def_answer, not_def_answer;
@@ -1459,14 +1459,14 @@ set_width (void)
 }
 
 static void
-set_width_command (char *args, int from_tty, struct cmd_list_element *c)
+set_width_command (const char *args, int from_tty, struct cmd_list_element *c)
 {
   set_screen_size ();
   set_width ();
 }
 
 static void
-set_height_command (char *args, int from_tty, struct cmd_list_element *c)
+set_height_command (const char *args, int from_tty, struct cmd_list_element *c)
 {
   set_screen_size ();
 }
@@ -2156,40 +2156,304 @@ fprintf_symbol_filtered (struct ui_file *stream, const char *name,
     }
 }
 
-/* Modes of operation for strncmp_iw_with_mode.  */
+/* True if CH is a character that can be part of a symbol name.  I.e.,
+   either a number, a letter, or a '_'.  */
 
-enum class strncmp_iw_mode
+static bool
+valid_identifier_name_char (int ch)
 {
-  /* Work like strncmp, while ignoring whitespace.  */
-  NORMAL,
+  return (isalnum (ch) || ch == '_');
+}
 
-  /* Like NORMAL, but also apply the strcmp_iw hack.  I.e.,
-     string1=="FOO(PARAMS)" matches string2=="FOO".  */
-  MATCH_PARAMS,
-};
+/* Skip to end of token, or to END, whatever comes first.  Input is
+   assumed to be a C++ operator name.  */
 
-/* Helper for strncmp_iw and strcmp_iw.  */
+static const char *
+cp_skip_operator_token (const char *token, const char *end)
+{
+  const char *p = token;
+  while (p != end && !isspace (*p) && *p != '(')
+    {
+      if (valid_identifier_name_char (*p))
+	{
+	  while (p != end && valid_identifier_name_char (*p))
+	    p++;
+	  return p;
+	}
+      else
+	{
+	  /* Note, ordered such that among ops that share a prefix,
+	     longer comes first.  This is so that the loop below can
+	     bail on first match.  */
+	  static const char *ops[] =
+	    {
+	      "[",
+	      "]",
+	      "~",
+	      ",",
+	      "-=", "--", "->", "-",
+	      "+=", "++", "+",
+	      "*=", "*",
+	      "/=", "/",
+	      "%=", "%",
+	      "|=", "||", "|",
+	      "&=", "&&", "&",
+	      "^=", "^",
+	      "!=", "!",
+	      "<<=", "<=", "<<", "<",
+	      ">>=", ">=", ">>", ">",
+	      "==", "=",
+	    };
 
-static int
+	  for (const char *op : ops)
+	    {
+	      size_t oplen = strlen (op);
+	      size_t lencmp = std::min<size_t> (oplen, end - p);
+
+	      if (strncmp (p, op, lencmp) == 0)
+		return p + lencmp;
+	    }
+	  /* Some unidentified character.  Return it.  */
+	  return p + 1;
+	}
+    }
+
+  return p;
+}
+
+/* Advance STRING1/STRING2 past whitespace.  */
+
+static void
+skip_ws (const char *&string1, const char *&string2, const char *end_str2)
+{
+  while (isspace (*string1))
+    string1++;
+  while (string2 < end_str2 && isspace (*string2))
+    string2++;
+}
+
+/* True if STRING points at the start of a C++ operator name.  START
+   is the start of the string that STRING points to, hence when
+   reading backwards, we must not read any character before START.  */
+
+static bool
+cp_is_operator (const char *string, const char *start)
+{
+  return ((string == start
+	   || !valid_identifier_name_char (string[-1]))
+	  && strncmp (string, CP_OPERATOR_STR, CP_OPERATOR_LEN) == 0
+	  && !valid_identifier_name_char (string[CP_OPERATOR_LEN]));
+}
+
+/* If *NAME points at an ABI tag, skip it and return true.  Otherwise
+   leave *NAME unmodified and return false.  (see GCC's abi_tag
+   attribute), such names are demangled as e.g.,
+   "function[abi:cxx11]()".  */
+
+static bool
+skip_abi_tag (const char **name)
+{
+  const char *p = *name;
+
+  if (startswith (p, "[abi:"))
+    {
+      p += 5;
+
+      while (valid_identifier_name_char (*p))
+	p++;
+
+      if (*p == ']')
+	{
+	  p++;
+	  *name = p;
+	  return true;
+	}
+    }
+  return false;
+}
+
+/* See utils.h.  */
+
+int
 strncmp_iw_with_mode (const char *string1, const char *string2,
-		      size_t string2_len, strncmp_iw_mode mode)
+		      size_t string2_len, strncmp_iw_mode mode,
+		      enum language language,
+		      completion_match_for_lcd *match_for_lcd)
 {
+  const char *string1_start = string1;
   const char *end_str2 = string2 + string2_len;
+  bool skip_spaces = true;
+  bool have_colon_op = (language == language_cplus
+			|| language == language_rust
+			|| language == language_fortran);
 
   while (1)
     {
-      while (isspace (*string1))
-	string1++;
-      while (string2 < end_str2 && isspace (*string2))
-	string2++;
+      if (skip_spaces
+	  || ((isspace (*string1) && !valid_identifier_name_char (*string2))
+	      || (isspace (*string2) && !valid_identifier_name_char (*string1))))
+	{
+	  skip_ws (string1, string2, end_str2);
+	  skip_spaces = false;
+	}
+
+      /* Skip [abi:cxx11] tags in the symbol name if the lookup name
+	 doesn't include them.  E.g.:
+
+	 string1: function[abi:cxx1](int)
+	 string2: function
+
+	 string1: function[abi:cxx1](int)
+	 string2: function(int)
+
+	 string1: Struct[abi:cxx1]::function()
+	 string2: Struct::function()
+
+	 string1: function(Struct[abi:cxx1], int)
+	 string2: function(Struct, int)
+      */
+      if (string2 == end_str2
+	  || (*string2 != '[' && !valid_identifier_name_char (*string2)))
+	{
+	  const char *abi_start = string1;
+
+	  /* There can be more than one tag.  */
+	  while (*string1 == '[' && skip_abi_tag (&string1))
+	    ;
+
+	  if (match_for_lcd != NULL && abi_start != string1)
+	    match_for_lcd->mark_ignored_range (abi_start, string1);
+
+	  while (isspace (*string1))
+	    string1++;
+	}
+
       if (*string1 == '\0' || string2 == end_str2)
 	break;
+
+      /* Handle the :: operator.  */
+      if (have_colon_op && string1[0] == ':' && string1[1] == ':')
+	{
+	  if (*string2 != ':')
+	    return 1;
+
+	  string1++;
+	  string2++;
+
+	  if (string2 == end_str2)
+	    break;
+
+	  if (*string2 != ':')
+	    return 1;
+
+	  string1++;
+	  string2++;
+
+	  while (isspace (*string1))
+	    string1++;
+	  while (string2 < end_str2 && isspace (*string2))
+	    string2++;
+	  continue;
+	}
+
+      /* Handle C++ user-defined operators.  */
+      else if (language == language_cplus
+	       && *string1 == 'o')
+	{
+	  if (cp_is_operator (string1, string1_start))
+	    {
+	      /* An operator name in STRING1.  Check STRING2.  */
+	      size_t cmplen
+		= std::min<size_t> (CP_OPERATOR_LEN, end_str2 - string2);
+	      if (strncmp (string1, string2, cmplen) != 0)
+		return 1;
+
+	      string1 += cmplen;
+	      string2 += cmplen;
+
+	      if (string2 != end_str2)
+		{
+		  /* Check for "operatorX" in STRING2.  */
+		  if (valid_identifier_name_char (*string2))
+		    return 1;
+
+		  skip_ws (string1, string2, end_str2);
+		}
+
+	      /* Handle operator().  */
+	      if (*string1 == '(')
+		{
+		  if (string2 == end_str2)
+		    {
+		      if (mode == strncmp_iw_mode::NORMAL)
+			return 0;
+		      else
+			{
+			  /* Don't break for the regular return at the
+			     bottom, because "operator" should not
+			     match "operator()", since this open
+			     parentheses is not the parameter list
+			     start.  */
+			  return *string1 != '\0';
+			}
+		    }
+
+		  if (*string1 != *string2)
+		    return 1;
+
+		  string1++;
+		  string2++;
+		}
+
+	      while (1)
+		{
+		  skip_ws (string1, string2, end_str2);
+
+		  /* Skip to end of token, or to END, whatever comes
+		     first.  */
+		  const char *end_str1 = string1 + strlen (string1);
+		  const char *p1 = cp_skip_operator_token (string1, end_str1);
+		  const char *p2 = cp_skip_operator_token (string2, end_str2);
+
+		  cmplen = std::min (p1 - string1, p2 - string2);
+		  if (p2 == end_str2)
+		    {
+		      if (strncmp (string1, string2, cmplen) != 0)
+			return 1;
+		    }
+		  else
+		    {
+		      if (p1 - string1 != p2 - string2)
+			return 1;
+		      if (strncmp (string1, string2, cmplen) != 0)
+			return 1;
+		    }
+
+		  string1 += cmplen;
+		  string2 += cmplen;
+
+		  if (*string1 == '\0' || string2 == end_str2)
+		    break;
+		  if (*string1 == '(' || *string2 == '(')
+		    break;
+		}
+
+	      continue;
+	    }
+	}
+
       if (case_sensitivity == case_sensitive_on && *string1 != *string2)
 	break;
       if (case_sensitivity == case_sensitive_off
 	  && (tolower ((unsigned char) *string1)
 	      != tolower ((unsigned char) *string2)))
 	break;
+
+      /* If we see any non-whitespace, non-identifier-name character
+	 (any of "()<>*&" etc.), then skip spaces the next time
+	 around.  */
+      if (!isspace (*string1) && !valid_identifier_name_char (*string1))
+	skip_spaces = true;
 
       string1++;
       string2++;
@@ -2198,7 +2462,40 @@ strncmp_iw_with_mode (const char *string1, const char *string2,
   if (string2 == end_str2)
     {
       if (mode == strncmp_iw_mode::NORMAL)
-	return 0;
+	{
+	  /* Strip abi tag markers from the matched symbol name.
+	     Usually the ABI marker will be found on function name
+	     (automatically added because the function returns an
+	     object marked with an ABI tag).  However, it's also
+	     possible to see a marker in one of the function
+	     parameters, for example.
+
+	     string2 (lookup name):
+	       func
+	     symbol name:
+	       function(some_struct[abi:cxx11], int)
+
+	     and for completion LCD computation we want to say that
+	     the match was for:
+	       function(some_struct, int)
+	  */
+	  if (match_for_lcd != NULL)
+	    {
+	      while ((string1 = strstr (string1, "[abi:")) != NULL)
+		{
+		  const char *abi_start = string1;
+
+		  /* There can be more than one tag.  */
+		  while (skip_abi_tag (&string1) && *string1 == '[')
+		    ;
+
+		  if (abi_start != string1)
+		    match_for_lcd->mark_ignored_range (abi_start, string1);
+		}
+	    }
+
+	  return 0;
+	}
       else
 	return (*string1 != '\0' && *string1 != '(');
     }
@@ -2212,7 +2509,7 @@ int
 strncmp_iw (const char *string1, const char *string2, size_t string2_len)
 {
   return strncmp_iw_with_mode (string1, string2, string2_len,
-			       strncmp_iw_mode::NORMAL);
+			       strncmp_iw_mode::NORMAL, language_minimal);
 }
 
 /* See utils.h.  */
@@ -2221,7 +2518,7 @@ int
 strcmp_iw (const char *string1, const char *string2)
 {
   return strncmp_iw_with_mode (string1, string2, strlen (string2),
-			       strncmp_iw_mode::MATCH_PARAMS);
+			       strncmp_iw_mode::MATCH_PARAMS, language_minimal);
 }
 
 /* This is like strcmp except that it ignores whitespace and treats
@@ -2428,6 +2725,23 @@ When set, debugging messages will be marked with seconds and microseconds."),
 			   &setdebuglist, &showdebuglist);
 }
 
+/* See utils.h.  */
+
+CORE_ADDR
+address_significant (gdbarch *gdbarch, CORE_ADDR addr)
+{
+  /* Truncate address to the significant bits of a target address,
+     avoiding shifts larger or equal than the width of a CORE_ADDR.
+     The local variable ADDR_BIT stops the compiler reporting a shift
+     overflow when it won't occur.  */
+  int addr_bit = gdbarch_significant_addr_bit (gdbarch);
+
+  if (addr_bit < (sizeof (CORE_ADDR) * HOST_CHAR_BIT))
+    addr &= ((CORE_ADDR) 1 << addr_bit) - 1;
+
+  return addr;
+}
+
 const char *
 paddress (struct gdbarch *gdbarch, CORE_ADDR addr)
 {
@@ -2525,57 +2839,6 @@ string_to_core_addr (const char *my_string)
   return addr;
 }
 
-gdb::unique_xmalloc_ptr<char>
-gdb_realpath (const char *filename)
-{
-/* On most hosts, we rely on canonicalize_file_name to compute
-   the FILENAME's realpath.
-
-   But the situation is slightly more complex on Windows, due to some
-   versions of GCC which were reported to generate paths where
-   backlashes (the directory separator) were doubled.  For instance:
-      c:\\some\\double\\slashes\\dir
-   ... instead of ...
-      c:\some\double\slashes\dir
-   Those double-slashes were getting in the way when comparing paths,
-   for instance when trying to insert a breakpoint as follow:
-      (gdb) b c:/some/double/slashes/dir/foo.c:4
-      No source file named c:/some/double/slashes/dir/foo.c:4.
-      (gdb) b c:\some\double\slashes\dir\foo.c:4
-      No source file named c:\some\double\slashes\dir\foo.c:4.
-   To prevent this from happening, we need this function to always
-   strip those extra backslashes.  While canonicalize_file_name does
-   perform this simplification, it only works when the path is valid.
-   Since the simplification would be useful even if the path is not
-   valid (one can always set a breakpoint on a file, even if the file
-   does not exist locally), we rely instead on GetFullPathName to
-   perform the canonicalization.  */
-
-#if defined (_WIN32)
-  {
-    char buf[MAX_PATH];
-    DWORD len = GetFullPathName (filename, MAX_PATH, buf, NULL);
-
-    /* The file system is case-insensitive but case-preserving.
-       So it is important we do not lowercase the path.  Otherwise,
-       we might not be able to display the original casing in a given
-       path.  */
-    if (len > 0 && len < MAX_PATH)
-      return gdb::unique_xmalloc_ptr<char> (xstrdup (buf));
-  }
-#else
-  {
-    char *rp = canonicalize_file_name (filename);
-
-    if (rp != NULL)
-      return gdb::unique_xmalloc_ptr<char> (rp);
-  }
-#endif
-
-  /* This system is a lost cause, just dup the buffer.  */
-  return gdb::unique_xmalloc_ptr<char> (xstrdup (filename));
-}
-
 #if GDB_SELF_TEST
 
 static void
@@ -2611,74 +2874,6 @@ gdb_realpath_tests ()
 }
 
 #endif /* GDB_SELF_TEST */
-
-/* Return a copy of FILENAME, with its directory prefix canonicalized
-   by gdb_realpath.  */
-
-gdb::unique_xmalloc_ptr<char>
-gdb_realpath_keepfile (const char *filename)
-{
-  const char *base_name = lbasename (filename);
-  char *dir_name;
-  char *result;
-
-  /* Extract the basename of filename, and return immediately 
-     a copy of filename if it does not contain any directory prefix.  */
-  if (base_name == filename)
-    return gdb::unique_xmalloc_ptr<char> (xstrdup (filename));
-
-  dir_name = (char *) alloca ((size_t) (base_name - filename + 2));
-  /* Allocate enough space to store the dir_name + plus one extra
-     character sometimes needed under Windows (see below), and
-     then the closing \000 character.  */
-  strncpy (dir_name, filename, base_name - filename);
-  dir_name[base_name - filename] = '\000';
-
-#ifdef HAVE_DOS_BASED_FILE_SYSTEM
-  /* We need to be careful when filename is of the form 'd:foo', which
-     is equivalent of d:./foo, which is totally different from d:/foo.  */
-  if (strlen (dir_name) == 2 && isalpha (dir_name[0]) && dir_name[1] == ':')
-    {
-      dir_name[2] = '.';
-      dir_name[3] = '\000';
-    }
-#endif
-
-  /* Canonicalize the directory prefix, and build the resulting
-     filename.  If the dirname realpath already contains an ending
-     directory separator, avoid doubling it.  */
-  gdb::unique_xmalloc_ptr<char> path_storage = gdb_realpath (dir_name);
-  const char *real_path = path_storage.get ();
-  if (IS_DIR_SEPARATOR (real_path[strlen (real_path) - 1]))
-    result = concat (real_path, base_name, (char *) NULL);
-  else
-    result = concat (real_path, SLASH_STRING, base_name, (char *) NULL);
-
-  return gdb::unique_xmalloc_ptr<char> (result);
-}
-
-/* Return PATH in absolute form, performing tilde-expansion if necessary.
-   PATH cannot be NULL or the empty string.
-   This does not resolve symlinks however, use gdb_realpath for that.  */
-
-gdb::unique_xmalloc_ptr<char>
-gdb_abspath (const char *path)
-{
-  gdb_assert (path != NULL && path[0] != '\0');
-
-  if (path[0] == '~')
-    return gdb::unique_xmalloc_ptr<char> (tilde_expand (path));
-
-  if (IS_ABSOLUTE_PATH (path))
-    return gdb::unique_xmalloc_ptr<char> (xstrdup (path));
-
-  /* Beware the // my son, the Emacs barfs, the botch that catch...  */
-  return gdb::unique_xmalloc_ptr<char>
-    (concat (current_directory,
-	     IS_DIR_SEPARATOR (current_directory[strlen (current_directory) - 1])
-	     ? "" : SLASH_STRING,
-	     path, (char *) NULL));
-}
 
 ULONGEST
 align_up (ULONGEST v, int n)
@@ -2855,30 +3050,6 @@ struct cleanup *
 make_bpstat_clear_actions_cleanup (void)
 {
   return make_cleanup (do_bpstat_clear_actions_cleanup, NULL);
-}
-
-
-/* Helper for make_cleanup_free_char_ptr_vec.  */
-
-static void
-do_free_char_ptr_vec (void *arg)
-{
-  VEC (char_ptr) *char_ptr_vec = (VEC (char_ptr) *) arg;
-
-  free_char_ptr_vec (char_ptr_vec);
-}
-
-/* Make cleanup handler calling xfree for each element of CHAR_PTR_VEC and
-   final VEC_free for CHAR_PTR_VEC itself.
-
-   You must not modify CHAR_PTR_VEC after this cleanup registration as the
-   CHAR_PTR_VEC base address may change on its updates.  Contrary to VEC_free
-   this function does not (cannot) clear the pointer.  */
-
-struct cleanup *
-make_cleanup_free_char_ptr_vec (VEC (char_ptr) *char_ptr_vec)
-{
-  return make_cleanup (do_free_char_ptr_vec, char_ptr_vec);
 }
 
 /* Substitute all occurences of string FROM by string TO in *STRINGP.  *STRINGP

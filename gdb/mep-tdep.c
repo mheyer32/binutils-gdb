@@ -1,6 +1,6 @@
 /* Target-dependent code for the Toshiba MeP for GDB, the GNU debugger.
 
-   Copyright (C) 2001-2017 Free Software Foundation, Inc.
+   Copyright (C) 2001-2018 Free Software Foundation, Inc.
 
    Contributed by Red Hat, Inc.
 
@@ -927,8 +927,6 @@ current_ccr_names (void)
 static const char *
 mep_register_name (struct gdbarch *gdbarch, int regnr)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);  
-
   /* General-purpose registers.  */
   static const char *gpr_names[] = {
     "r0",   "r1",   "r2",   "r3",   /* 0 */
@@ -1114,18 +1112,9 @@ mep_register_type (struct gdbarch *gdbarch, int reg_nr)
     return builtin_type (gdbarch)->builtin_uint32;
 }
 
-
-static CORE_ADDR
-mep_read_pc (struct regcache *regcache)
-{
-  ULONGEST pc;
-  regcache_cooked_read_unsigned (regcache, MEP_PC_REGNUM, &pc);
-  return pc;
-}
-
 static enum register_status
 mep_pseudo_cr32_read (struct gdbarch *gdbarch,
-                      struct regcache *regcache,
+		      readable_regcache *regcache,
                       int cookednum,
                       gdb_byte *buf)
 {
@@ -1138,7 +1127,7 @@ mep_pseudo_cr32_read (struct gdbarch *gdbarch,
 
   gdb_assert (TYPE_LENGTH (register_type (gdbarch, rawnum)) == sizeof (buf64));
   gdb_assert (TYPE_LENGTH (register_type (gdbarch, cookednum)) == 4);
-  status = regcache_raw_read (regcache, rawnum, buf64);
+  status = regcache->raw_read (rawnum, buf64);
   if (status == REG_VALID)
     {
       /* Slow, but legible.  */
@@ -1151,23 +1140,23 @@ mep_pseudo_cr32_read (struct gdbarch *gdbarch,
 
 static enum register_status
 mep_pseudo_cr64_read (struct gdbarch *gdbarch,
-                      struct regcache *regcache,
+                      readable_regcache *regcache,
                       int cookednum,
                       gdb_byte *buf)
 {
-  return regcache_raw_read (regcache, mep_pseudo_to_raw[cookednum], buf);
+  return regcache->raw_read (mep_pseudo_to_raw[cookednum], buf);
 }
 
 
 static enum register_status
 mep_pseudo_register_read (struct gdbarch *gdbarch,
-                          struct regcache *regcache,
+			  readable_regcache *regcache,
                           int cookednum,
                           gdb_byte *buf)
 {
   if (IS_CSR_REGNUM (cookednum)
       || IS_CCR_REGNUM (cookednum))
-    return regcache_raw_read (regcache, mep_pseudo_to_raw[cookednum], buf);
+    return regcache->raw_read (mep_pseudo_to_raw[cookednum], buf);
   else if (IS_CR32_REGNUM (cookednum)
            || IS_FP_CR32_REGNUM (cookednum))
     return mep_pseudo_cr32_read (gdbarch, regcache, cookednum, buf);
@@ -1673,7 +1662,6 @@ mep_analyze_prologue (struct gdbarch *gdbarch,
   CORE_ADDR pc;
   unsigned long insn;
   int rn;
-  int found_lp = 0;
   pv_t reg[MEP_NUM_REGS];
   CORE_ADDR after_last_frame_setup_insn = start_pc;
 
@@ -2449,7 +2437,6 @@ mep_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   tdep->me_module = me_module;
 
   /* Register set.  */
-  set_gdbarch_read_pc (gdbarch, mep_read_pc);
   set_gdbarch_num_regs (gdbarch, MEP_NUM_RAW_REGS);
   set_gdbarch_pc_regnum (gdbarch, MEP_PC_REGNUM);
   set_gdbarch_sp_regnum (gdbarch, MEP_SP_REGNUM);

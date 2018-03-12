@@ -1,6 +1,6 @@
 /* Cache and manage frames for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2017 Free Software Foundation, Inc.
+   Copyright (C) 1986-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -99,7 +99,7 @@ struct frame_info
   struct program_space *pspace;
 
   /* The frame's address space.  */
-  struct address_space *aspace;
+  const address_space *aspace;
 
   /* The frame's low-level unwinder and corresponding cache.  The
      low-level unwinder is responsible for unwinding register values
@@ -1017,14 +1017,13 @@ do_frame_register_read (void *src, int regnum, gdb_byte *buf)
     return REG_VALID;
 }
 
-std::unique_ptr<struct regcache>
+std::unique_ptr<readonly_detached_regcache>
 frame_save_as_regcache (struct frame_info *this_frame)
 {
-  struct address_space *aspace = get_frame_address_space (this_frame);
-  std::unique_ptr<struct regcache> regcache
-    (new struct regcache (get_frame_arch (this_frame), aspace));
+  std::unique_ptr<readonly_detached_regcache> regcache
+    (new readonly_detached_regcache (get_frame_arch (this_frame),
+				     do_frame_register_read, this_frame));
 
-  regcache_save (regcache.get (), do_frame_register_read, this_frame);
   return regcache;
 }
 
@@ -1058,7 +1057,7 @@ frame_pop (struct frame_info *this_frame)
      Save them in a scratch buffer so that there isn't a race between
      trying to extract the old values from the current regcache while
      at the same time writing new values into that same cache.  */
-  std::unique_ptr<struct regcache> scratch
+  std::unique_ptr<readonly_detached_regcache> scratch
     = frame_save_as_regcache (prev_frame);
 
   /* FIXME: cagney/2003-03-16: It should be possible to tell the
@@ -1069,9 +1068,8 @@ frame_pop (struct frame_info *this_frame)
      Unfortunately, they don't implement it.  Their lack of a formal
      definition can lead to targets writing back bogus values
      (arguably a bug in the target code mind).  */
-  /* Now copy those saved registers into the current regcache.
-     Here, regcache_cpy() calls regcache_restore().  */
-  regcache_cpy (get_current_regcache (), scratch.get ());
+  /* Now copy those saved registers into the current regcache.  */
+  get_current_regcache ()->restore (scratch.get ());
 
   /* We've made right mess of GDB's local state, just discard
      everything.  */
@@ -1521,7 +1519,7 @@ create_sentinel_frame (struct program_space *pspace, struct regcache *regcache)
 
   frame->level = -1;
   frame->pspace = pspace;
-  frame->aspace = get_regcache_aspace (regcache);
+  frame->aspace = regcache->aspace ();
   /* Explicitly initialize the sentinel frame's cache.  Provide it
      with the underlying regcache.  In the future additional
      information, such as the frame's thread will be added.  */
@@ -2643,7 +2641,7 @@ frame_unwind_program_space (struct frame_info *this_frame)
   return this_frame->pspace;
 }
 
-struct address_space *
+const address_space *
 get_frame_address_space (struct frame_info *frame)
 {
   return frame->aspace;

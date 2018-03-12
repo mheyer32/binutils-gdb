@@ -1,5 +1,5 @@
 /* Inferior process information for the remote server for GDB.
-   Copyright (C) 1993-2017 Free Software Foundation, Inc.
+   Copyright (C) 1993-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -33,6 +33,10 @@ struct process_info_private;
 
 struct process_info
 {
+  process_info (int pid_, int attached_)
+  : pid (pid_), attached (attached_)
+  {}
+
   /* This process' pid.  */
   int pid;
 
@@ -42,28 +46,28 @@ struct process_info
 
   /* True if GDB asked us to detach from this process, but we remained
      attached anyway.  */
-  int gdb_detached;
+  int gdb_detached = 0;
 
   /* The symbol cache.  */
-  struct sym_cache *symbol_cache;
+  struct sym_cache *symbol_cache = NULL;
 
   /* The list of memory breakpoints.  */
-  struct breakpoint *breakpoints;
+  struct breakpoint *breakpoints = NULL;
 
   /* The list of raw memory breakpoints.  */
-  struct raw_breakpoint *raw_breakpoints;
+  struct raw_breakpoint *raw_breakpoints = NULL;
 
   /* The list of installed fast tracepoints.  */
-  struct fast_tracepoint_jump *fast_tracepoint_jumps;
+  struct fast_tracepoint_jump *fast_tracepoint_jumps = NULL;
 
   /* The list of syscalls to report, or just a single element, ANY_SYSCALL,
      for unfiltered syscall reporting.  */
-  VEC (int) *syscalls_to_catch;
+  std::vector<int> syscalls_to_catch;
 
-  const struct target_desc *tdesc;
+  const struct target_desc *tdesc = NULL;
 
   /* Private target data.  */
-  struct process_info_private *priv;
+  struct process_info_private *priv = NULL;
 };
 
 /* Get the pid of PROC.  */
@@ -135,19 +139,6 @@ int have_started_inferiors_p (void);
 int have_attached_inferiors_p (void);
 
 void clear_inferiors (void);
-
-thread_info *find_inferior (std::list<thread_info *> *thread_list,
-			    int (*func) (thread_info *, void *), void *arg);
-thread_info *find_inferior_id (std::list<thread_info *> *thread_list,
-			       ptid_t id);
-thread_info *find_inferior_in_random (std::list<thread_info *> *thread_list,
-				      int (*func) (thread_info *, void *),
-				      void *arg);
-void for_each_inferior (std::list<thread_info *> *thread_list,
-			void (*action) (thread_info *));
-void for_each_inferior_with_data (std::list<thread_info *> *thread_list,
-				  void (*action) (thread_info *, void *),
-				  void *data);
 
 void *thread_target_data (struct thread_info *);
 struct regcache *thread_regcache_data (struct thread_info *);

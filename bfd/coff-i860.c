@@ -1,5 +1,5 @@
 /* BFD back-end for Intel i860 COFF files.
-   Copyright (C) 1990-2017 Free Software Foundation, Inc.
+   Copyright (C) 1990-2018 Free Software Foundation, Inc.
    Created mostly by substituting "860" for "386" in coff-i386.c
    Harry Dolan <dolan@ssd.intel.com>, October 1995
 
@@ -95,6 +95,11 @@ coff_i860_reloc (bfd *abfd,
 	reloc_howto_type *howto = reloc_entry->howto;
 	unsigned char *addr = (unsigned char *) data + reloc_entry->address;
 
+	if (! bfd_reloc_offset_in_range (howto, abfd, input_section,
+					 reloc_entry->address
+					 * bfd_octets_per_byte (abfd)))
+	  return bfd_reloc_outofrange;
+
 	switch (howto->size)
 	  {
 	  case 0:
@@ -134,7 +139,7 @@ coff_i860_reloc (bfd *abfd,
    these relocations.  */
 
 static bfd_reloc_status_type
-coff_i860_reloc_nyi (bfd *abfd ATTRIBUTE_UNUSED,
+coff_i860_reloc_nyi (bfd *abfd,
 		     arelent *reloc_entry,
 		     asymbol *symbol ATTRIBUTE_UNUSED,
 		     void *data ATTRIBUTE_UNUSED,
@@ -143,7 +148,7 @@ coff_i860_reloc_nyi (bfd *abfd ATTRIBUTE_UNUSED,
 		     char **error_message ATTRIBUTE_UNUSED)
 {
   reloc_howto_type *howto = reloc_entry->howto;
-  _bfd_error_handler (_("relocation `%s' not yet implemented"), howto->name);
+  _bfd_error_handler (_("%pB: %s unsupported"), abfd, howto->name);
   return bfd_reloc_notsupported;
 }
 
@@ -159,33 +164,33 @@ static reloc_howto_type howto_table[] =
   EMPTY_HOWTO (3),
   EMPTY_HOWTO (4),
   EMPTY_HOWTO (5),
-  HOWTO (R_DIR32,               /* type */
-	 0,	                /* rightshift */
-	 2,	                /* size (0 = byte, 1 = short, 2 = long) */
-	 32,	                /* bitsize */
-	 FALSE,	                /* pc_relative */
-	 0,	                /* bitpos */
+  HOWTO (R_DIR32,		/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 32,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
 	 complain_overflow_bitfield, /* complain_on_overflow */
-	 coff_i860_reloc,       /* special_function */
-	 "dir32",               /* name */
-	 TRUE,	                /* partial_inplace */
-	 0xffffffff,            /* src_mask */
-	 0xffffffff,            /* dst_mask */
-	 TRUE),                /* pcrel_offset */
+	 coff_i860_reloc,	/* special_function */
+	 "dir32",		/* name */
+	 TRUE,			/* partial_inplace */
+	 0xffffffff,		/* src_mask */
+	 0xffffffff,		/* dst_mask */
+	 TRUE),		       /* pcrel_offset */
   /* {7}, */
-  HOWTO (R_IMAGEBASE,            /* type */
-	 0,	                /* rightshift */
-	 2,	                /* size (0 = byte, 1 = short, 2 = long) */
-	 32,	                /* bitsize */
-	 FALSE,	                /* pc_relative */
-	 0,	                /* bitpos */
+  HOWTO (R_IMAGEBASE,		 /* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 32,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
 	 complain_overflow_bitfield, /* complain_on_overflow */
-	 coff_i860_reloc,       /* special_function */
-	 "rva32",	           /* name */
-	 TRUE,	                /* partial_inplace */
-	 0xffffffff,            /* src_mask */
-	 0xffffffff,            /* dst_mask */
-	 FALSE),                /* pcrel_offset */
+	 coff_i860_reloc,	/* special_function */
+	 "rva32",		   /* name */
+	 TRUE,			/* partial_inplace */
+	 0xffffffff,		/* src_mask */
+	 0xffffffff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
   EMPTY_HOWTO (010),
   EMPTY_HOWTO (011),
   EMPTY_HOWTO (012),
@@ -290,7 +295,7 @@ static reloc_howto_type howto_table[] =
 	 FALSE,			/* partial_inplace */
 	 0xffff,		/* src_mask */
 	 0xffff,		/* dst_mask */
-	 FALSE),	        /* pcrel_offset */
+	 FALSE),		/* pcrel_offset */
   EMPTY_HOWTO (0x1d),
   HOWTO (COFF860_R_HIGH,	/* type */
 	 16,			/* rightshift */
@@ -304,8 +309,8 @@ static reloc_howto_type howto_table[] =
 	 FALSE,			/* partial_inplace */
 	 0xffff,		/* src_mask */
 	 0xffff,		/* dst_mask */
-	 FALSE),	        /* pcrel_offset */
-  HOWTO (COFF860_R_LOW0,        /* type */
+	 FALSE),		/* pcrel_offset */
+  HOWTO (COFF860_R_LOW0,	/* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
 	 16,			/* bitsize */
@@ -317,8 +322,8 @@ static reloc_howto_type howto_table[] =
 	 FALSE,			/* partial_inplace */
 	 0xffff,		/* src_mask */
 	 0xffff,		/* dst_mask */
-	 FALSE),	        /* pcrel_offset */
-  HOWTO (COFF860_R_LOW1,        /* type */
+	 FALSE),		/* pcrel_offset */
+  HOWTO (COFF860_R_LOW1,	/* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
 	 16,			/* bitsize */
@@ -330,8 +335,8 @@ static reloc_howto_type howto_table[] =
 	 FALSE,			/* partial_inplace */
 	 0xfffe,		/* src_mask */
 	 0xfffe,		/* dst_mask */
-	 FALSE),	        /* pcrel_offset */
-  HOWTO (COFF860_R_LOW2,        /* type */
+	 FALSE),		/* pcrel_offset */
+  HOWTO (COFF860_R_LOW2,	/* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
 	 16,			/* bitsize */
@@ -343,8 +348,8 @@ static reloc_howto_type howto_table[] =
 	 FALSE,			/* partial_inplace */
 	 0xfffc,		/* src_mask */
 	 0xfffc,		/* dst_mask */
-	 FALSE),	        /* pcrel_offset */
-  HOWTO (COFF860_R_LOW3,        /* type */
+	 FALSE),		/* pcrel_offset */
+  HOWTO (COFF860_R_LOW3,	/* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
 	 16,			/* bitsize */
@@ -356,8 +361,8 @@ static reloc_howto_type howto_table[] =
 	 FALSE,			/* partial_inplace */
 	 0xfff8,		/* src_mask */
 	 0xfff8,		/* dst_mask */
-	 FALSE),	        /* pcrel_offset */
-  HOWTO (COFF860_R_LOW4,        /* type */
+	 FALSE),		/* pcrel_offset */
+  HOWTO (COFF860_R_LOW4,	/* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
 	 16,			/* bitsize */
@@ -369,8 +374,8 @@ static reloc_howto_type howto_table[] =
 	 FALSE,			/* partial_inplace */
 	 0xfff0,		/* src_mask */
 	 0xfff0,		/* dst_mask */
-	 FALSE),	        /* pcrel_offset */
-  HOWTO (COFF860_R_SPLIT0,      /* type */
+	 FALSE),		/* pcrel_offset */
+  HOWTO (COFF860_R_SPLIT0,	/* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
 	 16,			/* bitsize */
@@ -382,8 +387,8 @@ static reloc_howto_type howto_table[] =
 	 FALSE,			/* partial_inplace */
 	 0x1f07ff,		/* src_mask */
 	 0x1f07ff,		/* dst_mask */
-	 FALSE),	        /* pcrel_offset */
-  HOWTO (COFF860_R_SPLIT1,      /* type */
+	 FALSE),		/* pcrel_offset */
+  HOWTO (COFF860_R_SPLIT1,	/* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
 	 16,			/* bitsize */
@@ -395,8 +400,8 @@ static reloc_howto_type howto_table[] =
 	 FALSE,			/* partial_inplace */
 	 0x1f07fe,		/* src_mask */
 	 0x1f07fe,		/* dst_mask */
-	 FALSE),	        /* pcrel_offset */
-  HOWTO (COFF860_R_SPLIT2,      /* type */
+	 FALSE),		/* pcrel_offset */
+  HOWTO (COFF860_R_SPLIT2,	/* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
 	 16,			/* bitsize */
@@ -408,8 +413,8 @@ static reloc_howto_type howto_table[] =
 	 FALSE,			/* partial_inplace */
 	 0x1f07fc,		/* src_mask */
 	 0x1f07fc,		/* dst_mask */
-	 FALSE),	        /* pcrel_offset */
-  HOWTO (COFF860_R_HIGHADJ,     /* type */
+	 FALSE),		/* pcrel_offset */
+  HOWTO (COFF860_R_HIGHADJ,	/* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
 	 16,			/* bitsize */
@@ -421,8 +426,8 @@ static reloc_howto_type howto_table[] =
 	 FALSE,			/* partial_inplace */
 	 0xffff,		/* src_mask */
 	 0xffff,		/* dst_mask */
-	 FALSE),	        /* pcrel_offset */
-  HOWTO (COFF860_R_BRADDR,      /* type */
+	 FALSE),		/* pcrel_offset */
+  HOWTO (COFF860_R_BRADDR,	/* type */
 	 2,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
 	 26,			/* bitsize */
@@ -434,7 +439,7 @@ static reloc_howto_type howto_table[] =
 	 FALSE,			/* partial_inplace */
 	 0x3ffffff,		/* src_mask */
 	 0x3ffffff,		/* dst_mask */
-	 TRUE)		        /* pcrel_offset */
+	 TRUE)			/* pcrel_offset */
 };
 
 /* Turn a howto into a reloc number.  */
@@ -595,7 +600,7 @@ i860_reloc_processing (arelent *cache_ptr, struct internal_reloc *dst,
   else
     {
       /* For every other relocation, do exactly what coff_slurp_reloc_table
-         would do (which this code is taken directly from).  */
+	 would do (which this code is taken directly from).  */
       asymbol *ptr = NULL;
       cache_ptr->address = dst->r_vaddr;
 
@@ -605,7 +610,7 @@ i860_reloc_processing (arelent *cache_ptr, struct internal_reloc *dst,
 	    {
 	      _bfd_error_handler
 		/* xgettext: c-format */
-		(_("%B: warning: illegal symbol index %ld in relocs"),
+		(_("%pB: warning: illegal symbol index %ld in relocs"),
 		 abfd, dst->r_symndx);
 	      cache_ptr->sym_ptr_ptr = bfd_abs_section_ptr->symbol_ptr_ptr;
 	      ptr = NULL;
@@ -672,9 +677,9 @@ const bfd_target
   BFD_ENDIAN_LITTLE,		/* data byte order is little */
   BFD_ENDIAN_LITTLE,		/* header byte order is little */
 
-  (HAS_RELOC | EXEC_P |		/* object flags */
-   HAS_LINENO | HAS_DEBUG |
-   HAS_SYMS | HAS_LOCALS | WP_TEXT | D_PAGED),
+  (HAS_RELOC | EXEC_P		/* object flags */
+   | HAS_LINENO | HAS_DEBUG
+   | HAS_SYMS | HAS_LOCALS | WP_TEXT | D_PAGED),
 
   (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_RELOC), /* section flags */
   '_',				/* leading underscore */
@@ -690,22 +695,34 @@ const bfd_target
      bfd_getl16, bfd_getl_signed_16, bfd_putl16, /* hdrs */
 
 /* Note that we allow an object file to be treated as a core file as well.  */
-    {_bfd_dummy_target, i3coff_object_p, /* bfd_check_format */
-       bfd_generic_archive_p, i3coff_object_p},
-    {bfd_false, coff_mkobject, _bfd_generic_mkarchive, /* bfd_set_format */
-       bfd_false},
-    {bfd_false, coff_write_object_contents, /* bfd_write_contents */
-       _bfd_write_archive_contents, bfd_false},
+  {				/* bfd_check_format */
+    _bfd_dummy_target,
+    i3coff_object_p,
+    bfd_generic_archive_p,
+    i3coff_object_p
+  },
+  {				/* bfd_set_format */
+    _bfd_bool_bfd_false_error,
+    coff_mkobject,
+    _bfd_generic_mkarchive,
+    _bfd_bool_bfd_false_error
+  },
+  {				/* bfd_write_contents */
+    _bfd_bool_bfd_false_error,
+    coff_write_object_contents,
+    _bfd_write_archive_contents,
+    _bfd_bool_bfd_false_error
+  },
 
-     BFD_JUMP_TABLE_GENERIC (coff),
-     BFD_JUMP_TABLE_COPY (coff),
-     BFD_JUMP_TABLE_CORE (_bfd_nocore),
-     BFD_JUMP_TABLE_ARCHIVE (_bfd_archive_coff),
-     BFD_JUMP_TABLE_SYMBOLS (coff),
-     BFD_JUMP_TABLE_RELOCS (coff),
-     BFD_JUMP_TABLE_WRITE (coff),
-     BFD_JUMP_TABLE_LINK (coff),
-     BFD_JUMP_TABLE_DYNAMIC (_bfd_nodynamic),
+  BFD_JUMP_TABLE_GENERIC (coff),
+  BFD_JUMP_TABLE_COPY (coff),
+  BFD_JUMP_TABLE_CORE (_bfd_nocore),
+  BFD_JUMP_TABLE_ARCHIVE (_bfd_archive_coff),
+  BFD_JUMP_TABLE_SYMBOLS (coff),
+  BFD_JUMP_TABLE_RELOCS (coff),
+  BFD_JUMP_TABLE_WRITE (coff),
+  BFD_JUMP_TABLE_LINK (coff),
+  BFD_JUMP_TABLE_DYNAMIC (_bfd_nodynamic),
 
   NULL,
 

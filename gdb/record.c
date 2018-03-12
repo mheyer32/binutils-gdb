@@ -1,6 +1,6 @@
 /* Process record and replay target for GDB, the GNU debugger.
 
-   Copyright (C) 2008-2017 Free Software Foundation, Inc.
+   Copyright (C) 2008-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -99,25 +99,25 @@ record_start (const char *method, const char *format, int from_tty)
   if (method == NULL)
     {
       if (format == NULL)
-	execute_command_to_string ((char *) "record", from_tty);
+	execute_command_to_string ("record", from_tty);
       else
 	error (_("Invalid format."));
     }
   else if (strcmp (method, "full") == 0)
     {
       if (format == NULL)
-	execute_command_to_string ((char *) "record full", from_tty);
+	execute_command_to_string ("record full", from_tty);
       else
 	error (_("Invalid format."));
     }
   else if (strcmp (method, "btrace") == 0)
     {
       if (format == NULL)
-	execute_command_to_string ((char *) "record btrace", from_tty);
+	execute_command_to_string ("record btrace", from_tty);
       else if (strcmp (format, "bts") == 0)
-	execute_command_to_string ((char *) "record btrace bts", from_tty);
+	execute_command_to_string ("record btrace bts", from_tty);
       else if (strcmp (format, "pt") == 0)
-	execute_command_to_string ((char *) "record btrace pt", from_tty);
+	execute_command_to_string ("record btrace pt", from_tty);
       else
 	error (_("Invalid format."));
     }
@@ -130,7 +130,7 @@ record_start (const char *method, const char *format, int from_tty)
 void
 record_stop (int from_tty)
 {
-  execute_command_to_string ((char *) "record stop", from_tty);
+  execute_command_to_string ("record stop", from_tty);
 }
 
 /* See record.h.  */
@@ -187,7 +187,7 @@ record_disconnect (struct target_ops *t, const char *args, int from_tty)
 /* See record.h.  */
 
 void
-record_detach (struct target_ops *t, const char *args, int from_tty)
+record_detach (struct target_ops *t, inferior *inf, int from_tty)
 {
   gdb_assert (t->to_stratum == record_stratum);
 
@@ -196,7 +196,7 @@ record_detach (struct target_ops *t, const char *args, int from_tty)
   record_stop (t);
   record_unpush (t);
 
-  target_detach (args, from_tty);
+  target_detach (inf, from_tty);
 }
 
 /* See record.h.  */
@@ -266,7 +266,7 @@ show_record_debug (struct ui_file *file, int from_tty,
 static void
 cmd_record_start (const char *args, int from_tty)
 {
-  execute_command ((char *) "target record-full", from_tty);
+  execute_command ("target record-full", from_tty);
 }
 
 /* Truncate the record log from the present point
@@ -452,7 +452,6 @@ get_context_size (const char **arg)
 {
   const char *pos;
   char *end;
-  int number;
 
   pos = skip_spaces (*arg);
 
@@ -616,14 +615,11 @@ cmd_record_insn_history (const char *arg, int from_tty)
 
 /* Read function-call-history modifiers from an argument string.  */
 
-static int
+static record_print_flags
 get_call_history_modifiers (const char **arg)
 {
-  int modifiers;
-  const char *args;
-
-  modifiers = 0;
-  args = *arg;
+  record_print_flags modifiers = 0;
+  const char *args = *arg;
 
   if (args == NULL)
     return modifiers;
@@ -673,13 +669,11 @@ get_call_history_modifiers (const char **arg)
 static void
 cmd_record_call_history (const char *arg, int from_tty)
 {
-  int flags, size;
-
   require_record_target ();
 
-  flags = get_call_history_modifiers (&arg);
+  record_print_flags flags = get_call_history_modifiers (&arg);
 
-  size = command_size_to_target_size (record_call_history_size);
+  int size = command_size_to_target_size (record_call_history_size);
 
   if (arg == NULL || *arg == 0 || strcmp (arg, "+") == 0)
     target_call_history (size, flags);
@@ -759,7 +753,7 @@ validate_history_size (unsigned int *command_var, unsigned int *setting)
    [0..UINT_MAX].  See command_size_to_target_size.  */
 
 static void
-set_record_insn_history_size (char *args, int from_tty,
+set_record_insn_history_size (const char *args, int from_tty,
 			      struct cmd_list_element *c)
 {
   validate_history_size (&record_insn_history_size_setshow_var,
@@ -771,7 +765,7 @@ set_record_insn_history_size (char *args, int from_tty,
    [0..UINT_MAX].  See command_size_to_target_size.  */
 
 static void
-set_record_call_history_size (char *args, int from_tty,
+set_record_call_history_size (const char *args, int from_tty,
 			      struct cmd_list_element *c)
 {
   validate_history_size (&record_call_history_size_setshow_var,

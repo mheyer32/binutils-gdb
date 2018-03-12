@@ -1,5 +1,5 @@
 /* Target description definitions for remote server for GDB.
-   Copyright (C) 2012-2017 Free Software Foundation, Inc.
+   Copyright (C) 2012-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,7 +19,7 @@
 #ifndef TDESC_H
 #define TDESC_H
 
-#include "arch/tdesc.h"
+#include "common/tdesc.h"
 
 #include "regdef.h"
 #include <vector>

@@ -1,6 +1,6 @@
 /* Core dump and executable file functions above target vector, for GDB.
 
-   Copyright (C) 1986-2017 Free Software Foundation, Inc.
+   Copyright (C) 1986-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -68,7 +68,7 @@ core_file_command (const char *filename, int from_tty)
   gdb_assert (core_target != NULL);
 
   if (!filename)
-    (core_target->to_detach) (core_target, filename, from_tty);
+    (core_target->to_detach) (core_target, current_inferior (), from_tty);
   else
     (core_target->to_open) (filename, from_tty);
 }
@@ -452,11 +452,8 @@ show_gnutarget_string (struct ui_file *file, int from_tty,
 		    _("The current BFD target is \"%s\".\n"), value);
 }
 
-static void set_gnutarget_command (char *, int,
-				   struct cmd_list_element *);
-
 static void
-set_gnutarget_command (char *ignore, int from_tty,
+set_gnutarget_command (const char *ignore, int from_tty,
 		       struct cmd_list_element *c)
 {
   char *gend = gnutarget_string + strlen (gnutarget_string);

@@ -1,6 +1,6 @@
 // plugin.cc -- plugin manager for gold      -*- C++ -*-
 
-// Copyright (C) 2008-2017 Free Software Foundation, Inc.
+// Copyright (C) 2008-2018 Free Software Foundation, Inc.
 // Written by Cary Coutant <ccoutant@google.com>.
 
 // This file is part of gold.
@@ -167,6 +167,12 @@ static enum ld_plugin_status
 get_input_section_size(const struct ld_plugin_section section,
                        uint64_t* secsize);
 
+static enum ld_plugin_status
+register_new_input(ld_plugin_new_input_handler handler);
+
+static enum ld_plugin_status
+get_wrap_symbols(uint64_t *num_symbols, const char ***wrap_symbol_list);
+
 };
 
 #endif // ENABLE_PLUGINS
@@ -211,7 +217,7 @@ Plugin::load()
   sscanf(ver, "%d.%d", &major, &minor);
 
   // Allocate and populate a transfer vector.
-  const int tv_fixed_size = 29;
+  const int tv_fixed_size = 31;
 
   int tv_size = this->args_.size() + tv_fixed_size;
   ld_plugin_tv* tv = new ld_plugin_tv[tv_size];
@@ -346,6 +352,14 @@ Plugin::load()
   tv[i].tv_u.tv_get_input_section_size = get_input_section_size;
 
   ++i;
+  tv[i].tv_tag = LDPT_REGISTER_NEW_INPUT_HOOK;
+  tv[i].tv_u.tv_register_new_input = register_new_input;
+
+  ++i;
+  tv[i].tv_tag = LDPT_GET_WRAP_SYMBOLS;
+  tv[i].tv_u.tv_get_wrap_symbols = get_wrap_symbols;
+
+  ++i;
   tv[i].tv_tag = LDPT_NULL;
   tv[i].tv_u.tv_val = 0;
 
@@ -381,6 +395,15 @@ Plugin::all_symbols_read()
 {
   if (this->all_symbols_read_handler_ != NULL)
     (*this->all_symbols_read_handler_)();
+}
+
+// Call the new_input handler.
+
+inline void
+Plugin::new_input(struct ld_plugin_input_file* plugin_input_file)
+{
+  if (this->new_input_handler_ != NULL)
+    (*this->new_input_handler_)(plugin_input_file);
 }
 
 // Call the cleanup handler.
@@ -476,8 +499,6 @@ Plugin_manager::claim_file(Input_file* input_file, off_t offset,
 
   gold_assert(lock_initialized);
   Hold_lock hl(*this->lock_);
-  if (this->in_replacement_phase_)
-    return NULL;
 
   unsigned int handle = this->objects_.size();
   this->input_file_ = input_file;
@@ -494,19 +515,28 @@ Plugin_manager::claim_file(Input_file* input_file, off_t offset,
        this->current_ != this->plugins_.end();
        ++this->current_)
     {
-      if ((*this->current_)->claim_file(&this->plugin_input_file_))
+      // If we aren't yet in replacement phase, allow plugins to claim input
+      // files, otherwise notify the plugin of the new input file, if needed.
+      if (!this->in_replacement_phase_)
         {
-	  this->any_claimed_ = true;
-	  this->in_claim_file_handler_ = false;
+          if ((*this->current_)->claim_file(&this->plugin_input_file_))
+            {
+              this->any_claimed_ = true;
+              this->in_claim_file_handler_ = false;
 
-          if (this->objects_.size() > handle
-              && this->objects_[handle]->pluginobj() != NULL)
-            return this->objects_[handle]->pluginobj();
+              if (this->objects_.size() > handle
+                  && this->objects_[handle]->pluginobj() != NULL)
+                return this->objects_[handle]->pluginobj();
 
-          // If the plugin claimed the file but did not call the
-          // add_symbols callback, we need to create the Pluginobj now.
-          Pluginobj* obj = this->make_plugin_object(handle);
-          return obj;
+              // If the plugin claimed the file but did not call the
+              // add_symbols callback, we need to create the Pluginobj now.
+              Pluginobj* obj = this->make_plugin_object(handle);
+              return obj;
+            }
+        }
+      else
+        {
+          (*this->current_)->new_input(&this->plugin_input_file_);
         }
     }
 
@@ -556,6 +586,11 @@ Plugin_manager::all_symbols_read(Workqueue* workqueue, Task* task,
   this->dirpath_ = dirpath;
   this->mapfile_ = mapfile;
   this->this_blocker_ = NULL;
+
+  // Set symbols used in defsym expressions as seen in real ELF.
+  Layout *layout = parameters->options().plugins()->layout();
+  layout->script_options()->set_defsym_uses_in_real_elf(symtab);
+  layout->script_options()->find_defsym_defs(this->defsym_defines_set_);
 
   for (this->current_ = this->plugins_.begin();
        this->current_ != this->plugins_.end();
@@ -966,6 +1001,7 @@ Pluginobj::get_symbol_resolution_info(Symbol_table* symtab,
       return version > 2 ? LDPS_NO_SYMS : LDPS_OK;
     }
 
+  Plugin_manager* plugins = parameters->options().plugins();
   for (int i = 0; i < nsyms; i++)
     {
       ld_plugin_symbol* isym = &syms[i];
@@ -974,9 +1010,16 @@ Pluginobj::get_symbol_resolution_info(Symbol_table* symtab,
         lsym = symtab->resolve_forwards(lsym);
       ld_plugin_symbol_resolution res = LDPR_UNKNOWN;
 
-      if (lsym->is_undefined())
-        // The symbol remains undefined.
-        res = LDPR_UNDEF;
+      if (plugins->is_defsym_def(lsym->name()))
+	{
+	  // The symbol is redefined via defsym.
+	  res = LDPR_PREEMPTED_REG;
+	}
+      else if (lsym->is_undefined())
+	{
+          // The symbol remains undefined.
+          res = LDPR_UNDEF;
+	}
       else if (isym->def == LDPK_UNDEF
                || isym->def == LDPK_WEAKUNDEF
                || isym->def == LDPK_COMMON)
@@ -1797,6 +1840,25 @@ get_input_section_size(const struct ld_plugin_section section,
   return LDPS_OK;
 }
 
+static enum ld_plugin_status
+get_wrap_symbols(uint64_t *count, const char ***wrap_symbols)
+{
+  gold_assert(parameters->options().has_plugins());
+  *count = parameters->options().wrap_size();
+
+  if (*count == 0)
+    return LDPS_OK;
+
+  *wrap_symbols = new const char *[*count];
+  int i = 0;
+  for (options::String_set::const_iterator
+       it = parameters->options().wrap_begin();
+       it != parameters->options().wrap_end(); ++it, ++i) {
+    (*wrap_symbols)[i] = it->c_str();
+  }
+  return LDPS_OK;
+}
+
 
 // Specify the ordering of sections in the final layout. The sections are
 // specified as (handle,shndx) pairs in the two arrays in the order in
@@ -1902,6 +1964,16 @@ unique_segment_for_sections(const char* segment_name,
       layout->insert_section_segment_map(secn_id, s);
     }
 
+  return LDPS_OK;
+}
+
+// Register a new_input handler.
+
+static enum ld_plugin_status
+register_new_input(ld_plugin_new_input_handler handler)
+{
+  gold_assert(parameters->options().has_plugins());
+  parameters->options().plugins()->set_new_input_handler(handler);
   return LDPS_OK;
 }
 

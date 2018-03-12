@@ -1,4 +1,4 @@
-@c Copyright (C) 1991-2017 Free Software Foundation, Inc.
+@c Copyright (C) 1991-2018 Free Software Foundation, Inc.
 @c This is part of the GAS manual.
 @c For copying conditions, see the file as.texinfo.
 @c man end
@@ -74,7 +74,8 @@ usage and use x86-64 as target platform).
 @item -n
 By default, x86 GAS replaces multiple nop instructions used for
 alignment within code sections with multi-byte nop instructions such
-as leal 0(%esi,1),%esi.  This switch disables the optimization.
+as leal 0(%esi,1),%esi.  This switch disables the optimization if a single
+byte nop (0x90) is explicitly specified as the fill byte for alignment.
 
 @cindex @samp{--divide} option, i386
 @item --divide
@@ -228,6 +229,8 @@ accept various extension mnemonics.  For example,
 @code{clflush},
 @code{mwaitx},
 @code{clzero},
+@code{wbnoinvd},
+@code{pconfig},
 @code{lwp},
 @code{fma4},
 @code{xop},
@@ -408,6 +411,28 @@ with 01, 10 and 11 RC bits, respectively.
 This option specifies that the assembler should accept only AMD64 or
 Intel64 ISA in 64-bit mode.  The default is to accept both.
 
+@cindex @samp{-O0} option, i386
+@cindex @samp{-O0} option, x86-64
+@cindex @samp{-O} option, i386
+@cindex @samp{-O} option, x86-64
+@cindex @samp{-O1} option, i386
+@cindex @samp{-O1} option, x86-64
+@cindex @samp{-O2} option, i386
+@cindex @samp{-O2} option, x86-64
+@cindex @samp{-Os} option, i386
+@cindex @samp{-Os} option, x86-64
+@item -O0 | -O | -O1 | -O2 | -Os
+Optimize instruction encoding with smaller instruction size.  @samp{-O}
+and @samp{-O1} encode 64-bit register load instructions with 64-bit
+immediate as 32-bit register load instructions with 31-bit or 32-bits
+immediates and encode 64-bit register clearing instructions with 32-bit
+register clearing instructions.  @samp{-O2} includes @samp{-O1}
+optimization plus encodes 256-bit and 512-bit vector register clearing
+instructions with 128-bit vector register clearing instructions.
+@samp{-Os} includes @samp{-O2} optimization plus encodes 16-bit, 32-bit
+and 64-bit register tests with immediate as 8-bit register test with
+immediate.  @samp{-O0} turns off this optimization.
+
 @end table
 @c man end
 
@@ -430,8 +455,17 @@ specifies the desired alignment of the symbol in the bss section.
 
 This directive is only available for COFF based x86 targets.
 
+@cindex @code{largecomm} directive, ELF
+@item .largecomm @var{symbol} , @var{length}[, @var{alignment}]
+This directive behaves in the same way as the @code{comm} directive
+except that the data is placed into the @var{.lbss} section instead of
+the @var{.bss} section @ref{Comm}.
+
+The directive is intended to be used for data which requires a large
+amount of space, and it is only available for ELF based x86_64
+targets.
+
 @c FIXME: Document other x86 specific directives ?  Eg: .code16gcc,
-@c .largecomm
 
 @end table
 
@@ -630,6 +664,14 @@ Different encoding options can be specified via pseudo prefixes:
 
 @item
 @samp{@{evex@}} --  encode with EVEX prefix.
+
+@item
+@samp{@{rex@}} -- prefer REX prefix for integer and legacy vector
+instructions (x86-64 only).  Note that this differs from the @samp{rex}
+prefix which generates REX prefix unconditionally.
+
+@item
+@samp{@{nooptimize@}} -- disable instruction size optimization.
 @end itemize
 
 @cindex conversion instructions, i386
@@ -1229,12 +1271,13 @@ supported on the CPU specified.  The choices for @var{cpu_type} are:
 @item @samp{.avx512vbmi} @tab @samp{.avx512_4fmaps} @tab @samp{.avx512_4vnniw}
 @item @samp{.avx512_vpopcntdq} @tab @samp{.avx512_vbmi2} @tab @samp{.avx512_vnni}
 @item @samp{.avx512_bitalg}
-@item @samp{.clwb} @tab @samp{.rdpid} @tab @samp{.ptwrite} @tab @item @samp{.cet}
+@item @samp{.clwb} @tab @samp{.rdpid} @tab @samp{.ptwrite} @tab @item @samp{.ibt}
+@item @samp{.wbnoinvd} @tab @samp{.pconfig}
+@item @samp{.shstk} @tab @samp{.gfni} @tab @samp{.vaes} @tab @samp{.vpclmulqdq}
 @item @samp{.3dnow} @tab @samp{.3dnowa} @tab @samp{.sse4a} @tab @samp{.sse5}
 @item @samp{.syscall} @tab @samp{.rdtscp} @tab @samp{.svme} @tab @samp{.abm}
 @item @samp{.lwp} @tab @samp{.fma4} @tab @samp{.xop} @tab @samp{.cx16}
-@item @samp{.padlock} @tab @samp{.clzero} @tab @samp{.mwaitx} @tab @samp{.gfni}
-@item @samp{.vaes} @tab @samp{.vpclmulqdq}
+@item @samp{.padlock} @tab @samp{.clzero} @tab @samp{.mwaitx}
 @end multitable
 
 Apart from the warning, there are only two other effects on

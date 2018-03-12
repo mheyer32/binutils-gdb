@@ -1,6 +1,6 @@
 /* Native-dependent code for GNU/Linux AArch64.
 
-   Copyright (C) 2011-2017 Free Software Foundation, Inc.
+   Copyright (C) 2011-2018 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of GDB.
@@ -501,7 +501,7 @@ aarch64_linux_read_description (struct target_ops *ops)
   if (ret == 0)
     return tdesc_arm_with_neon;
   else
-    return tdesc_aarch64;
+    return aarch64_read_description ();
 }
 
 /* Convert a native/host siginfo object, into/from the siginfo in the

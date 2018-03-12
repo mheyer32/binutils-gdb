@@ -1,6 +1,6 @@
 /* Frame unwinder for ia64 frames using the libunwind library.
 
-   Copyright (C) 2003-2017 Free Software Foundation, Inc.
+   Copyright (C) 2003-2018 Free Software Foundation, Inc.
 
    Written by Jeff Johnston, contributed by Red Hat Inc.
 
@@ -452,7 +452,7 @@ libunwind_sigtramp_frame_sniffer (const struct frame_unwind *self,
    are usually located at BOF, this is not always true and only the libunwind
    info can decipher where they actually are.  */
 int
-libunwind_get_reg_special (struct gdbarch *gdbarch, struct regcache *regcache,
+libunwind_get_reg_special (struct gdbarch *gdbarch, readable_regcache *regcache,
 			   int regnum, void *buf)
 {
   unw_cursor_t cursor;

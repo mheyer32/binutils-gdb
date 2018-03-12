@@ -1,6 +1,6 @@
 /* gdb commands implemented in Python
 
-   Copyright (C) 2008-2017 Free Software Foundation, Inc.
+   Copyright (C) 2008-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -110,9 +110,8 @@ cmdpy_destroyer (struct cmd_list_element *self, void *context)
 
 static void
 cmdpy_function (struct cmd_list_element *command,
-		char *args_entry, int from_tty)
+		const char *args, int from_tty)
 {
-  const char *args = args_entry;
   cmdpy_object *obj = (cmdpy_object *) get_cmd_context (command);
 
   gdbpy_enter enter_py (get_current_arch (), current_language);

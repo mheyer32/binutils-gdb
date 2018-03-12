@@ -1,6 +1,6 @@
 # Test linking directly to S-records.
 # By Ian Lance Taylor, Cygnus Support.
-#   Copyright (C) 1999-2017 Free Software Foundation, Inc.
+#   Copyright (C) 1999-2018 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -280,6 +280,12 @@ proc run_srec_test { test objs } {
     # MSP430 targets always relax.
     if [istarget msp430*-*-*] {
 	setup_xfail "msp430*-*-*"
+    }
+
+    # The RISC-V target does not correctly process
+    # relocs when output format is not ELF.
+    if [istarget riscv*-*-*] {
+	setup_xfail "riscv*-*-*"
     }
 
     # SH64 targets cannot convert format in the linker 

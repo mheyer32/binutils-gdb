@@ -5815,6 +5815,7 @@ fi
 
 
 if $development; then
+  srv_selftest_objs="common/selftest.o"
 
 $as_echo "#define GDB_SELF_TEST 1" >>confdefs.h
 
@@ -5857,7 +5858,7 @@ ac_config_commands="$ac_config_commands depdir"
 
 
 # Create sub-directories for objects and dependencies.
-CONFIG_SRC_SUBDIR="arch"
+CONFIG_SRC_SUBDIR="arch common"
 
 
 ac_config_commands="$ac_config_commands gdbdepdir"
@@ -6177,7 +6178,7 @@ $as_echo "$as_me: running $SHELL $ac_sub_configure $ac_sub_configure_args --cach
   cd "$ac_popdir"
 
 
-for ac_header in sgtty.h termio.h termios.h sys/reg.h string.h 		 proc_service.h sys/procfs.h linux/elf.h 		 fcntl.h signal.h sys/file.h 		 sys/ioctl.h netinet/in.h sys/socket.h netdb.h 		 netinet/tcp.h arpa/inet.h
+for ac_header in termios.h sys/reg.h string.h 		 proc_service.h sys/procfs.h linux/elf.h 		 fcntl.h signal.h sys/file.h 		 sys/ioctl.h netinet/in.h sys/socket.h netdb.h 		 netinet/tcp.h arpa/inet.h
 do :
   as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
 ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
@@ -6769,7 +6770,7 @@ $as_echo "#define HAVE_LANGINFO_CODESET 1" >>confdefs.h
   fi
 
 
-  for ac_header in linux/perf_event.h locale.h memory.h signal.h 		   sys/resource.h sys/socket.h sys/syscall.h 		   sys/un.h sys/wait.h 		   thread_db.h wait.h 		   termios.h termio.h sgtty.h
+  for ac_header in linux/perf_event.h locale.h memory.h signal.h 		   sys/resource.h sys/socket.h 		   sys/un.h sys/wait.h 		   thread_db.h wait.h 		   termios.h
 do :
   as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
 ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
@@ -7524,7 +7525,8 @@ fi
 # See if <sys/user.h> supports the %fs_base and %gs_bas amd64 segment registers.
 # Older amd64 Linux's don't have the fs_base and gs_base members of
 # `struct user_regs_struct'.
-ac_fn_c_check_member "$LINENO" "struct user_regs_struct" "fs_base" "ac_cv_member_struct_user_regs_struct_fs_base" "#include <sys/user.h>
+ac_fn_c_check_member "$LINENO" "struct user_regs_struct" "fs_base" "ac_cv_member_struct_user_regs_struct_fs_base" "#include <sys/types.h>
+#include <sys/user.h>
 "
 if test "x$ac_cv_member_struct_user_regs_struct_fs_base" = x""yes; then :
 
@@ -7534,7 +7536,8 @@ _ACEOF
 
 
 fi
-ac_fn_c_check_member "$LINENO" "struct user_regs_struct" "gs_base" "ac_cv_member_struct_user_regs_struct_gs_base" "#include <sys/user.h>
+ac_fn_c_check_member "$LINENO" "struct user_regs_struct" "gs_base" "ac_cv_member_struct_user_regs_struct_gs_base" "#include <sys/types.h>
+#include <sys/user.h>
 "
 if test "x$ac_cv_member_struct_user_regs_struct_gs_base" = x""yes; then :
 
@@ -8287,7 +8290,7 @@ $as_echo "#define USE_XML 1" >>confdefs.h
   done
 fi
 
-GDBSERVER_DEPFILES="$srv_regobj $srv_tgtobj $srv_hostio_err_objs $srv_thread_depfiles $srv_host_obs"
+GDBSERVER_DEPFILES="$srv_regobj $srv_tgtobj $srv_hostio_err_objs $srv_thread_depfiles $srv_host_obs $srv_selftest_objs"
 GDBSERVER_LIBS="$srv_libs"
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether the target supports __sync_*_compare_and_swap" >&5

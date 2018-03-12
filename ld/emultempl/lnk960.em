@@ -2,7 +2,7 @@
 # It does some substitutions.
 fragment <<EOF
 /* intel coff loader emulation specific stuff
-   Copyright (C) 1991-2017 Free Software Foundation, Inc.
+   Copyright (C) 1991-2018 Free Software Foundation, Inc.
    Written by Steve Chamberlain steve@cygnus.com
 
    This file is part of the GNU Binutils.
@@ -90,7 +90,7 @@ lnk960_before_parse (void)
     {
       name = getenv("G960BASE");
       if (name == (char *) NULL)
-	einfo (_("%P%F I960BASE and G960BASE not set\n"));
+	einfo (_("%F%P: I960BASE and G960BASE not set\n"));
     }
 
   ldfile_add_library_path (concat (name, "/lib", (const char *) NULL), FALSE);
@@ -141,7 +141,7 @@ symbol_at_beginning_of (const char *secname, const char *name)
 
   h = bfd_link_hash_lookup (link_info.hash, name, TRUE, TRUE, TRUE);
   if (h == NULL)
-    einfo (_("%P%F: bfd_link_hash_lookup failed: %E\n"));
+    einfo (_("%F%P: bfd_link_hash_lookup failed: %E\n"));
 
   if (h->type == bfd_link_hash_new
       || h->type == bfd_link_hash_undefined)
@@ -170,7 +170,7 @@ symbol_at_end_of (const char *secname, const char *name)
 
   h = bfd_link_hash_lookup (link_info.hash, name, TRUE, TRUE, TRUE);
   if (h == NULL)
-    einfo (_("%P%F: bfd_link_hash_lookup failed: %E\n"));
+    einfo (_("%F%P: bfd_link_hash_lookup failed: %E\n"));
 
   if (h->type == bfd_link_hash_new
       || h->type == bfd_link_hash_undefined)

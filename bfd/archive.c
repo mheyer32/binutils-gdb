@@ -1,5 +1,5 @@
 /* BFD back-end for archive files (libraries).
-   Copyright (C) 1990-2017 Free Software Foundation, Inc.
+   Copyright (C) 1990-2018 Free Software Foundation, Inc.
    Written by Cygnus Support.  Mostly Gumby Henkel-Wallace's fault.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -754,6 +754,13 @@ _bfd_generic_get_elt_at_index (bfd *abfd, symindex sym_index)
   return _bfd_get_elt_at_filepos (abfd, entry->file_offset);
 }
 
+bfd *
+_bfd_noarchive_get_elt_at_index (bfd *abfd,
+				 symindex sym_index ATTRIBUTE_UNUSED)
+{
+  return (bfd *) _bfd_ptr_bfd_null_error (abfd);
+}
+
 /*
 FUNCTION
 	bfd_openr_next_archived_file
@@ -764,10 +771,11 @@ SYNOPSIS
 DESCRIPTION
 	Provided a BFD, @var{archive}, containing an archive and NULL, open
 	an input BFD on the first contained element and returns that.
-	Subsequent calls should pass
-	the archive and the previous return value to return a created
-	BFD to the next contained element. NULL is returned when there
-	are no more.
+	Subsequent calls should pass the archive and the previous return
+	value to return a created BFD to the next contained element.  NULL
+	is returned when there are no more.
+	Note - if you want to process the bfd returned by this call be
+	sure to call bfd_check_format() on it first.
 */
 
 bfd *
@@ -813,6 +821,13 @@ bfd_generic_openr_next_archived_file (bfd *archive, bfd *last_file)
     }
 
   return _bfd_get_elt_at_filepos (archive, filestart);
+}
+
+bfd *
+_bfd_noarchive_openr_next_archived_file (bfd *archive,
+					 bfd *last_file ATTRIBUTE_UNUSED)
+{
+  return (bfd *) _bfd_ptr_bfd_null_error (archive);
 }
 
 const bfd_target *
@@ -1437,16 +1452,16 @@ normalize (bfd *abfd ATTRIBUTE_UNUSED, const char *file)
 
      Relative path  Reference path  Result
      -------------  --------------  ------
-     bar.o          lib.a           bar.o
-     foo/bar.o      lib.a           foo/bar.o
-     bar.o          foo/lib.a       ../bar.o
-     foo/bar.o      baz/lib.a       ../foo/bar.o
-     bar.o          ../lib.a        <parent of current dir>/bar.o
-   ; ../bar.o       ../lib.a        bar.o
-   ; ../bar.o       lib.a           ../bar.o
-     foo/bar.o      ../lib.a        <parent of current dir>/foo/bar.o
-     bar.o          ../../lib.a     <grandparent>/<parent>/bar.o
-     bar.o          foo/baz/lib.a   ../../bar.o
+     bar.o	    lib.a	    bar.o
+     foo/bar.o	    lib.a	    foo/bar.o
+     bar.o	    foo/lib.a	    ../bar.o
+     foo/bar.o	    baz/lib.a	    ../foo/bar.o
+     bar.o	    ../lib.a	    <parent of current dir>/bar.o
+   ; ../bar.o	    ../lib.a	    bar.o
+   ; ../bar.o	    lib.a	    ../bar.o
+     foo/bar.o	    ../lib.a	    <parent of current dir>/foo/bar.o
+     bar.o	    ../../lib.a	    <grandparent>/<parent>/bar.o
+     bar.o	    foo/baz/lib.a   ../../bar.o
 
    Note - the semicolons above are there to prevent the BFD chew
    utility from interpreting those lines as prototypes to put into
@@ -1583,6 +1598,15 @@ _bfd_archive_coff_construct_extended_name_table (bfd *abfd,
 {
   *name = "//";
   return _bfd_construct_extended_name_table (abfd, TRUE, tabloc, tablen);
+}
+
+bfd_boolean
+_bfd_noarchive_construct_extended_name_table (bfd *abfd ATTRIBUTE_UNUSED,
+					      char **tabloc ATTRIBUTE_UNUSED,
+					      bfd_size_type *len ATTRIBUTE_UNUSED,
+					      const char **name ATTRIBUTE_UNUSED)
+{
+  return TRUE;
 }
 
 /* Follows archive_head and produces an extended name table if
@@ -1883,6 +1907,12 @@ _bfd_bsd44_write_ar_hdr (bfd *archive, bfd *abfd)
     }
   return TRUE;
 }
+
+bfd_boolean
+_bfd_noarchive_write_ar_hdr (bfd *archive, bfd *abfd ATTRIBUTE_UNUSED)
+{
+  return _bfd_bool_bfd_false_error (archive);
+}
 
 /* A couple of functions for creating ar_hdrs.  */
 
@@ -2018,7 +2048,7 @@ bfd_generic_stat_arch_elt (bfd *abfd, struct stat *buf)
     return -1;
 #define foo(arelt, stelt, size)				\
   buf->stelt = strtol (hdr->arelt, &aloser, size);	\
-  if (aloser == hdr->arelt)	      			\
+  if (aloser == hdr->arelt)				\
     return -1;
 
   /* Some platforms support special notations for large IDs.  */
@@ -2152,6 +2182,13 @@ bfd_gnu_truncate_arname (bfd *abfd, const char *pathname, char *arhdr)
 
   if (length < 16)
     (hdr->ar_name)[length] = ar_padchar (abfd);
+}
+
+void
+_bfd_noarchive_truncate_arname (bfd *abfd ATTRIBUTE_UNUSED,
+				const char *pathname ATTRIBUTE_UNUSED,
+				char *arhdr ATTRIBUTE_UNUSED)
+{
 }
 
 /* The BFD is open for write and has its format set to bfd_archive.  */
@@ -2301,7 +2338,7 @@ _bfd_write_archive_contents (bfd *arch)
 	  if (bfd_update_armap_timestamp (arch))
 	    break;
 	  _bfd_error_handler
-	    (_("Warning: writing archive was slow: rewriting timestamp\n"));
+	    (_("warning: writing archive was slow: rewriting timestamp"));
 	}
       while (++tries < 6);
     }
@@ -2417,7 +2454,7 @@ _bfd_compute_and_write_armap (bfd *arch, unsigned int elength)
 				     + (syms[src_count]->name[2] == '_'),
 				     "__gnu_lto_slim") == 0)
 			_bfd_error_handler
-			  (_("%B: plugin needed to handle lto object"),
+			  (_("%pB: plugin needed to handle lto object"),
 			   current);
 		      namelen = strlen (syms[src_count]->name);
 		      amt = sizeof (char *);
@@ -2830,6 +2867,17 @@ _bfd_coff_write_armap (bfd *arch,
 	return FALSE;
     }
 
+  return TRUE;
+}
+
+bfd_boolean
+_bfd_noarchive_write_armap
+    (bfd *arch ATTRIBUTE_UNUSED,
+     unsigned int elength ATTRIBUTE_UNUSED,
+     struct orl *map ATTRIBUTE_UNUSED,
+     unsigned int orl_count ATTRIBUTE_UNUSED,
+     int stridx ATTRIBUTE_UNUSED)
+{
   return TRUE;
 }
 

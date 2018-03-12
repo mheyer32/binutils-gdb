@@ -1,5 +1,5 @@
 /* as.c - GAS main program.
-   Copyright (C) 1987-2017 Free Software Foundation, Inc.
+   Copyright (C) 1987-2018 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -31,6 +31,10 @@
 
 #define COMMON
 
+/* Disable code to set FAKE_LABEL_NAME in obj-multi.h, to avoid circular
+   reference.  */
+#define INITIALIZING_EMULS
+
 #include "as.h"
 #include "subsegs.h"
 #include "output-file.h"
@@ -39,6 +43,7 @@
 #include "dwarf2dbg.h"
 #include "dw2gencfi.h"
 #include "bfdver.h"
+#include "write.h"
 
 #ifdef HAVE_ITBL_CPU
 #include "itbl-ops.h"
@@ -209,10 +214,10 @@ common_emul_init (void)
   if (this_emulation->fake_label_name == 0)
     {
       if (this_emulation->leading_underscore)
-	this_emulation->fake_label_name = "L0\001";
+	this_emulation->fake_label_name = FAKE_LABEL_NAME;
       else
 	/* What other parameters should we test?  */
-	this_emulation->fake_label_name = ".L0\001";
+	this_emulation->fake_label_name = "." FAKE_LABEL_NAME;
     }
 }
 #endif
@@ -661,7 +666,7 @@ parse_args (int * pargc, char *** pargv)
 	case OPTION_VERSION:
 	  /* This output is intended to follow the GNU standards document.  */
 	  printf (_("GNU assembler %s\n"), BFD_VERSION_STRING);
-	  printf (_("Copyright (C) 2017 Free Software Foundation, Inc.\n"));
+	  printf (_("Copyright (C) 2018 Free Software Foundation, Inc.\n"));
 	  printf (_("\
 This program is free software; you may redistribute it under the terms of\n\
 the GNU General Public License version 3 or later.\n\
@@ -1349,15 +1354,10 @@ main (int argc, char ** argv)
       n_warns = had_warnings ();
       n_errs = had_errors ();
 
-      if (n_warns == 1)
-	sprintf (warn_msg, _("%d warning"), n_warns);
-      else
-	sprintf (warn_msg, _("%d warnings"), n_warns);
-      if (n_errs == 1)
-	sprintf (err_msg, _("%d error"), n_errs);
-      else
-	sprintf (err_msg, _("%d errors"), n_errs);
-
+      sprintf (warn_msg,
+	       ngettext ("%d warning", "%d warnings", n_warns), n_warns);
+      sprintf (err_msg,
+	       ngettext ("%d error", "%d errors", n_errs), n_errs);
       if (flag_fatal_warnings && n_warns != 0)
 	{
 	  if (n_errs == 0)

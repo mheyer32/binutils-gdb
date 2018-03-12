@@ -1,6 +1,6 @@
 /* Generic serial interface functions.
 
-   Copyright (C) 1992-2017 Free Software Foundation, Inc.
+   Copyright (C) 1992-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -547,14 +547,6 @@ ser_base_copy_tty_state (struct serial *scb, serial_ttystate ttystate)
 
 int
 ser_base_set_tty_state (struct serial *scb, serial_ttystate ttystate)
-{
-  return 0;
-}
-
-int
-ser_base_noflush_set_tty_state (struct serial *scb,
-				serial_ttystate new_ttystate,
-				serial_ttystate old_ttystate)
 {
   return 0;
 }

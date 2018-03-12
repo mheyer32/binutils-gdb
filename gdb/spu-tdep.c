@@ -1,5 +1,5 @@
 /* SPU target-dependent code for GDB, the GNU debugger.
-   Copyright (C) 2006-2017 Free Software Foundation, Inc.
+   Copyright (C) 2006-2018 Free Software Foundation, Inc.
 
    Contributed by Ulrich Weigand <uweigand@de.ibm.com>.
    Based on a port by Sid Manning <sid@us.ibm.com>.
@@ -182,7 +182,7 @@ spu_register_type (struct gdbarch *gdbarch, int reg_nr)
 /* Pseudo registers for preferred slots - stack pointer.  */
 
 static enum register_status
-spu_pseudo_register_read_spu (struct regcache *regcache, const char *regname,
+spu_pseudo_register_read_spu (readable_regcache *regcache, const char *regname,
 			      gdb_byte *buf)
 {
   struct gdbarch *gdbarch = regcache->arch ();
@@ -193,7 +193,7 @@ spu_pseudo_register_read_spu (struct regcache *regcache, const char *regname,
   ULONGEST id;
   ULONGEST ul;
 
-  status = regcache_raw_read_unsigned (regcache, SPU_ID_REGNUM, &id);
+  status = regcache->raw_read (SPU_ID_REGNUM, &id);
   if (status != REG_VALID)
     return status;
   xsnprintf (annex, sizeof annex, "%d/%s", (int) id, regname);
@@ -207,7 +207,7 @@ spu_pseudo_register_read_spu (struct regcache *regcache, const char *regname,
 }
 
 static enum register_status
-spu_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
+spu_pseudo_register_read (struct gdbarch *gdbarch, readable_regcache *regcache,
                           int regnum, gdb_byte *buf)
 {
   gdb_byte reg[16];
@@ -218,14 +218,14 @@ spu_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
   switch (regnum)
     {
     case SPU_SP_REGNUM:
-      status = regcache_raw_read (regcache, SPU_RAW_SP_REGNUM, reg);
+      status = regcache->raw_read (SPU_RAW_SP_REGNUM, reg);
       if (status != REG_VALID)
 	return status;
       memcpy (buf, reg, 4);
       return status;
 
     case SPU_FPSCR_REGNUM:
-      status = regcache_raw_read_unsigned (regcache, SPU_ID_REGNUM, &id);
+      status = regcache->raw_read (SPU_ID_REGNUM, &id);
       if (status != REG_VALID)
 	return status;
       xsnprintf (annex, sizeof annex, "%d/fpcr", (int) id);
@@ -1176,11 +1176,12 @@ spu_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
 }
 
 static CORE_ADDR
-spu_read_pc (struct regcache *regcache)
+spu_read_pc (readable_regcache *regcache)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (regcache->arch ());
   ULONGEST pc;
-  regcache_cooked_read_unsigned (regcache, SPU_PC_REGNUM, &pc);
+
+  regcache->cooked_read (SPU_PC_REGNUM, &pc);
   /* Mask off interrupt enable bit.  */
   return SPUADDR (tdep->id, pc & -4);
 }
@@ -1202,7 +1203,7 @@ spu_write_pc (struct regcache *regcache, CORE_ADDR pc)
 struct spu2ppu_cache
 {
   struct frame_id frame_id;
-  struct regcache *regcache;
+  readonly_detached_regcache *regcache;
 };
 
 static struct gdbarch *
@@ -1229,7 +1230,7 @@ spu2ppu_prev_register (struct frame_info *this_frame,
   gdb_byte *buf;
 
   buf = (gdb_byte *) alloca (register_size (gdbarch, regnum));
-  regcache_cooked_read (cache->regcache, regnum, buf);
+  cache->regcache->cooked_read (regnum, buf);
   return frame_unwind_got_bytes (this_frame, regnum, buf);
 }
 
@@ -1274,7 +1275,7 @@ spu2ppu_sniffer (const struct frame_unwind *self,
 	{
 	  struct regcache *regcache;
 	  regcache = get_thread_arch_regcache (inferior_ptid, target_gdbarch ());
-	  cache->regcache = regcache_dup (regcache);
+	  cache->regcache = new readonly_detached_regcache (*regcache);
 	  *this_prologue_cache = cache;
 	  return 1;
 	}
@@ -1632,8 +1633,8 @@ spu_software_single_step (struct regcache *regcache)
   insn = extract_unsigned_integer (buf, 4, byte_order);
 
   /* Get local store limit.  */
-  lslr = regcache_raw_get_unsigned (regcache, SPU_LSLR_REGNUM);
-  if (!lslr)
+  if ((regcache_cooked_read_unsigned (regcache, SPU_LSLR_REGNUM, &lslr)
+       != REG_VALID) || !lslr)
     lslr = (ULONGEST) -1;
 
   /* Next sequential instruction is at PC + 4, except if the current
@@ -1653,7 +1654,10 @@ spu_software_single_step (struct regcache *regcache)
       if (reg == SPU_PC_REGNUM)
 	target += SPUADDR_ADDR (pc);
       else if (reg != -1)
-	target += regcache_raw_get_unsigned (regcache, reg) & -4;
+      {
+	regcache_raw_read_part (regcache, reg, 0, 4, buf);
+	target += extract_unsigned_integer (buf, 4, byte_order) & -4;
+      }
 
       target = target & lslr;
       if (target != next_pc)
@@ -1912,7 +1916,6 @@ spu_overlay_new_objfile (struct objfile *objfile)
   /* Now go and fiddle with all the LMAs.  */
   ALL_OBJFILE_OSECTIONS (objfile, osect)
     {
-      bfd *obfd = objfile->obfd;
       asection *bsect = osect->the_bfd_section;
       int ndx = osect - objfile->sections;
 
@@ -1964,7 +1967,9 @@ spu_catch_start (struct objfile *objfile)
       struct symbol *sym;
       struct symtab_and_line sal;
 
-      sym = block_lookup_symbol (block, "main", VAR_DOMAIN);
+      sym = block_lookup_symbol (block, "main",
+				 symbol_name_match_type::SEARCH_NAME,
+				 VAR_DOMAIN);
       if (sym)
 	{
 	  fixup_symbol_section (sym, objfile);
@@ -2718,6 +2723,9 @@ spu_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_address_class_name_to_type_flags
     (gdbarch, spu_address_class_name_to_type_flags);
 
+  /* We need to support more than "addr_bit" significant address bits
+     in order to support SPUADDR_ADDR encoded values.  */
+  set_gdbarch_significant_addr_bit (gdbarch, 64);
 
   /* Inferior function calls.  */
   set_gdbarch_call_dummy_location (gdbarch, ON_STACK);

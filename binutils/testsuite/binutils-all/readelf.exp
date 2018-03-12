@@ -1,4 +1,4 @@
-#   Copyright (C) 1999-2017 Free Software Foundation, Inc.
+#   Copyright (C) 1999-2018 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -324,6 +324,8 @@ if {![binutils_assemble $srcdir/$subdir/bintest.s tmpdir/bintest.o]} then {
     unresolved "readelf -S bintest (failed to assemble)"
     unresolved "readelf -s bintest (failed to assemble)"
     unresolved "readelf -r bintest (failed to assemble)"
+    global readelf_size
+    set readelf_size ""
 } else {
 
     if ![is_remote host] {
@@ -466,3 +468,41 @@ if {![binutils_assemble_flags $srcdir/$subdir/dwarf-attributes.S tmpdir/dwarf-at
     # Make sure that readelf can decode the contents.
     readelf_test -wi $tempfile dwarf-attributes.W {}
 }
+
+# Check that debug link sections can be dumped.
+if {![binutils_assemble $srcdir/$subdir/debuglink.s tmpdir/debuglink.o]} then {
+    unresolved "readelf --debug-dump=links (failed to assemble debuglink.s)"
+} else {
+    if ![is_remote host] {
+	set tempfile tmpdir/debuglink.o
+    } else {
+	set tempfile [remote_download host tmpdir/debuglink.o]
+    }
+
+    readelf_test {--debug-dump=links} $tempfile readelf.k  {}
+
+    # Check that debug link sections can be followed.
+    if {![binutils_assemble $srcdir/$subdir/linkdebug.s tmpdir/linkdebug.debug]} then {
+	unresolved "readelf --debug-dump=follow-links (failed to assemble linkdebug.s)"
+    } else {
+	if [is_remote host] {
+	    set tempfile2 [remote_download host tmpdir/linkdebug.debug]
+	}
+
+	readelf_test {-wKis} $tempfile objdump.WK2  {}
+    }
+}
+
+if {![binutils_assemble $srcdir/$subdir/dwo.s tmpdir/dwo.o]} then {
+    unresolved "readelf --debug-dump=links (failed to assemble dwo.s)"
+} else {
+    if ![is_remote host] {
+	set tempfile tmpdir/dwo.o
+    } else {
+	set tempfile [remote_download host tmpdir/dwo.o]
+    }
+
+    readelf_test {--debug-dump=links} $tempfile readelf.k2  {}
+}
+
+

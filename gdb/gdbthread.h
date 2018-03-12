@@ -1,5 +1,5 @@
 /* Multi-process/thread control defs for GDB, the GNU debugger.
-   Copyright (C) 1987-2017 Free Software Foundation, Inc.
+   Copyright (C) 1987-2018 Free Software Foundation, Inc.
    Contributed by Lynx Real-Time Systems, Inc.  Los Gatos, CA.
    
 
@@ -175,9 +175,11 @@ struct thread_suspend_state
   CORE_ADDR stop_pc;
 };
 
-typedef struct value *value_ptr;
-DEF_VEC_P (value_ptr);
-typedef VEC (value_ptr) value_vec;
+/* Base class for target-specific thread data.  */
+struct private_thread_info
+{
+  virtual ~private_thread_info () = 0;
+};
 
 /* Threads are intrusively refcounted objects.  Being the
    user-selected thread is normally considered an implicit strong
@@ -345,22 +347,18 @@ public:
   struct frame_id initiating_frame = null_frame_id;
 
   /* Private data used by the target vector implementation.  */
-  struct private_thread_info *priv = NULL;
-
-  /* Function that is called to free PRIVATE.  If this is NULL, then
-     xfree will be called on PRIVATE.  */
-  void (*private_dtor) (struct private_thread_info *) = NULL;
+  std::unique_ptr<private_thread_info> priv;
 
   /* Branch trace information for this thread.  */
   struct btrace_thread_info btrace {};
 
   /* Flag which indicates that the stack temporaries should be stored while
      evaluating expressions.  */
-  int stack_temporaries_enabled = 0;
+  bool stack_temporaries_enabled = false;
 
   /* Values that are stored as temporaries on stack while evaluating
      expressions.  */
-  value_vec *stack_temporaries = NULL;
+  std::vector<struct value *> stack_temporaries;
 
   /* Step-over chain.  A thread is in the step-over queue if these are
      non-NULL.  If only a single thread is in the chain, then these
@@ -604,7 +602,9 @@ public:
   DISABLE_COPY_AND_ASSIGN (scoped_restore_current_thread);
 
 private:
-  thread_info *m_thread;
+  /* Use the "class" keyword here, because of a clash with a "thread_info"
+     function in the Darwin API.  */
+  class thread_info *m_thread;
   inferior *m_inf;
   frame_id m_selected_frame_id;
   int m_selected_frame_level;
@@ -630,15 +630,48 @@ extern void delete_exited_threads (void);
 
 int pc_in_thread_step_range (CORE_ADDR pc, struct thread_info *thread);
 
-extern struct cleanup *enable_thread_stack_temporaries (ptid_t ptid);
+/* Enable storing stack temporaries for thread with id PTID and
+   disable and clear the stack temporaries on destruction.  */
 
-extern int thread_stack_temporaries_enabled_p (ptid_t ptid);
+class enable_thread_stack_temporaries
+{
+public:
+
+  explicit enable_thread_stack_temporaries (ptid_t ptid)
+    : m_ptid (ptid)
+  {
+    struct thread_info *tp = find_thread_ptid (ptid);
+
+    gdb_assert (tp != NULL);
+    tp->stack_temporaries_enabled = true;
+    tp->stack_temporaries.clear ();
+  }
+
+  ~enable_thread_stack_temporaries ()
+  {
+    struct thread_info *tp = find_thread_ptid (m_ptid);
+
+    if (tp != NULL)
+      {
+	tp->stack_temporaries_enabled = false;
+	tp->stack_temporaries.clear ();
+      }
+  }
+
+  DISABLE_COPY_AND_ASSIGN (enable_thread_stack_temporaries);
+
+private:
+
+  ptid_t m_ptid;
+};
+
+extern bool thread_stack_temporaries_enabled_p (ptid_t ptid);
 
 extern void push_thread_stack_temporary (ptid_t ptid, struct value *v);
 
 extern struct value *get_last_thread_stack_temporary (ptid_t);
 
-extern int value_in_thread_stack_temporaries (struct value *, ptid_t);
+extern bool value_in_thread_stack_temporaries (struct value *, ptid_t);
 
 /* Add TP to the end of its inferior's pending step-over chain.  */
 
@@ -683,7 +716,7 @@ extern void print_selected_thread_frame (struct ui_out *uiout,
    Selects thread THR.  TIDSTR is the original string the thread ID
    was parsed from.  This is used in the error message if THR is not
    alive anymore.  */
-extern void thread_select (const char *tidstr, thread_info *thr);
+extern void thread_select (const char *tidstr, class thread_info *thr);
 
 extern struct thread_info *thread_list;
 

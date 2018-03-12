@@ -1,6 +1,6 @@
 /* Gdb/Python header for private use by Python module.
 
-   Copyright (C) 2008-2017 Free Software Foundation, Inc.
+   Copyright (C) 2008-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -83,6 +83,12 @@
 /* A kludge to avoid redefinition of snprintf on Windows by pyerrors.h.  */
 #if defined(_WIN32) && defined(HAVE_DECL_SNPRINTF)
 #define HAVE_SNPRINTF 1
+#endif
+
+/* Another kludge to avoid compilation errors because MinGW defines
+   'hypot' to '_hypot', but the C++ headers says "using ::hypot".  */
+#ifdef __MINGW32__
+# define _hypot hypot
 #endif
 
 /* Request clean size types from Python.  */
@@ -453,7 +459,8 @@ extern enum ext_lang_rc gdbpy_apply_val_pretty_printer
    const struct language_defn *language);
 extern enum ext_lang_bt_status gdbpy_apply_frame_filter
   (const struct extension_language_defn *,
-   struct frame_info *frame, int flags, enum ext_lang_frame_args args_type,
+   struct frame_info *frame, frame_filter_flags flags,
+   enum ext_lang_frame_args args_type,
    struct ui_out *out, int frame_low, int frame_high);
 extern void gdbpy_preserve_values (const struct extension_language_defn *,
 				   struct objfile *objfile,
@@ -463,28 +470,11 @@ extern enum ext_lang_bp_stop gdbpy_breakpoint_cond_says_stop
 extern int gdbpy_breakpoint_has_cond (const struct extension_language_defn *,
 				      struct breakpoint *b);
 
-extern void *gdbpy_clone_xmethod_worker_data
-  (const struct extension_language_defn *extlang, void *data);
-extern void gdbpy_free_xmethod_worker_data
-  (const struct extension_language_defn *extlang, void *data);
 extern enum ext_lang_rc gdbpy_get_matching_xmethod_workers
   (const struct extension_language_defn *extlang,
    struct type *obj_type, const char *method_name,
-   xmethod_worker_vec **dm_vec);
-extern enum ext_lang_rc gdbpy_get_xmethod_arg_types
-  (const struct extension_language_defn *extlang,
-   struct xmethod_worker *worker,
-   int *nargs,
-   struct type ***arg_types);
-extern enum ext_lang_rc gdbpy_get_xmethod_result_type
-  (const struct extension_language_defn *extlang,
-   struct xmethod_worker *worker,
-   struct value *object, struct value **args, int nargs,
-   struct type **result_type);
-extern struct value *gdbpy_invoke_xmethod
-  (const struct extension_language_defn *extlang,
-   struct xmethod_worker *worker,
-   struct value *obj, struct value **args, int nargs);
+   std::vector<xmethod_worker_up> *dm_vec);
+
 
 PyObject *gdbpy_history (PyObject *self, PyObject *args);
 PyObject *gdbpy_breakpoints (PyObject *, PyObject *);

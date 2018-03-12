@@ -1,6 +1,6 @@
 /* Disassemble support for GDB.
 
-   Copyright (C) 2000-2017 Free Software Foundation, Inc.
+   Copyright (C) 2000-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -263,7 +263,6 @@ gdb_pretty_print_disassembler::pretty_print_insn (struct ui_out *uiout,
       {
 	CORE_ADDR end_pc;
 	bfd_byte data;
-	int err;
 	const char *spacer = "";
 
 	/* Build the opcodes using a temporary stream so we can
@@ -938,7 +937,7 @@ set_disassembler_options (char *prospective_options)
 }
 
 static void
-set_disassembler_options_sfunc (char *args, int from_tty,
+set_disassembler_options_sfunc (const char *args, int from_tty,
 				struct cmd_list_element *c)
 {
   set_disassembler_options (prospective_options);

@@ -1,6 +1,6 @@
 /* Common target dependent code for GDB on AArch64 systems.
 
-   Copyright (C) 2009-2017 Free Software Foundation, Inc.
+   Copyright (C) 2009-2018 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of GDB.
@@ -54,9 +54,6 @@
 
 #include "record.h"
 #include "record-full.h"
-
-#include "features/aarch64.c"
-
 #include "arch/aarch64-insn.h"
 
 #include "opcode/aarch64.h"
@@ -2228,7 +2225,7 @@ aarch64_pseudo_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 
 static struct value *
 aarch64_pseudo_read_value (struct gdbarch *gdbarch,
-			   struct regcache *regcache,
+			   readable_regcache *regcache,
 			   int regnum)
 {
   gdb_byte reg_buf[V_REGISTER_SIZE];
@@ -2248,7 +2245,7 @@ aarch64_pseudo_read_value (struct gdbarch *gdbarch,
       unsigned v_regnum;
 
       v_regnum = AARCH64_V0_REGNUM + regnum - AARCH64_Q0_REGNUM;
-      status = regcache_raw_read (regcache, v_regnum, reg_buf);
+      status = regcache->raw_read (v_regnum, reg_buf);
       if (status != REG_VALID)
 	mark_value_bytes_unavailable (result_value, 0,
 				      TYPE_LENGTH (value_type (result_value)));
@@ -2263,7 +2260,7 @@ aarch64_pseudo_read_value (struct gdbarch *gdbarch,
       unsigned v_regnum;
 
       v_regnum = AARCH64_V0_REGNUM + regnum - AARCH64_D0_REGNUM;
-      status = regcache_raw_read (regcache, v_regnum, reg_buf);
+      status = regcache->raw_read (v_regnum, reg_buf);
       if (status != REG_VALID)
 	mark_value_bytes_unavailable (result_value, 0,
 				      TYPE_LENGTH (value_type (result_value)));
@@ -2278,7 +2275,7 @@ aarch64_pseudo_read_value (struct gdbarch *gdbarch,
       unsigned v_regnum;
 
       v_regnum = AARCH64_V0_REGNUM + regnum - AARCH64_S0_REGNUM;
-      status = regcache_raw_read (regcache, v_regnum, reg_buf);
+      status = regcache->raw_read (v_regnum, reg_buf);
       if (status != REG_VALID)
 	mark_value_bytes_unavailable (result_value, 0,
 				      TYPE_LENGTH (value_type (result_value)));
@@ -2293,7 +2290,7 @@ aarch64_pseudo_read_value (struct gdbarch *gdbarch,
       unsigned v_regnum;
 
       v_regnum = AARCH64_V0_REGNUM + regnum - AARCH64_H0_REGNUM;
-      status = regcache_raw_read (regcache, v_regnum, reg_buf);
+      status = regcache->raw_read (v_regnum, reg_buf);
       if (status != REG_VALID)
 	mark_value_bytes_unavailable (result_value, 0,
 				      TYPE_LENGTH (value_type (result_value)));
@@ -2308,7 +2305,7 @@ aarch64_pseudo_read_value (struct gdbarch *gdbarch,
       unsigned v_regnum;
 
       v_regnum = AARCH64_V0_REGNUM + regnum - AARCH64_B0_REGNUM;
-      status = regcache_raw_read (regcache, v_regnum, reg_buf);
+      status = regcache->raw_read (v_regnum, reg_buf);
       if (status != REG_VALID)
 	mark_value_bytes_unavailable (result_value, 0,
 				      TYPE_LENGTH (value_type (result_value)));
@@ -2828,6 +2825,20 @@ aarch64_displaced_step_hw_singlestep (struct gdbarch *gdbarch,
   return 1;
 }
 
+/* Get the correct target description.  */
+
+const target_desc *
+aarch64_read_description ()
+{
+  static target_desc *aarch64_tdesc = NULL;
+  target_desc **tdesc = &aarch64_tdesc;
+
+  if (*tdesc == NULL)
+    *tdesc = aarch64_create_target_description ();
+
+  return *tdesc;
+}
+
 /* Initialize the current architecture based on INFO.  If possible,
    re-use an architecture from ARCHES, which is a list of
    architectures already created during this debugging session.
@@ -2851,7 +2862,7 @@ aarch64_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* Ensure we always have a target descriptor.  */
   if (!tdesc_has_registers (tdesc))
-    tdesc = tdesc_aarch64;
+    tdesc = aarch64_read_description ();
 
   gdb_assert (tdesc);
 
@@ -2959,6 +2970,11 @@ aarch64_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_tdesc_pseudo_register_reggroup_p (gdbarch,
 					aarch64_pseudo_register_reggroup_p);
 
+  /* The top byte of an address is known as the "tag" and is
+     ignored by the kernel, the hardware, etc. and can be regarded
+     as additional data associated with the address.  */
+  set_gdbarch_significant_addr_bit (gdbarch, 56);
+
   /* ABI */
   set_gdbarch_short_bit (gdbarch, 16);
   set_gdbarch_int_bit (gdbarch, 32);
@@ -3044,8 +3060,6 @@ _initialize_aarch64_tdep (void)
   gdbarch_register (bfd_arch_aarch64, aarch64_gdbarch_init,
 		    aarch64_dump_tdep);
 
-  initialize_tdesc_aarch64 ();
-
   /* Debug this file's internals.  */
   add_setshow_boolean_cmd ("aarch64", class_maintenance, &aarch64_debug, _("\
 Set AArch64 debugging."), _("\
@@ -3060,6 +3074,8 @@ When on, AArch64 specific debugging is enabled."),
 			    selftests::aarch64_analyze_prologue_test);
   selftests::register_test ("aarch64-process-record",
 			    selftests::aarch64_process_record_test);
+  selftests::record_xml_tdesc ("aarch64.xml",
+			       aarch64_create_target_description ());
 #endif
 }
 

@@ -1,5 +1,5 @@
 /* X86-64 specific support for ELF
-   Copyright (C) 2000-2017 Free Software Foundation, Inc.
+   Copyright (C) 2000-2018 Free Software Foundation, Inc.
    Contributed by Jan Hubicka <jh@suse.cz>.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -282,9 +282,10 @@ elf_x86_64_rtype_to_howto (bfd *abfd, unsigned r_type)
       if (r_type >= (unsigned int) R_X86_64_standard)
 	{
 	  /* xgettext:c-format */
-	  _bfd_error_handler (_("%B: invalid relocation type %d"),
-			      abfd, (int) r_type);
-	  r_type = R_X86_64_NONE;
+	  _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
+			      abfd, r_type);
+	  bfd_set_error (bfd_error_bad_value);
+	  return NULL;
 	}
       i = r_type;
     }
@@ -336,8 +337,8 @@ elf_x86_64_reloc_name_lookup (bfd *abfd,
 
 /* Given an x86_64 ELF reloc type, fill in an arelent structure.  */
 
-static void
-elf_x86_64_info_to_howto (bfd *abfd ATTRIBUTE_UNUSED, arelent *cache_ptr,
+static bfd_boolean
+elf_x86_64_info_to_howto (bfd *abfd, arelent *cache_ptr,
 			  Elf_Internal_Rela *dst)
 {
   unsigned r_type;
@@ -347,8 +348,10 @@ elf_x86_64_info_to_howto (bfd *abfd ATTRIBUTE_UNUSED, arelent *cache_ptr,
       && r_type != (unsigned int) R_X86_64_GNU_VTENTRY)
     r_type &= ~R_X86_64_converted_reloc_bit;
   cache_ptr->howto = elf_x86_64_rtype_to_howto (abfd, r_type);
-
+  if (cache_ptr->howto == NULL)
+    return FALSE;
   BFD_ASSERT (r_type == cache_ptr->howto->type || cache_ptr->howto->type == R_X86_64_NONE);
+  return TRUE;
 }
 
 /* Support for core dump NOTE sections.  */
@@ -569,9 +572,9 @@ static const bfd_byte elf_x86_64_lazy_plt_entry[LAZY_PLT_ENTRY_SIZE] =
 
 static const bfd_byte elf_x86_64_lazy_bnd_plt0_entry[LAZY_PLT_ENTRY_SIZE] =
 {
-  0xff, 0x35, 8, 0, 0, 0,         /* pushq GOT+8(%rip)        */
+  0xff, 0x35, 8, 0, 0, 0,	  /* pushq GOT+8(%rip)	      */
   0xf2, 0xff, 0x25, 16, 0, 0, 0,  /* bnd jmpq *GOT+16(%rip)   */
-  0x0f, 0x1f, 0                   /* nopl (%rax)              */
+  0x0f, 0x1f, 0			  /* nopl (%rax)	      */
 };
 
 /* Subsequent entries for branches with BND prefx in a lazy procedure
@@ -579,9 +582,9 @@ static const bfd_byte elf_x86_64_lazy_bnd_plt0_entry[LAZY_PLT_ENTRY_SIZE] =
 
 static const bfd_byte elf_x86_64_lazy_bnd_plt_entry[LAZY_PLT_ENTRY_SIZE] =
 {
-  0x68, 0, 0, 0, 0,             /* pushq immediate            */
-  0xf2, 0xe9, 0, 0, 0, 0,       /* bnd jmpq relative          */
-  0x0f, 0x1f, 0x44, 0, 0        /* nopl 0(%rax,%rax,1)        */
+  0x68, 0, 0, 0, 0,		/* pushq immediate	      */
+  0xf2, 0xe9, 0, 0, 0, 0,	/* bnd jmpq relative	      */
+  0x0f, 0x1f, 0x44, 0, 0	/* nopl 0(%rax,%rax,1)	      */
 };
 
 /* The first entry in the IBT-enabled lazy procedure linkage table is the
@@ -592,10 +595,10 @@ static const bfd_byte elf_x86_64_lazy_bnd_plt_entry[LAZY_PLT_ENTRY_SIZE] =
 
 static const bfd_byte elf_x86_64_lazy_ibt_plt_entry[LAZY_PLT_ENTRY_SIZE] =
 {
-  0xf3, 0x0f, 0x1e, 0xfa,       /* endbr64                    */
-  0x68, 0, 0, 0, 0,             /* pushq immediate            */
-  0xf2, 0xe9, 0, 0, 0, 0,       /* bnd jmpq relative          */
-  0x90                          /* nop                        */
+  0xf3, 0x0f, 0x1e, 0xfa,	/* endbr64		      */
+  0x68, 0, 0, 0, 0,		/* pushq immediate	      */
+  0xf2, 0xe9, 0, 0, 0, 0,	/* bnd jmpq relative	      */
+  0x90				/* nop			      */
 };
 
 /* The first entry in the x32 IBT-enabled lazy procedure linkage table
@@ -604,19 +607,19 @@ static const bfd_byte elf_x86_64_lazy_ibt_plt_entry[LAZY_PLT_ENTRY_SIZE] =
 
 static const bfd_byte elf_x32_lazy_ibt_plt_entry[LAZY_PLT_ENTRY_SIZE] =
 {
-  0xf3, 0x0f, 0x1e, 0xfa,       /* endbr64                    */
-  0x68, 0, 0, 0, 0,             /* pushq immediate            */
-  0xe9, 0, 0, 0, 0,             /* jmpq relative              */
-  0x66, 0x90                    /* xchg %ax,%ax               */
+  0xf3, 0x0f, 0x1e, 0xfa,	/* endbr64		      */
+  0x68, 0, 0, 0, 0,		/* pushq immediate	      */
+  0xe9, 0, 0, 0, 0,		/* jmpq relative	      */
+  0x66, 0x90			/* xchg %ax,%ax		      */
 };
 
 /* Entries in the non-lazey procedure linkage table look like this.  */
 
 static const bfd_byte elf_x86_64_non_lazy_plt_entry[NON_LAZY_PLT_ENTRY_SIZE] =
 {
-  0xff, 0x25,        /* jmpq *name@GOTPC(%rip)                        */
-  0, 0, 0, 0,        /* replaced with offset to this symbol in .got.  */
-  0x66, 0x90         /* xchg %ax,%ax                                  */
+  0xff, 0x25,	     /* jmpq *name@GOTPC(%rip)			      */
+  0, 0, 0, 0,	     /* replaced with offset to this symbol in .got.  */
+  0x66, 0x90	     /* xchg %ax,%ax				      */
 };
 
 /* Entries for branches with BND prefix in the non-lazey procedure
@@ -624,9 +627,9 @@ static const bfd_byte elf_x86_64_non_lazy_plt_entry[NON_LAZY_PLT_ENTRY_SIZE] =
 
 static const bfd_byte elf_x86_64_non_lazy_bnd_plt_entry[NON_LAZY_PLT_ENTRY_SIZE] =
 {
-  0xf2, 0xff, 0x25,  /* bnd jmpq *name@GOTPC(%rip)                    */
-  0, 0, 0, 0,        /* replaced with offset to this symbol in .got.  */
-  0x90               /* nop                                           */
+  0xf2, 0xff, 0x25,  /* bnd jmpq *name@GOTPC(%rip)		      */
+  0, 0, 0, 0,	     /* replaced with offset to this symbol in .got.  */
+  0x90		     /* nop					      */
 };
 
 /* Entries for branches with IBT-enabled in the non-lazey procedure
@@ -635,10 +638,10 @@ static const bfd_byte elf_x86_64_non_lazy_bnd_plt_entry[NON_LAZY_PLT_ENTRY_SIZE]
 
 static const bfd_byte elf_x86_64_non_lazy_ibt_plt_entry[LAZY_PLT_ENTRY_SIZE] =
 {
-  0xf3, 0x0f, 0x1e, 0xfa,       /* endbr64                     */
-  0xf2, 0xff, 0x25,             /* bnd jmpq *name@GOTPC(%rip)  */
+  0xf3, 0x0f, 0x1e, 0xfa,	/* endbr64		       */
+  0xf2, 0xff, 0x25,		/* bnd jmpq *name@GOTPC(%rip)  */
   0, 0, 0, 0,  /* replaced with offset to this symbol in .got. */
-  0x0f, 0x1f, 0x44, 0x00, 0x00  /* nopl 0x0(%rax,%rax,1)       */
+  0x0f, 0x1f, 0x44, 0x00, 0x00	/* nopl 0x0(%rax,%rax,1)       */
 };
 
 /* Entries for branches with IBT-enabled in the x32 non-lazey procedure
@@ -647,8 +650,8 @@ static const bfd_byte elf_x86_64_non_lazy_ibt_plt_entry[LAZY_PLT_ENTRY_SIZE] =
 
 static const bfd_byte elf_x32_non_lazy_ibt_plt_entry[LAZY_PLT_ENTRY_SIZE] =
 {
-  0xf3, 0x0f, 0x1e, 0xfa,            /* endbr64                */
-  0xff, 0x25,                        /* jmpq *name@GOTPC(%rip) */
+  0xf3, 0x0f, 0x1e, 0xfa,	     /* endbr64		       */
+  0xff, 0x25,			     /* jmpq *name@GOTPC(%rip) */
   0, 0, 0, 0,  /* replaced with offset to this symbol in .got. */
   0x66, 0x0f, 0x1f, 0x44, 0x00, 0x00 /* nopw 0x0(%rax,%rax,1)  */
 };
@@ -823,135 +826,135 @@ static const bfd_byte elf_x86_64_eh_frame_non_lazy_plt[] =
 /* These are the standard parameters.  */
 static const struct elf_x86_lazy_plt_layout elf_x86_64_lazy_plt =
   {
-    elf_x86_64_lazy_plt0_entry,         /* plt0_entry */
-    LAZY_PLT_ENTRY_SIZE,                /* plt0_entry_size */
-    elf_x86_64_lazy_plt_entry,          /* plt_entry */
-    LAZY_PLT_ENTRY_SIZE,                /* plt_entry_size */
-    2,                                  /* plt0_got1_offset */
-    8,                                  /* plt0_got2_offset */
-    12,                                 /* plt0_got2_insn_end */
-    2,                                  /* plt_got_offset */
-    7,                                  /* plt_reloc_offset */
-    12,                                 /* plt_plt_offset */
-    6,                                  /* plt_got_insn_size */
-    LAZY_PLT_ENTRY_SIZE,                /* plt_plt_insn_end */
-    6,                                  /* plt_lazy_offset */
-    elf_x86_64_lazy_plt0_entry,         /* pic_plt0_entry */
-    elf_x86_64_lazy_plt_entry,          /* pic_plt_entry */
-    elf_x86_64_eh_frame_lazy_plt,       /* eh_frame_plt */
+    elf_x86_64_lazy_plt0_entry,		/* plt0_entry */
+    LAZY_PLT_ENTRY_SIZE,		/* plt0_entry_size */
+    elf_x86_64_lazy_plt_entry,		/* plt_entry */
+    LAZY_PLT_ENTRY_SIZE,		/* plt_entry_size */
+    2,					/* plt0_got1_offset */
+    8,					/* plt0_got2_offset */
+    12,					/* plt0_got2_insn_end */
+    2,					/* plt_got_offset */
+    7,					/* plt_reloc_offset */
+    12,					/* plt_plt_offset */
+    6,					/* plt_got_insn_size */
+    LAZY_PLT_ENTRY_SIZE,		/* plt_plt_insn_end */
+    6,					/* plt_lazy_offset */
+    elf_x86_64_lazy_plt0_entry,		/* pic_plt0_entry */
+    elf_x86_64_lazy_plt_entry,		/* pic_plt_entry */
+    elf_x86_64_eh_frame_lazy_plt,	/* eh_frame_plt */
     sizeof (elf_x86_64_eh_frame_lazy_plt) /* eh_frame_plt_size */
   };
 
 static const struct elf_x86_non_lazy_plt_layout elf_x86_64_non_lazy_plt =
   {
-    elf_x86_64_non_lazy_plt_entry,      /* plt_entry */
-    elf_x86_64_non_lazy_plt_entry,      /* pic_plt_entry */
-    NON_LAZY_PLT_ENTRY_SIZE,            /* plt_entry_size */
-    2,                                  /* plt_got_offset */
-    6,                                  /* plt_got_insn_size */
-    elf_x86_64_eh_frame_non_lazy_plt,   /* eh_frame_plt */
+    elf_x86_64_non_lazy_plt_entry,	/* plt_entry */
+    elf_x86_64_non_lazy_plt_entry,	/* pic_plt_entry */
+    NON_LAZY_PLT_ENTRY_SIZE,		/* plt_entry_size */
+    2,					/* plt_got_offset */
+    6,					/* plt_got_insn_size */
+    elf_x86_64_eh_frame_non_lazy_plt,	/* eh_frame_plt */
     sizeof (elf_x86_64_eh_frame_non_lazy_plt) /* eh_frame_plt_size */
   };
 
 static const struct elf_x86_lazy_plt_layout elf_x86_64_lazy_bnd_plt =
   {
-    elf_x86_64_lazy_bnd_plt0_entry,     /* plt0_entry */
-    LAZY_PLT_ENTRY_SIZE,                /* plt0_entry_size */
-    elf_x86_64_lazy_bnd_plt_entry,      /* plt_entry */
-    LAZY_PLT_ENTRY_SIZE,                /* plt_entry_size */
-    2,                                  /* plt0_got1_offset */
-    1+8,                                /* plt0_got2_offset */
-    1+12,                               /* plt0_got2_insn_end */
-    1+2,                                /* plt_got_offset */
-    1,                                  /* plt_reloc_offset */
-    7,                                  /* plt_plt_offset */
-    1+6,                                /* plt_got_insn_size */
-    11,                                 /* plt_plt_insn_end */
-    0,                                  /* plt_lazy_offset */
-    elf_x86_64_lazy_bnd_plt0_entry,     /* pic_plt0_entry */
-    elf_x86_64_lazy_bnd_plt_entry,      /* pic_plt_entry */
-    elf_x86_64_eh_frame_lazy_bnd_plt,   /* eh_frame_plt */
+    elf_x86_64_lazy_bnd_plt0_entry,	/* plt0_entry */
+    LAZY_PLT_ENTRY_SIZE,		/* plt0_entry_size */
+    elf_x86_64_lazy_bnd_plt_entry,	/* plt_entry */
+    LAZY_PLT_ENTRY_SIZE,		/* plt_entry_size */
+    2,					/* plt0_got1_offset */
+    1+8,				/* plt0_got2_offset */
+    1+12,				/* plt0_got2_insn_end */
+    1+2,				/* plt_got_offset */
+    1,					/* plt_reloc_offset */
+    7,					/* plt_plt_offset */
+    1+6,				/* plt_got_insn_size */
+    11,					/* plt_plt_insn_end */
+    0,					/* plt_lazy_offset */
+    elf_x86_64_lazy_bnd_plt0_entry,	/* pic_plt0_entry */
+    elf_x86_64_lazy_bnd_plt_entry,	/* pic_plt_entry */
+    elf_x86_64_eh_frame_lazy_bnd_plt,	/* eh_frame_plt */
     sizeof (elf_x86_64_eh_frame_lazy_bnd_plt) /* eh_frame_plt_size */
   };
 
 static const struct elf_x86_non_lazy_plt_layout elf_x86_64_non_lazy_bnd_plt =
   {
-    elf_x86_64_non_lazy_bnd_plt_entry,  /* plt_entry */
-    elf_x86_64_non_lazy_bnd_plt_entry,  /* pic_plt_entry */
-    NON_LAZY_PLT_ENTRY_SIZE,            /* plt_entry_size */
-    1+2,                                /* plt_got_offset */
-    1+6,                                /* plt_got_insn_size */
-    elf_x86_64_eh_frame_non_lazy_plt,   /* eh_frame_plt */
+    elf_x86_64_non_lazy_bnd_plt_entry,	/* plt_entry */
+    elf_x86_64_non_lazy_bnd_plt_entry,	/* pic_plt_entry */
+    NON_LAZY_PLT_ENTRY_SIZE,		/* plt_entry_size */
+    1+2,				/* plt_got_offset */
+    1+6,				/* plt_got_insn_size */
+    elf_x86_64_eh_frame_non_lazy_plt,	/* eh_frame_plt */
     sizeof (elf_x86_64_eh_frame_non_lazy_plt) /* eh_frame_plt_size */
   };
 
 static const struct elf_x86_lazy_plt_layout elf_x86_64_lazy_ibt_plt =
   {
-    elf_x86_64_lazy_bnd_plt0_entry,     /* plt0_entry */
-    LAZY_PLT_ENTRY_SIZE,                /* plt0_entry_size */
-    elf_x86_64_lazy_ibt_plt_entry,      /* plt_entry */
-    LAZY_PLT_ENTRY_SIZE,                /* plt_entry_size */
-    2,                                  /* plt0_got1_offset */
-    1+8,                                /* plt0_got2_offset */
-    1+12,                               /* plt0_got2_insn_end */
-    4+1+2,                              /* plt_got_offset */
-    4+1,                                /* plt_reloc_offset */
-    4+1+6,                              /* plt_plt_offset */
-    4+1+6,                              /* plt_got_insn_size */
-    4+1+5+5,                            /* plt_plt_insn_end */
-    0,                                  /* plt_lazy_offset */
-    elf_x86_64_lazy_bnd_plt0_entry,     /* pic_plt0_entry */
-    elf_x86_64_lazy_ibt_plt_entry,      /* pic_plt_entry */
-    elf_x86_64_eh_frame_lazy_ibt_plt,   /* eh_frame_plt */
+    elf_x86_64_lazy_bnd_plt0_entry,	/* plt0_entry */
+    LAZY_PLT_ENTRY_SIZE,		/* plt0_entry_size */
+    elf_x86_64_lazy_ibt_plt_entry,	/* plt_entry */
+    LAZY_PLT_ENTRY_SIZE,		/* plt_entry_size */
+    2,					/* plt0_got1_offset */
+    1+8,				/* plt0_got2_offset */
+    1+12,				/* plt0_got2_insn_end */
+    4+1+2,				/* plt_got_offset */
+    4+1,				/* plt_reloc_offset */
+    4+1+6,				/* plt_plt_offset */
+    4+1+6,				/* plt_got_insn_size */
+    4+1+5+5,				/* plt_plt_insn_end */
+    0,					/* plt_lazy_offset */
+    elf_x86_64_lazy_bnd_plt0_entry,	/* pic_plt0_entry */
+    elf_x86_64_lazy_ibt_plt_entry,	/* pic_plt_entry */
+    elf_x86_64_eh_frame_lazy_ibt_plt,	/* eh_frame_plt */
     sizeof (elf_x86_64_eh_frame_lazy_ibt_plt) /* eh_frame_plt_size */
   };
 
 static const struct elf_x86_lazy_plt_layout elf_x32_lazy_ibt_plt =
   {
-    elf_x86_64_lazy_plt0_entry,         /* plt0_entry */
-    LAZY_PLT_ENTRY_SIZE,                /* plt0_entry_size */
-    elf_x32_lazy_ibt_plt_entry,         /* plt_entry */
-    LAZY_PLT_ENTRY_SIZE,                /* plt_entry_size */
-    2,                                  /* plt0_got1_offset */
-    8,                                  /* plt0_got2_offset */
-    12,                                 /* plt0_got2_insn_end */
-    4+2,                                /* plt_got_offset */
-    4+1,                                /* plt_reloc_offset */
-    4+6,                                /* plt_plt_offset */
-    4+6,                                /* plt_got_insn_size */
-    4+5+5,                              /* plt_plt_insn_end */
-    0,                                  /* plt_lazy_offset */
-    elf_x86_64_lazy_plt0_entry,         /* pic_plt0_entry */
-    elf_x32_lazy_ibt_plt_entry,         /* pic_plt_entry */
-    elf_x32_eh_frame_lazy_ibt_plt,      /* eh_frame_plt */
+    elf_x86_64_lazy_plt0_entry,		/* plt0_entry */
+    LAZY_PLT_ENTRY_SIZE,		/* plt0_entry_size */
+    elf_x32_lazy_ibt_plt_entry,		/* plt_entry */
+    LAZY_PLT_ENTRY_SIZE,		/* plt_entry_size */
+    2,					/* plt0_got1_offset */
+    8,					/* plt0_got2_offset */
+    12,					/* plt0_got2_insn_end */
+    4+2,				/* plt_got_offset */
+    4+1,				/* plt_reloc_offset */
+    4+6,				/* plt_plt_offset */
+    4+6,				/* plt_got_insn_size */
+    4+5+5,				/* plt_plt_insn_end */
+    0,					/* plt_lazy_offset */
+    elf_x86_64_lazy_plt0_entry,		/* pic_plt0_entry */
+    elf_x32_lazy_ibt_plt_entry,		/* pic_plt_entry */
+    elf_x32_eh_frame_lazy_ibt_plt,	/* eh_frame_plt */
     sizeof (elf_x32_eh_frame_lazy_ibt_plt) /* eh_frame_plt_size */
   };
 
 static const struct elf_x86_non_lazy_plt_layout elf_x86_64_non_lazy_ibt_plt =
   {
-    elf_x86_64_non_lazy_ibt_plt_entry,  /* plt_entry */
-    elf_x86_64_non_lazy_ibt_plt_entry,  /* pic_plt_entry */
-    LAZY_PLT_ENTRY_SIZE,                /* plt_entry_size */
-    4+1+2,                              /* plt_got_offset */
-    4+1+6,                              /* plt_got_insn_size */
-    elf_x86_64_eh_frame_non_lazy_plt,   /* eh_frame_plt */
+    elf_x86_64_non_lazy_ibt_plt_entry,	/* plt_entry */
+    elf_x86_64_non_lazy_ibt_plt_entry,	/* pic_plt_entry */
+    LAZY_PLT_ENTRY_SIZE,		/* plt_entry_size */
+    4+1+2,				/* plt_got_offset */
+    4+1+6,				/* plt_got_insn_size */
+    elf_x86_64_eh_frame_non_lazy_plt,	/* eh_frame_plt */
     sizeof (elf_x86_64_eh_frame_non_lazy_plt) /* eh_frame_plt_size */
   };
 
 static const struct elf_x86_non_lazy_plt_layout elf_x32_non_lazy_ibt_plt =
   {
-    elf_x32_non_lazy_ibt_plt_entry,     /* plt_entry */
-    elf_x32_non_lazy_ibt_plt_entry,     /* pic_plt_entry */
-    LAZY_PLT_ENTRY_SIZE,                /* plt_entry_size */
-    4+2,                                /* plt_got_offset */
-    4+6,                                /* plt_got_insn_size */
-    elf_x86_64_eh_frame_non_lazy_plt,   /* eh_frame_plt */
+    elf_x32_non_lazy_ibt_plt_entry,	/* plt_entry */
+    elf_x32_non_lazy_ibt_plt_entry,	/* pic_plt_entry */
+    LAZY_PLT_ENTRY_SIZE,		/* plt_entry_size */
+    4+2,				/* plt_got_offset */
+    4+6,				/* plt_got_insn_size */
+    elf_x86_64_eh_frame_non_lazy_plt,	/* eh_frame_plt */
     sizeof (elf_x86_64_eh_frame_non_lazy_plt) /* eh_frame_plt_size */
   };
 
 static const struct elf_x86_backend_data elf_x86_64_arch_bed =
   {
-    is_normal                            /* os */
+    is_normal				 /* os */
   };
 
 #define	elf_backend_arch_data	&elf_x86_64_arch_bed
@@ -1026,15 +1029,15 @@ elf_x86_64_check_tls_transition (bfd *abfd,
 		addr32 call __tls_get_addr
 	     can transit to different access model.  For largepic,
 	     we also support:
-	        leaq foo@tlsgd(%rip), %rdi
-	        movabsq $__tls_get_addr@pltoff, %rax
-	        addq $r15, %rax
-	        call *%rax
+		leaq foo@tlsgd(%rip), %rdi
+		movabsq $__tls_get_addr@pltoff, %rax
+		addq $r15, %rax
+		call *%rax
 	     or
-	        leaq foo@tlsgd(%rip), %rdi
-	        movabsq $__tls_get_addr@pltoff, %rax
-	        addq $rbx, %rax
-	        call *%rax  */
+		leaq foo@tlsgd(%rip), %rdi
+		movabsq $__tls_get_addr@pltoff, %rax
+		addq $rbx, %rax
+		call *%rax  */
 
 	  static const unsigned char leaq[] = { 0x66, 0x48, 0x8d, 0x3d };
 
@@ -1085,22 +1088,22 @@ elf_x86_64_check_tls_transition (bfd *abfd,
 	  /* Check transition from LD access model.  Only
 		leaq foo@tlsld(%rip), %rdi;
 		call __tls_get_addr@PLT
-             or
+	     or
 		leaq foo@tlsld(%rip), %rdi;
 		call *__tls_get_addr@GOTPCREL(%rip)
 		which may be converted to
 		addr32 call __tls_get_addr
 	     can transit to different access model.  For largepic
 	     we also support:
-	        leaq foo@tlsld(%rip), %rdi
-	        movabsq $__tls_get_addr@pltoff, %rax
-	        addq $r15, %rax
-	        call *%rax
+		leaq foo@tlsld(%rip), %rdi
+		movabsq $__tls_get_addr@pltoff, %rax
+		addq $r15, %rax
+		call *%rax
 	     or
-	        leaq foo@tlsld(%rip), %rdi
-	        movabsq $__tls_get_addr@pltoff, %rax
-	        addq $rbx, %rax
-	        call *%rax  */
+		leaq foo@tlsld(%rip), %rdi
+		movabsq $__tls_get_addr@pltoff, %rax
+		addq $rbx, %rax
+		call *%rax  */
 
 	  static const unsigned char lea[] = { 0x48, 0x8d, 0x3d };
 
@@ -1311,6 +1314,9 @@ elf_x86_64_tls_transition (struct bfd_link_info *info, bfd *abfd,
       from = elf_x86_64_rtype_to_howto (abfd, from_type);
       to = elf_x86_64_rtype_to_howto (abfd, to_type);
 
+      if (from == NULL || to == NULL)
+	return FALSE;
+
       if (h)
 	name = h->root.root.string;
       else
@@ -1332,9 +1338,9 @@ elf_x86_64_tls_transition (struct bfd_link_info *info, bfd *abfd,
 
       _bfd_error_handler
 	/* xgettext:c-format */
-	(_("%B: TLS transition from %s to %s against `%s' at %#Lx "
-	   "in section `%A' failed"),
-	 abfd, from->name, to->name, name, rel->r_offset, sec);
+	(_("%pB: TLS transition from %s to %s against `%s' at %#" PRIx64
+	   " in section `%pA' failed"),
+	 abfd, from->name, to->name, name, (uint64_t) rel->r_offset, sec);
       bfd_set_error (bfd_error_bad_value);
       return FALSE;
     }
@@ -1401,7 +1407,7 @@ elf_x86_64_need_pic (struct bfd_link_info *info,
     object = _("a PDE object");
 
   /* xgettext:c-format */
-  _bfd_error_handler (_("%B: relocation %s against %s%s`%s' can "
+  _bfd_error_handler (_("%pB: relocation %s against %s%s`%s' can "
 			"not be used when making %s%s"),
 		      input_bfd, howto->name, und, v, name,
 		      object, pic);
@@ -1820,7 +1826,7 @@ elf_x86_64_check_relocs (bfd *abfd, struct bfd_link_info *info,
       if (r_symndx >= NUM_SHDR_ENTRIES (symtab_hdr))
 	{
 	  /* xgettext:c-format */
-	  _bfd_error_handler (_("%B: bad symbol index: %d"),
+	  _bfd_error_handler (_("%pB: bad symbol index: %d"),
 			      abfd, r_symndx);
 	  goto error_return;
 	}
@@ -1886,7 +1892,7 @@ elf_x86_64_check_relocs (bfd *abfd, struct bfd_link_info *info,
 					   NULL);
 		_bfd_error_handler
 		  /* xgettext:c-format */
-		  (_("%B: relocation %s against symbol `%s' isn't "
+		  (_("%pB: relocation %s against symbol `%s' isn't "
 		     "supported in x32 mode"), abfd,
 		   x86_64_elf_howto_table[r_type].name, name);
 		bfd_set_error (bfd_error_bad_value);
@@ -1899,7 +1905,6 @@ elf_x86_64_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	{
 	  /* It is referenced by a non-shared object. */
 	  h->ref_regular = 1;
-	  h->root.non_ir_ref_regular = 1;
 
 	  if (h->type == STT_GNU_IFUNC)
 	    elf_tdata (info->output_bfd)->has_gnu_symbols
@@ -1927,6 +1932,10 @@ elf_x86_64_check_relocs (bfd *abfd, struct bfd_link_info *info,
 				       &r_type, GOT_UNKNOWN,
 				       rel, rel_end, h, r_symndx, FALSE))
 	goto error_return;
+
+      /* Check if _GLOBAL_OFFSET_TABLE_ is referenced.  */
+      if (h == htab->elf.hgot)
+	htab->got_referenced = TRUE;
 
       eh = (struct elf_x86_link_hash_entry *) h;
       switch (r_type)
@@ -2025,7 +2034,7 @@ elf_x86_64_check_relocs (bfd *abfd, struct bfd_link_info *info,
 					       isym, NULL);
 		    _bfd_error_handler
 		      /* xgettext:c-format */
-		      (_("%B: '%s' accessed both as normal and"
+		      (_("%pB: '%s' accessed both as normal and"
 			 " thread local symbol"),
 		       abfd, name);
 		    bfd_set_error (bfd_error_bad_value);
@@ -2067,7 +2076,7 @@ elf_x86_64_check_relocs (bfd *abfd, struct bfd_link_info *info,
 
 	  eh->zero_undefweak &= 0x2;
 	  h->needs_plt = 1;
-	  h->plt.refcount += 1;
+	  h->plt.refcount = 1;
 	  break;
 
 	case R_X86_64_PLTOFF64:
@@ -2076,7 +2085,7 @@ elf_x86_64_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	  if (h != NULL)
 	    {
 	      h->needs_plt = 1;
-	      h->plt.refcount += 1;
+	      h->plt.refcount = 1;
 	    }
 	  goto create_got;
 
@@ -2124,20 +2133,7 @@ pointer:
 	      && (bfd_link_executable (info)
 		  || h->type == STT_GNU_IFUNC))
 	    {
-	      /* If this reloc is in a read-only section, we might
-		 need a copy reloc.  We can't check reliably at this
-		 stage whether the section is read-only, as input
-		 sections have not yet been mapped to output sections.
-		 Tentatively set the flag for now, and correct in
-		 adjust_dynamic_symbol.  */
-	      h->non_got_ref = 1;
-
-	      /* We may need a .plt entry if the symbol is a function
-		 defined in a shared lib or is a STT_GNU_IFUNC function
-		 referenced from the code or read-only section.  */
-	      if (!h->def_regular
-		  || (sec->flags & (SEC_CODE | SEC_READONLY)) != 0)
-		h->plt.refcount += 1;
+	      bfd_boolean func_pointer_ref = FALSE;
 
 	      if (r_type == R_X86_64_PC32)
 		{
@@ -2145,7 +2141,17 @@ pointer:
 		     as pointer, make sure that PLT is used if foo is
 		     a function defined in a shared library.  */
 		  if ((sec->flags & SEC_CODE) == 0)
-		    h->pointer_equality_needed = 1;
+		    {
+		      h->pointer_equality_needed = 1;
+		      if (bfd_link_pie (info)
+			  && h->type == STT_FUNC
+			  && !h->def_regular
+			  && h->def_dynamic)
+			{
+			  h->needs_plt = 1;
+			  h->plt.refcount = 1;
+			}
+		    }
 		}
 	      else if (r_type != R_X86_64_PC32_BND
 		       && r_type != R_X86_64_PC64)
@@ -2159,13 +2165,31 @@ pointer:
 			  || (!ABI_64_P (abfd)
 			      && (r_type == R_X86_64_32
 				  || r_type == R_X86_64_32S))))
-		    eh->func_pointer_refcount += 1;
+		    func_pointer_ref = TRUE;
+		}
+
+	      if (!func_pointer_ref)
+		{
+		  /* If this reloc is in a read-only section, we might
+		     need a copy reloc.  We can't check reliably at this
+		     stage whether the section is read-only, as input
+		     sections have not yet been mapped to output sections.
+		     Tentatively set the flag for now, and correct in
+		     adjust_dynamic_symbol.  */
+		  h->non_got_ref = 1;
+
+		  /* We may need a .plt entry if the symbol is a function
+		     defined in a shared lib or is a function referenced
+		     from the code or read-only section.  */
+		  if (!h->def_regular
+		      || (sec->flags & (SEC_CODE | SEC_READONLY)) != 0)
+		    h->plt.refcount = 1;
 		}
 	    }
 
 	  size_reloc = FALSE;
 do_size:
-	  if (NEED_DYNAMIC_RELOCATION_P (info, h, sec, r_type,
+	  if (NEED_DYNAMIC_RELOCATION_P (info, TRUE, h, sec, r_type,
 					 htab->pointer_r_type))
 	    {
 	      struct elf_dyn_relocs *p;
@@ -2297,24 +2321,6 @@ elf_x86_64_tpoff (struct bfd_link_info *info, bfd_vma address)
   /* Consider special static TLS alignment requirements.  */
   static_tls_size = BFD_ALIGN (htab->tls_size, bed->static_tls_alignment);
   return address - static_tls_size - htab->tls_sec->vma;
-}
-
-/* Is the instruction before OFFSET in CONTENTS a 32bit relative
-   branch?  */
-
-static bfd_boolean
-is_32bit_relative_branch (bfd_byte *contents, bfd_vma offset)
-{
-  /* Opcode		Instruction
-     0xe8		call
-     0xe9		jump
-     0x0f 0x8x		conditional jump */
-  return ((offset > 0
-	   && (contents [offset - 1] == 0xe8
-	       || contents [offset - 1] == 0xe9))
-	  || (offset > 1
-	      && contents [offset - 2] == 0x0f
-	      && (contents [offset - 1] & 0xf0) == 0x80));
 }
 
 /* Relocate an x86_64 ELF section.  */
@@ -2497,6 +2503,10 @@ elf_x86_64_relocate_section (bfd *output_bfd,
 
 	  if ((input_section->flags & SEC_ALLOC) == 0)
 	    {
+	      /* If this is a SHT_NOTE section without SHF_ALLOC, treat
+	         STT_GNU_IFUNC symbol as STT_FUNC.  */
+	      if (elf_section_type (input_section) == SHT_NOTE)
+		goto skip_ifunc;
 	      /* Dynamic relocs are not propagated for SEC_DEBUGGING
 		 sections because such sections are not SEC_ALLOC and
 		 thus ld.so will not process them.  */
@@ -2618,7 +2628,7 @@ bad_ifunc_reloc:
 					 NULL);
 	      _bfd_error_handler
 		/* xgettext:c-format */
-		(_("%B: relocation %s against STT_GNU_IFUNC "
+		(_("%pB: relocation %s against STT_GNU_IFUNC "
 		   "symbol `%s' isn't supported"), input_bfd,
 		 howto->name, name);
 	      bfd_set_error (bfd_error_bad_value);
@@ -2644,9 +2654,9 @@ do_ifunc_pointer:
 					     sym, NULL);
 		  _bfd_error_handler
 		    /* xgettext:c-format */
-		    (_("%B: relocation %s against STT_GNU_IFUNC "
-		       "symbol `%s' has non-zero addend: %Ld"),
-		     input_bfd, howto->name, name, rel->r_addend);
+		    (_("%pB: relocation %s against STT_GNU_IFUNC "
+		       "symbol `%s' has non-zero addend: %" PRId64),
+		     input_bfd, howto->name, name, (int64_t) rel->r_addend);
 		  bfd_set_error (bfd_error_bad_value);
 		  return FALSE;
 		}
@@ -2675,7 +2685,7 @@ do_ifunc_pointer:
 
 		  if (POINTER_LOCAL_IFUNC_P (info, h))
 		    {
-		      info->callbacks->minfo (_("Local IFUNC function `%s' in %B\n"),
+		      info->callbacks->minfo (_("Local IFUNC function `%s' in %pB\n"),
 					      h->root.root.string,
 					      h->root.u.def.section->owner);
 
@@ -2720,6 +2730,7 @@ do_ifunc_pointer:
 	    }
 	}
 
+skip_ifunc:
       resolved_to_zero = (eh != NULL
 			  && UNDEFINED_WEAK_RESOLVED_TO_ZERO (info, eh));
 
@@ -2881,7 +2892,7 @@ do_ifunc_pointer:
 
 		  _bfd_error_handler
 		    /* xgettext:c-format */
-		    (_("%B: relocation R_X86_64_GOTOFF64 against undefined %s"
+		    (_("%pB: relocation R_X86_64_GOTOFF64 against undefined %s"
 		       " `%s' can not be used when making a shared object"),
 		     input_bfd, v, h->root.root.string);
 		  bfd_set_error (bfd_error_bad_value);
@@ -2895,7 +2906,7 @@ do_ifunc_pointer:
 		{
 		  _bfd_error_handler
 	      /* xgettext:c-format */
-		    (_("%B: relocation R_X86_64_GOTOFF64 against protected %s"
+		    (_("%pB: relocation R_X86_64_GOTOFF64 against protected %s"
 		       " `%s' can not be used when making a shared object"),
 		     input_bfd,
 		     h->type == STT_FUNC ? "function" : "data",
@@ -2978,6 +2989,7 @@ do_ifunc_pointer:
 	      break;
 	    }
 
+use_plt:
 	  if (h->plt.offset != (bfd_vma) -1)
 	    {
 	      if (htab->plt_second != NULL)
@@ -3015,14 +3027,18 @@ do_ifunc_pointer:
 	case R_X86_64_PC32:
 	case R_X86_64_PC32_BND:
 	  /* Don't complain about -fPIC if the symbol is undefined when
-	     building executable unless it is unresolved weak symbol or
-	     -z nocopyreloc is used.  */
-          if ((input_section->flags & SEC_ALLOC) != 0
+	     building executable unless it is unresolved weak symbol,
+	     references a dynamic definition in PIE or -z nocopyreloc
+	     is used.  */
+	  if ((input_section->flags & SEC_ALLOC) != 0
 	      && (input_section->flags & SEC_READONLY) != 0
 	      && h != NULL
 	      && ((bfd_link_executable (info)
 		   && ((h->root.type == bfd_link_hash_undefweak
 			&& !resolved_to_zero)
+		       || (bfd_link_pie (info)
+			   && !h->def_regular
+			   && h->def_dynamic)
 		       || ((info->nocopyreloc
 			    || (eh->def_protected
 				&& elf_has_no_copy_on_protected (h->root.u.def.section->owner)))
@@ -3031,32 +3047,36 @@ do_ifunc_pointer:
 		  || bfd_link_dll (info)))
 	    {
 	      bfd_boolean fail = FALSE;
-	      bfd_boolean branch
-		= ((r_type == R_X86_64_PC32
-		    || r_type == R_X86_64_PC32_BND)
-		   && is_32bit_relative_branch (contents, rel->r_offset));
-
 	      if (SYMBOL_REFERENCES_LOCAL_P (info, h))
 		{
 		  /* Symbol is referenced locally.  Make sure it is
-		     defined locally or for a branch.  */
-		  fail = (!(h->def_regular || ELF_COMMON_DEF_P (h))
-			  && !branch);
+		     defined locally.  */
+		  fail = !(h->def_regular || ELF_COMMON_DEF_P (h));
 		}
 	      else if (!(bfd_link_pie (info)
 			 && (h->needs_copy || eh->needs_copy)))
 		{
 		  /* Symbol doesn't need copy reloc and isn't referenced
-		     locally.  We only allow branch to symbol with
-		     non-default visibility. */
-		  fail = (!branch
-			  || ELF_ST_VISIBILITY (h->other) == STV_DEFAULT);
+		     locally.  Address of protected function may not be
+		     reachable at run-time.  */
+		  fail = (ELF_ST_VISIBILITY (h->other) == STV_DEFAULT
+			  || (ELF_ST_VISIBILITY (h->other) == STV_PROTECTED
+			      && h->type == STT_FUNC));
 		}
 
 	      if (fail)
 		return elf_x86_64_need_pic (info, input_bfd, input_section,
 					    h, NULL, NULL, howto);
 	    }
+	  /* Since x86-64 has PC-relative PLT, we can use PLT in PIE
+	     as function address.  */
+	  else if (h != NULL
+		   && (input_section->flags & SEC_CODE) == 0
+		   && bfd_link_pie (info)
+		   && h->type == STT_FUNC
+		   && !h->def_regular
+		   && h->def_dynamic)
+	    goto use_plt;
 	  /* Fall through.  */
 
 	case R_X86_64_8:
@@ -3146,11 +3166,12 @@ direct:
 						     sym, NULL);
 			  _bfd_error_handler
 			    /* xgettext:c-format */
-			    (_("%B: addend %s%#x in relocation %s against "
-			       "symbol `%s' at %#Lx in section `%A' is "
-			       "out of range"),
+			    (_("%pB: addend %s%#x in relocation %s against "
+			       "symbol `%s' at %#" PRIx64
+			       " in section `%pA' is out of range"),
 			     input_bfd, addend < 0 ? "-" : "", addend,
-			     howto->name, name, rel->r_offset, input_section);
+			     howto->name, name, (uint64_t) rel->r_offset,
+			     input_section);
 			  bfd_set_error (bfd_error_bad_value);
 			  return FALSE;
 			}
@@ -3783,10 +3804,11 @@ direct:
 	    default:
 	      _bfd_error_handler
 		/* xgettext:c-format */
-		(_("%B(%A+%#Lx): unresolvable %s relocation against symbol `%s'"),
+		(_("%pB(%pA+%#" PRIx64 "): "
+		   "unresolvable %s relocation against symbol `%s'"),
 		 input_bfd,
 		 input_section,
-		 rel->r_offset,
+		 (uint64_t) rel->r_offset,
 		 howto->name,
 		 h->root.root.string);
 	      return FALSE;
@@ -3832,9 +3854,9 @@ check_relocation_error:
 	    {
 	      _bfd_error_handler
 		/* xgettext:c-format */
-		(_("%B(%A+%#Lx): reloc against `%s': error %d"),
+		(_("%pB(%pA+%#" PRIx64 "): reloc against `%s': error %d"),
 		 input_bfd, input_section,
-		 rel->r_offset, name, (int) r);
+		 (uint64_t) rel->r_offset, name, (int) r);
 	      return FALSE;
 	    }
 	}
@@ -3979,7 +4001,7 @@ elf_x86_64_finish_dynamic_symbol (bfd *output_bfd,
       /* Check PC-relative offset overflow in PLT entry.  */
       if ((plt_got_pcrel_offset + 0x80000000) > 0xffffffff)
 	/* xgettext:c-format */
-	info->callbacks->einfo (_("%F%B: PC-relative offset overflow in PLT entry for `%s'\n"),
+	info->callbacks->einfo (_("%F%pB: PC-relative offset overflow in PLT entry for `%s'\n"),
 				output_bfd, h->root.root.string);
 
       bfd_put_32 (output_bfd, plt_got_pcrel_offset,
@@ -4005,7 +4027,7 @@ elf_x86_64_finish_dynamic_symbol (bfd *output_bfd,
 			   + got_offset);
 	  if (PLT_LOCAL_IFUNC_P (info, h))
 	    {
-	      info->callbacks->minfo (_("Local IFUNC function `%s' in %B\n"),
+	      info->callbacks->minfo (_("Local IFUNC function `%s' in %pB\n"),
 				      h->root.root.string,
 				      h->root.u.def.section->owner);
 
@@ -4042,7 +4064,7 @@ elf_x86_64_finish_dynamic_symbol (bfd *output_bfd,
 		 will overflow first.  */
 	      if (plt0_offset > 0x80000000)
 		/* xgettext:c-format */
-		info->callbacks->einfo (_("%F%B: branch displacement overflow in PLT entry for `%s'\n"),
+		info->callbacks->einfo (_("%F%pB: branch displacement overflow in PLT entry for `%s'\n"),
 					output_bfd, h->root.root.string);
 	      bfd_put_32 (output_bfd, - plt0_offset,
 			  (plt->contents + h->plt.offset
@@ -4095,7 +4117,7 @@ elf_x86_64_finish_dynamic_symbol (bfd *output_bfd,
       if ((got_after_plt && got_pcrel_offset < 0)
 	  || (!got_after_plt && got_pcrel_offset > 0))
 	/* xgettext:c-format */
-	info->callbacks->einfo (_("%F%B: PC-relative offset overflow in GOT PLT entry for `%s'\n"),
+	info->callbacks->einfo (_("%F%pB: PC-relative offset overflow in GOT PLT entry for `%s'\n"),
 				output_bfd, h->root.root.string);
 
       bfd_put_32 (output_bfd, got_pcrel_offset,
@@ -4159,7 +4181,7 @@ elf_x86_64_finish_dynamic_symbol (bfd *output_bfd,
 		}
 	      if (SYMBOL_REFERENCES_LOCAL_P (info, h))
 		{
-		  info->callbacks->minfo (_("Local IFUNC function `%s' in %B\n"),
+		  info->callbacks->minfo (_("Local IFUNC function `%s' in %pB\n"),
 					  h->root.root.string,
 					  h->root.u.def.section->owner);
 
@@ -4303,7 +4325,7 @@ elf_x86_64_reloc_type_class (const struct bfd_link_info *info,
       && htab->elf.dynsym->contents != NULL)
     {
       /* Check relocation against STT_GNU_IFUNC symbol if there are
-         dynamic symbols.  */
+	 dynamic symbols.  */
       unsigned long r_symndx = htab->r_sym (rela->r_info);
       if (r_symndx != STN_UNDEF)
 	{
@@ -4511,7 +4533,7 @@ elf_x86_64_get_synthetic_symtab (bfd *abfd,
   if (relsize <= 0)
     return -1;
 
-  if (get_elf_x86_backend_data (abfd)->target_os == is_normal)
+  if (get_elf_x86_backend_data (abfd)->target_os != is_nacl)
     {
       lazy_plt = &elf_x86_64_lazy_plt;
       non_lazy_plt = &elf_x86_64_non_lazy_plt;
@@ -4862,8 +4884,7 @@ elf_x86_64_link_setup_gnu_properties (struct bfd_link_info *info)
   /* This is unused for x86-64.  */
   init_table.plt0_pad_byte = 0x90;
 
-  if (get_elf_x86_backend_data (info->output_bfd)->target_os
-      == is_normal)
+  if (get_elf_x86_backend_data (info->output_bfd)->target_os != is_nacl)
     {
       if (info->bndplt)
 	{
@@ -4915,10 +4936,10 @@ elf_x86_64_special_sections[]=
   { STRING_COMMA_LEN (".gnu.linkonce.lb"), -2, SHT_NOBITS,   SHF_ALLOC + SHF_WRITE + SHF_X86_64_LARGE},
   { STRING_COMMA_LEN (".gnu.linkonce.lr"), -2, SHT_PROGBITS, SHF_ALLOC + SHF_X86_64_LARGE},
   { STRING_COMMA_LEN (".gnu.linkonce.lt"), -2, SHT_PROGBITS, SHF_ALLOC + SHF_EXECINSTR + SHF_X86_64_LARGE},
-  { STRING_COMMA_LEN (".lbss"),	           -2, SHT_NOBITS,   SHF_ALLOC + SHF_WRITE + SHF_X86_64_LARGE},
+  { STRING_COMMA_LEN (".lbss"),		   -2, SHT_NOBITS,   SHF_ALLOC + SHF_WRITE + SHF_X86_64_LARGE},
   { STRING_COMMA_LEN (".ldata"),	   -2, SHT_PROGBITS, SHF_ALLOC + SHF_WRITE + SHF_X86_64_LARGE},
   { STRING_COMMA_LEN (".lrodata"),	   -2, SHT_PROGBITS, SHF_ALLOC + SHF_X86_64_LARGE},
-  { NULL,	                0,          0, 0,            0 }
+  { NULL,			0,	    0, 0,	     0 }
 };
 
 #define TARGET_LITTLE_SYM		    x86_64_elf64_vec
@@ -4926,7 +4947,11 @@ elf_x86_64_special_sections[]=
 #define ELF_ARCH			    bfd_arch_i386
 #define ELF_TARGET_ID			    X86_64_ELF_DATA
 #define ELF_MACHINE_CODE		    EM_X86_64
-#define ELF_MAXPAGESIZE			    0x200000
+#if DEFAULT_LD_Z_SEPARATE_CODE
+# define ELF_MAXPAGESIZE		    0x1000
+#else
+# define ELF_MAXPAGESIZE		    0x200000
+#endif
 #define ELF_MINPAGESIZE			    0x1000
 #define ELF_COMMONPAGESIZE		    0x1000
 
@@ -4937,7 +4962,7 @@ elf_x86_64_special_sections[]=
 #define elf_backend_want_plt_sym	    0
 #define elf_backend_got_header_size	    (GOT_ENTRY_SIZE*3)
 #define elf_backend_rela_normal		    1
-#define elf_backend_plt_alignment           4
+#define elf_backend_plt_alignment	    4
 #define elf_backend_extern_protected_data   1
 #define elf_backend_caches_rawsize	    1
 #define elf_backend_dtrel_excludes_plt	    1
@@ -4996,30 +5021,30 @@ elf_x86_64_special_sections[]=
 
 /* CloudABI support.  */
 
-#undef  TARGET_LITTLE_SYM
+#undef	TARGET_LITTLE_SYM
 #define TARGET_LITTLE_SYM		    x86_64_elf64_cloudabi_vec
-#undef  TARGET_LITTLE_NAME
+#undef	TARGET_LITTLE_NAME
 #define TARGET_LITTLE_NAME		    "elf64-x86-64-cloudabi"
 
 #undef	ELF_OSABI
 #define	ELF_OSABI			    ELFOSABI_CLOUDABI
 
-#undef  elf64_bed
+#undef	elf64_bed
 #define elf64_bed elf64_x86_64_cloudabi_bed
 
 #include "elf64-target.h"
 
 /* FreeBSD support.  */
 
-#undef  TARGET_LITTLE_SYM
+#undef	TARGET_LITTLE_SYM
 #define TARGET_LITTLE_SYM		    x86_64_elf64_fbsd_vec
-#undef  TARGET_LITTLE_NAME
+#undef	TARGET_LITTLE_NAME
 #define TARGET_LITTLE_NAME		    "elf64-x86-64-freebsd"
 
 #undef	ELF_OSABI
 #define	ELF_OSABI			    ELFOSABI_FREEBSD
 
-#undef  elf64_bed
+#undef	elf64_bed
 #define elf64_bed elf64_x86_64_fbsd_bed
 
 #include "elf64-target.h"
@@ -5030,6 +5055,14 @@ elf_x86_64_special_sections[]=
 #define TARGET_LITTLE_SYM		    x86_64_elf64_sol2_vec
 #undef  TARGET_LITTLE_NAME
 #define TARGET_LITTLE_NAME		    "elf64-x86-64-sol2"
+
+static const struct elf_x86_backend_data elf_x86_64_solaris_arch_bed =
+  {
+    is_solaris				    /* os */
+  };
+
+#undef	elf_backend_arch_data
+#define	elf_backend_arch_data		    &elf_x86_64_solaris_arch_bed
 
 /* Restore default: we cannot use ELFOSABI_SOLARIS, otherwise ELFOSABI_NONE
    objects won't be recognized.  */
@@ -5110,11 +5143,11 @@ elf64_x86_64_nacl_elf_object_p (bfd *abfd)
 
 static const bfd_byte elf_x86_64_nacl_plt0_entry[NACL_PLT_ENTRY_SIZE] =
   {
-    0xff, 0x35, 8, 0, 0, 0,             /* pushq GOT+8(%rip) 		*/
+    0xff, 0x35, 8, 0, 0, 0,		/* pushq GOT+8(%rip)		*/
     0x4c, 0x8b, 0x1d, 16, 0, 0, 0,	/* mov GOT+16(%rip), %r11	*/
-    0x41, 0x83, 0xe3, NACLMASK,         /* and $-32, %r11d		*/
-    0x4d, 0x01, 0xfb,             	/* add %r15, %r11		*/
-    0x41, 0xff, 0xe3,             	/* jmpq *%r11			*/
+    0x41, 0x83, 0xe3, NACLMASK,		/* and $-32, %r11d		*/
+    0x4d, 0x01, 0xfb,			/* add %r15, %r11		*/
+    0x41, 0xff, 0xe3,			/* jmpq *%r11			*/
 
     /* 9-byte nop sequence to pad out to the next 32-byte boundary.  */
     0x66, 0x0f, 0x1f, 0x84, 0, 0, 0, 0, 0, /* nopw 0x0(%rax,%rax,1)	*/
@@ -5124,49 +5157,49 @@ static const bfd_byte elf_x86_64_nacl_plt0_entry[NACL_PLT_ENTRY_SIZE] =
     0x2e, 0x0f, 0x1f, 0x84, 0, 0, 0, 0, 0, /* nopw %cs:0x0(%rax,%rax,1)	*/
     0x66, 0x66, 0x66, 0x66, 0x66, 0x66,    /* excess data16 prefixes	*/
     0x2e, 0x0f, 0x1f, 0x84, 0, 0, 0, 0, 0, /* nopw %cs:0x0(%rax,%rax,1)	*/
-    0x66,                                  /* excess data16 prefix	*/
-    0x90                                   /* nop */
+    0x66,				   /* excess data16 prefix	*/
+    0x90				   /* nop */
   };
 
 static const bfd_byte elf_x86_64_nacl_plt_entry[NACL_PLT_ENTRY_SIZE] =
   {
     0x4c, 0x8b, 0x1d, 0, 0, 0, 0,	/* mov name@GOTPCREL(%rip),%r11	*/
-    0x41, 0x83, 0xe3, NACLMASK,         /* and $-32, %r11d		*/
-    0x4d, 0x01, 0xfb,             	/* add %r15, %r11		*/
-    0x41, 0xff, 0xe3,             	/* jmpq *%r11			*/
+    0x41, 0x83, 0xe3, NACLMASK,		/* and $-32, %r11d		*/
+    0x4d, 0x01, 0xfb,			/* add %r15, %r11		*/
+    0x41, 0xff, 0xe3,			/* jmpq *%r11			*/
 
     /* 15-byte nop sequence to pad out to the next 32-byte boundary.  */
     0x66, 0x66, 0x66, 0x66, 0x66, 0x66,    /* excess data16 prefixes	*/
     0x2e, 0x0f, 0x1f, 0x84, 0, 0, 0, 0, 0, /* nopw %cs:0x0(%rax,%rax,1)	*/
 
     /* Lazy GOT entries point here (32-byte aligned).  */
-    0x68,                 /* pushq immediate */
-    0, 0, 0, 0,           /* replaced with index into relocation table.  */
-    0xe9,                 /* jmp relative */
-    0, 0, 0, 0,           /* replaced with offset to start of .plt0.  */
+    0x68,		  /* pushq immediate */
+    0, 0, 0, 0,		  /* replaced with index into relocation table.	 */
+    0xe9,		  /* jmp relative */
+    0, 0, 0, 0,		  /* replaced with offset to start of .plt0.  */
 
-    /* 22 bytes of nop to pad out to the standard size.  */
+    /* 22 bytes of nop to pad out to the standard size.	 */
     0x66, 0x66, 0x66, 0x66, 0x66, 0x66,    /* excess data16 prefixes	*/
     0x2e, 0x0f, 0x1f, 0x84, 0, 0, 0, 0, 0, /* nopw %cs:0x0(%rax,%rax,1)	*/
-    0x0f, 0x1f, 0x80, 0, 0, 0, 0,          /* nopl 0x0(%rax)		*/
+    0x0f, 0x1f, 0x80, 0, 0, 0, 0,	   /* nopl 0x0(%rax)		*/
   };
 
 /* .eh_frame covering the .plt section.  */
 
 static const bfd_byte elf_x86_64_nacl_eh_frame_plt[] =
   {
-#if (PLT_CIE_LENGTH != 20                               \
-     || PLT_FDE_LENGTH != 36                            \
-     || PLT_FDE_START_OFFSET != 4 + PLT_CIE_LENGTH + 8  \
+#if (PLT_CIE_LENGTH != 20				\
+     || PLT_FDE_LENGTH != 36				\
+     || PLT_FDE_START_OFFSET != 4 + PLT_CIE_LENGTH + 8	\
      || PLT_FDE_LEN_OFFSET != 4 + PLT_CIE_LENGTH + 12)
 # error "Need elf_x86_backend_data parameters for eh_frame_plt offsets!"
 #endif
     PLT_CIE_LENGTH, 0, 0, 0,	/* CIE length */
     0, 0, 0, 0,			/* CIE ID */
     1,				/* CIE version */
-    'z', 'R', 0,                /* Augmentation string */
+    'z', 'R', 0,		/* Augmentation string */
     1,				/* Code alignment factor */
-    0x78,                       /* Data alignment factor */
+    0x78,			/* Data alignment factor */
     16,				/* Return address column */
     1,				/* Augmentation size */
     DW_EH_PE_pcrel | DW_EH_PE_sdata4, /* FDE encoding */
@@ -5194,28 +5227,28 @@ static const bfd_byte elf_x86_64_nacl_eh_frame_plt[] =
 
 static const struct elf_x86_lazy_plt_layout elf_x86_64_nacl_plt =
   {
-    elf_x86_64_nacl_plt0_entry,              /* plt0_entry */
-    NACL_PLT_ENTRY_SIZE,                     /* plt0_entry_size */
-    elf_x86_64_nacl_plt_entry,               /* plt_entry */
-    NACL_PLT_ENTRY_SIZE,                     /* plt_entry_size */
-    2,                                       /* plt0_got1_offset */
-    9,                                       /* plt0_got2_offset */
-    13,                                      /* plt0_got2_insn_end */
-    3,                                       /* plt_got_offset */
-    33,                                      /* plt_reloc_offset */
-    38,                                      /* plt_plt_offset */
-    7,                                       /* plt_got_insn_size */
-    42,                                      /* plt_plt_insn_end */
-    32,                                      /* plt_lazy_offset */
-    elf_x86_64_nacl_plt0_entry,              /* pic_plt0_entry */
-    elf_x86_64_nacl_plt_entry,               /* pic_plt_entry */
-    elf_x86_64_nacl_eh_frame_plt,            /* eh_frame_plt */
+    elf_x86_64_nacl_plt0_entry,		     /* plt0_entry */
+    NACL_PLT_ENTRY_SIZE,		     /* plt0_entry_size */
+    elf_x86_64_nacl_plt_entry,		     /* plt_entry */
+    NACL_PLT_ENTRY_SIZE,		     /* plt_entry_size */
+    2,					     /* plt0_got1_offset */
+    9,					     /* plt0_got2_offset */
+    13,					     /* plt0_got2_insn_end */
+    3,					     /* plt_got_offset */
+    33,					     /* plt_reloc_offset */
+    38,					     /* plt_plt_offset */
+    7,					     /* plt_got_insn_size */
+    42,					     /* plt_plt_insn_end */
+    32,					     /* plt_lazy_offset */
+    elf_x86_64_nacl_plt0_entry,		     /* pic_plt0_entry */
+    elf_x86_64_nacl_plt_entry,		     /* pic_plt_entry */
+    elf_x86_64_nacl_eh_frame_plt,	     /* eh_frame_plt */
     sizeof (elf_x86_64_nacl_eh_frame_plt)    /* eh_frame_plt_size */
   };
 
 static const struct elf_x86_backend_data elf_x86_64_nacl_arch_bed =
   {
-    is_nacl                                  /* os */
+    is_nacl				     /* os */
   };
 
 #undef	elf_backend_arch_data
@@ -5242,9 +5275,9 @@ elf32_x86_64_nacl_elf_object_p (bfd *abfd)
   return TRUE;
 }
 
-#undef  TARGET_LITTLE_SYM
+#undef	TARGET_LITTLE_SYM
 #define TARGET_LITTLE_SYM		x86_64_elf32_nacl_vec
-#undef  TARGET_LITTLE_NAME
+#undef	TARGET_LITTLE_NAME
 #define TARGET_LITTLE_NAME		"elf32-x86-64-nacl"
 #undef	elf32_bed
 #define	elf32_bed			elf32_x86_64_nacl_bed
@@ -5311,7 +5344,11 @@ elf64_l1om_elf_object_p (bfd *abfd)
 #undef	ELF_MAXPAGESIZE
 #undef	ELF_MINPAGESIZE
 #undef	ELF_COMMONPAGESIZE
-#define ELF_MAXPAGESIZE			0x200000
+#if DEFAULT_LD_Z_SEPARATE_CODE
+# define ELF_MAXPAGESIZE		0x1000
+#else
+# define ELF_MAXPAGESIZE		0x200000
+#endif
 #define ELF_MINPAGESIZE			0x1000
 #define ELF_COMMONPAGESIZE		0x1000
 #undef	elf_backend_plt_alignment

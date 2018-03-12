@@ -1,5 +1,5 @@
 /* x86 specific support for ELF
-   Copyright (C) 2017 Free Software Foundation, Inc.
+   Copyright (C) 2017-2018 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -76,14 +76,11 @@
    into the shared library.  However, if we are linking with -Bsymbolic,
    we do not need to copy a reloc against a global symbol which is
    defined in an object we are including in the link (i.e., DEF_REGULAR
-   is set).  At this point we have not seen all the input files, so it
-   is possible that DEF_REGULAR is not set now but will be set later (it
-   is never cleared).  In case of a weak definition, DEF_REGULAR may be
-   cleared later by a strong definition in a shared library.  We account
-   for that possibility below by storing information in the relocs_copied
-   field of the hash table entry.  A similar situation occurs when
-   creating shared libraries and symbol visibility changes render the
-   symbol local.
+   is set).
+
+   If PCREL_PLT is true, don't generate dynamic relocation in PIE for
+   PC-relative relocation against a dynamic function definition in data
+   section when PLT address can be used.
 
    If on the other hand, we are creating an executable, we may need to
    keep relocations for symbols satisfied by a dynamic library if we
@@ -91,23 +88,30 @@
 
    We also need to generate dynamic pointer relocation against
    STT_GNU_IFUNC symbol in the non-code section.  */
-#define NEED_DYNAMIC_RELOCATION_P(INFO, H, SEC, R_TYPE, POINTER_TYPE) \
+#define NEED_DYNAMIC_RELOCATION_P(INFO, PCREL_PLT, H, SEC, R_TYPE, \
+				  POINTER_TYPE) \
   ((bfd_link_pic (INFO) \
     && (! X86_PCREL_TYPE_P (R_TYPE) \
 	|| ((H) != NULL \
 	    && (! (bfd_link_pie (INFO) \
 		   || SYMBOLIC_BIND ((INFO), (H))) \
 		|| (H)->root.type == bfd_link_hash_defweak \
-		|| !(H)->def_regular)))) \
-		|| ((H) != NULL \
-		    && (H)->type == STT_GNU_IFUNC \
-		    && (R_TYPE) == POINTER_TYPE \
-		    && ((SEC)->flags & SEC_CODE) == 0) \
-		    || (ELIMINATE_COPY_RELOCS \
-			&& !bfd_link_pic (INFO) \
-			&& (H) != NULL \
-			&& ((H)->root.type == bfd_link_hash_defweak \
-			    || !(H)->def_regular)))
+		|| (!(bfd_link_pie (INFO) \
+		      && (PCREL_PLT) \
+		      && (H)->plt.refcount > 0 \
+		      && ((SEC)->flags & SEC_CODE) == 0 \
+		      && (H)->type == STT_FUNC \
+		      && (H)->def_dynamic) \
+		    && !(H)->def_regular))))) \
+   || ((H) != NULL \
+       && (H)->type == STT_GNU_IFUNC \
+       && (R_TYPE) == POINTER_TYPE \
+       && ((SEC)->flags & SEC_CODE) == 0) \
+   || (ELIMINATE_COPY_RELOCS \
+       && !bfd_link_pic (INFO) \
+       && (H) != NULL \
+       && ((H)->root.type == bfd_link_hash_defweak \
+	   || !(H)->def_regular)))
 
 /* TRUE if dynamic relocation should be generated.  Don't copy a
    pc-relative relocation into the output file if the symbol needs
@@ -133,7 +137,6 @@
        && (EH) != NULL \
        && (EH)->elf.dynindx != -1 \
        && (!(EH)->elf.non_got_ref \
-	   || (EH)->func_pointer_refcount > 0 \
 	   || ((EH)->elf.root.type == bfd_link_hash_undefweak \
 	       && !(RESOLVED_TO_ZERO))) \
 	       && (((EH)->elf.def_dynamic && !(EH)->elf.def_regular) \
@@ -268,10 +271,6 @@ struct elf_x86_link_hash_entry
      is only used by x86-64.  */
   unsigned int needs_copy : 1;
 
-  /* Reference count of C/C++ function pointer relocations in read-write
-     section which can be resolved at run-time.  */
-  bfd_signed_vma func_pointer_refcount;
-
   /* Information about the GOT PLT entry. Filled when there are both
      GOT and PLT relocations against the same function.  */
   union gotplt_union plt_got;
@@ -289,12 +288,12 @@ struct elf_x86_lazy_plt_layout
   /* The first entry in an absolute lazy procedure linkage table looks
      like this.  */
   const bfd_byte *plt0_entry;
-  unsigned int plt0_entry_size;          /* Size of PLT0 entry.  */
+  unsigned int plt0_entry_size;		 /* Size of PLT0 entry.  */
 
   /* Later entries in an absolute lazy procedure linkage table look
      like this.  */
   const bfd_byte *plt_entry;
-  unsigned int plt_entry_size;          /* Size of each PLT entry.  */
+  unsigned int plt_entry_size;		/* Size of each PLT entry.  */
 
   /* Offsets into plt0_entry that are to be replaced with GOT[1] and
      GOT[2].  */
@@ -343,7 +342,7 @@ struct elf_x86_non_lazy_plt_layout
   /* Entries in a PIC non-lazy procedure linkage table look like this.  */
   const bfd_byte *pic_plt_entry;
 
-  unsigned int plt_entry_size;          /* Size of each PLT entry.  */
+  unsigned int plt_entry_size;		/* Size of each PLT entry.  */
 
   /* Offsets into plt_entry that are to be replaced with...  */
   unsigned int plt_got_offset;    /* ... address of this symbol in .got. */
@@ -365,7 +364,7 @@ struct elf_x86_plt_layout
   const bfd_byte *plt0_entry;
   /* Entries in a procedure linkage table look like this.  */
   const bfd_byte *plt_entry;
-  unsigned int plt_entry_size;          /* Size of each PLT entry.  */
+  unsigned int plt_entry_size;		/* Size of each PLT entry.  */
 
   /* 1 has PLT0.  */
   unsigned int has_plt0;
@@ -406,6 +405,7 @@ struct elf_x86_plt_layout
 enum elf_x86_target_os
 {
   is_normal,
+  is_solaris,
   is_vxworks,
   is_nacl
 };
@@ -482,6 +482,17 @@ struct elf_x86_link_hash_table
    /* Value used to fill the unused bytes of the first PLT entry.  This
       is only used for i386.  */
   bfd_byte plt0_pad_byte;
+
+  /* TRUE if GOT is referenced.  */
+  unsigned int got_referenced : 1;
+
+  /* TRUE if PLT is PC-relative.  PLT in PDE and PC-relative PLT in PIE
+     can be used as function address.
+
+     NB: i386 has non-PIC PLT and PIC PLT.  Only non-PIC PLT in PDE can
+     be used as function address.  PIC PLT in PIE can't be used as
+     function address.  */
+  unsigned int pcrel_plt : 1;
 
   bfd_vma (*r_info) (bfd_vma, bfd_vma);
   bfd_vma (*r_sym) (bfd_vma);
@@ -693,7 +704,7 @@ extern bfd * _bfd_x86_elf_link_setup_gnu_properties
 #define elf_backend_gc_mark_hook \
   _bfd_x86_elf_gc_mark_hook
 #define elf_backend_omit_section_dynsym \
-  ((bfd_boolean (*) (bfd *, struct bfd_link_info *, asection *)) bfd_true)
+  _bfd_elf_omit_section_dynsym_all
 #define elf_backend_parse_gnu_properties \
   _bfd_x86_elf_parse_gnu_properties
 #define elf_backend_merge_gnu_properties \

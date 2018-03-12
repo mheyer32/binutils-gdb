@@ -1,5 +1,5 @@
 /* Serial interface for a pipe to a separate program
-   Copyright (C) 1999-2017 Free Software Foundation, Inc.
+   Copyright (C) 1999-2018 Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions.
 
@@ -219,7 +219,6 @@ static const struct serial_ops pipe_ops =
   ser_base_copy_tty_state,
   ser_base_set_tty_state,
   ser_base_print_tty_state,
-  ser_base_noflush_set_tty_state,
   ser_base_setbaudrate,
   ser_base_setstopbits,
   ser_base_setparity,

@@ -1,5 +1,5 @@
 /* BFD back-end for WDC 65816 COFF binaries.
-   Copyright (C) 1995-2017 Free Software Foundation, Inc.
+   Copyright (C) 1995-2018 Free Software Foundation, Inc.
    Written by Steve Chamberlain, <sac@cygnus.com>.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -349,7 +349,7 @@ w65_reloc16_extra_cases (bfd *abfd,
       }
       break;
     default:
-      printf (_("ignoring reloc %s\n"), reloc->howto->name);
+      _bfd_error_handler (_("%pB: %s unsupported"), abfd, reloc->howto->name);
       break;
 
     }

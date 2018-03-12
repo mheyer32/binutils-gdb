@@ -1,6 +1,6 @@
 /* Print and select stack frames for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2017 Free Software Foundation, Inc.
+   Copyright (C) 1986-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -616,8 +616,8 @@ print_frame_args (struct symbol *func, struct frame_info *frame,
 	    {
 	      struct symbol *nsym;
 
-	      nsym = lookup_symbol (SYMBOL_LINKAGE_NAME (sym),
-				    b, VAR_DOMAIN, NULL).symbol;
+	      nsym = lookup_symbol_search_name (SYMBOL_SEARCH_NAME (sym),
+						b, VAR_DOMAIN).symbol;
 	      gdb_assert (nsym != NULL);
 	      if (SYMBOL_CLASS (nsym) == LOC_REGISTER
 		  && !SYMBOL_IS_ARGUMENT (nsym))
@@ -1380,7 +1380,7 @@ parse_frame_specification (const char *frame_exp, int *selected_frame_p)
    ADDR_EXP.  Absolutely all information in the frame is printed.  */
 
 static void
-info_frame_command (char *addr_exp, int from_tty)
+info_frame_command (const char *addr_exp, int from_tty)
 {
   struct frame_info *fi;
   struct symbol *func;
@@ -1692,7 +1692,7 @@ info_frame_command (char *addr_exp, int from_tty)
    frames.  */
 
 static void
-backtrace_command_1 (char *count_exp, int show_locals, int no_filters,
+backtrace_command_1 (const char *count_exp, int show_locals, int no_filters,
 		     int from_tty)
 {
   struct frame_info *fi;
@@ -1744,7 +1744,9 @@ backtrace_command_1 (char *count_exp, int show_locals, int no_filters,
       else
 	{
 	  py_start = 0;
-	  py_end = count;
+	  /* The argument to apply_ext_lang_frame_filter is the number
+	     of the final frame to print, and frames start at 0.  */
+	  py_end = count - 1;
 	}
     }
   else
@@ -1773,11 +1775,13 @@ backtrace_command_1 (char *count_exp, int show_locals, int no_filters,
 
   if (! no_filters)
     {
-      int flags = PRINT_LEVEL | PRINT_FRAME_INFO | PRINT_ARGS;
+      frame_filter_flags flags = PRINT_LEVEL | PRINT_FRAME_INFO | PRINT_ARGS;
       enum ext_lang_frame_args arg_type;
 
       if (show_locals)
 	flags |= PRINT_LOCALS;
+      if (from_tty)
+	flags |= PRINT_MORE_FRAMES;
 
       if (!strcmp (print_frame_arguments, "scalars"))
 	arg_type = CLI_SCALAR_VALUES;
@@ -1844,12 +1848,12 @@ backtrace_command_1 (char *count_exp, int show_locals, int no_filters,
 }
 
 static void
-backtrace_command (char *arg, int from_tty)
+backtrace_command (const char *arg, int from_tty)
 {
-  struct cleanup *old_chain = make_cleanup (null_cleanup, NULL);
   int fulltrace_arg = -1, arglen = 0, argc = 0, no_filters  = -1;
   int user_arg = 0;
 
+  std::string reconstructed_arg;
   if (arg)
     {
       char **argv;
@@ -1884,17 +1888,15 @@ backtrace_command (char *arg, int from_tty)
 	{
 	  if (arglen > 0)
 	    {
-	      arg = (char *) xmalloc (arglen + 1);
-	      make_cleanup (xfree, arg);
-	      arg[0] = 0;
 	      for (i = 0; i < argc; i++)
 		{
 		  if (i != fulltrace_arg && i != no_filters)
 		    {
-		      strcat (arg, argv[i]);
-		      strcat (arg, " ");
+		      reconstructed_arg += argv[i];
+		      reconstructed_arg += " ";
 		    }
 		}
+	      arg = reconstructed_arg.c_str ();
 	    }
 	  else
 	    arg = NULL;
@@ -1903,8 +1905,6 @@ backtrace_command (char *arg, int from_tty)
 
   backtrace_command_1 (arg, fulltrace_arg >= 0 /* show_locals */,
 		       no_filters >= 0 /* no frame-filters */, from_tty);
-
-  do_cleanups (old_chain);
 }
 
 /* Iterate over the local variables of a block B, calling CB with
@@ -1926,6 +1926,7 @@ iterate_over_block_locals (const struct block *b,
 	case LOC_REGISTER:
 	case LOC_STATIC:
 	case LOC_COMPUTED:
+	case LOC_OPTIMIZED_OUT:
 	  if (SYMBOL_IS_ARGUMENT (sym))
 	    break;
 	  if (SYMBOL_DOMAIN (sym) == COMMON_BLOCK_DOMAIN)
@@ -2110,7 +2111,7 @@ print_frame_local_vars (struct frame_info *frame, int num_tabs,
 }
 
 void
-info_locals_command (char *args, int from_tty)
+info_locals_command (const char *args, int from_tty)
 {
   print_frame_local_vars (get_selected_frame (_("No frame selected.")),
 			  0, gdb_stdout);
@@ -2144,8 +2145,8 @@ iterate_over_block_arg_vars (const struct block *b,
 	     float).  There are also LOC_ARG/LOC_REGISTER pairs which
 	     are not combined in symbol-reading.  */
 
-	  sym2 = lookup_symbol (SYMBOL_LINKAGE_NAME (sym),
-				b, VAR_DOMAIN, NULL).symbol;
+	  sym2 = lookup_symbol_search_name (SYMBOL_SEARCH_NAME (sym),
+					    b, VAR_DOMAIN).symbol;
 	  (*cb) (SYMBOL_PRINT_NAME (sym), sym2, cb_data);
 	}
     }
@@ -2192,7 +2193,7 @@ print_frame_arg_vars (struct frame_info *frame, struct ui_file *stream)
 }
 
 void
-info_args_command (char *ignore, int from_tty)
+info_args_command (const char *ignore, int from_tty)
 {
   print_frame_arg_vars (get_selected_frame (_("No frame selected.")),
 			gdb_stdout);
@@ -2270,7 +2271,7 @@ find_relative_frame (struct frame_info *frame, int *level_offset_ptr)
    expressions.  */
 
 void
-select_frame_command (char *level_exp, int from_tty)
+select_frame_command (const char *level_exp, int from_tty)
 {
   struct frame_info *prev_frame = get_selected_frame_if_set ();
 
@@ -2284,7 +2285,7 @@ select_frame_command (char *level_exp, int from_tty)
    the selected frame.  */
 
 static void
-frame_command (char *level_exp, int from_tty)
+frame_command (const char *level_exp, int from_tty)
 {
   struct frame_info *prev_frame = get_selected_frame_if_set ();
 
@@ -2314,13 +2315,13 @@ up_silently_base (const char *count_exp)
 }
 
 static void
-up_silently_command (char *count_exp, int from_tty)
+up_silently_command (const char *count_exp, int from_tty)
 {
   up_silently_base (count_exp);
 }
 
 static void
-up_command (char *count_exp, int from_tty)
+up_command (const char *count_exp, int from_tty)
 {
   up_silently_base (count_exp);
   observer_notify_user_selected_context_changed (USER_SELECTED_FRAME);
@@ -2353,20 +2354,20 @@ down_silently_base (const char *count_exp)
 }
 
 static void
-down_silently_command (char *count_exp, int from_tty)
+down_silently_command (const char *count_exp, int from_tty)
 {
   down_silently_base (count_exp);
 }
 
 static void
-down_command (char *count_exp, int from_tty)
+down_command (const char *count_exp, int from_tty)
 {
   down_silently_base (count_exp);
   observer_notify_user_selected_context_changed (USER_SELECTED_FRAME);
 }
 
 void
-return_command (char *retval_exp, int from_tty)
+return_command (const char *retval_exp, int from_tty)
 {
   /* Initialize it just to avoid a GCC false warning.  */
   enum return_value_convention rv_conv = RETURN_VALUE_STRUCT_CONVENTION;
@@ -2501,7 +2502,7 @@ struct function_bounds
 };
 
 static void
-func_command (char *arg, int from_tty)
+func_command (const char *arg, int from_tty)
 {
   struct frame_info *frame;
   int found = 0;

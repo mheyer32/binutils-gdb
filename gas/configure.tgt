@@ -1,6 +1,6 @@
 # gas target specific configuration file.  This is a -*- sh -*- file.
 #
-#   Copyright (C) 2012-2017 Free Software Foundation, Inc.
+#   Copyright (C) 2012-2018 Free Software Foundation, Inc.
 #
 # This file is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -346,12 +346,13 @@ case ${generic_target} in
   mips*-*-linux*)			fmt=elf em=tmips ;;
   mips*-*-freebsd* | mips*-*-kfreebsd*-gnu)
 					fmt=elf em=freebsd ;;
-  mips-*-sysv4*MP* | mips-*-gnu*)	fmt=elf em=tmips ;;
+  mips-*-sysv4* | mips-*-gnu*)		fmt=elf em=tmips ;;
   mips*-sde-elf* | mips*-mti-elf* | mips*-img-elf*)
 					fmt=elf em=tmips ;;
   mips-*-elf*)				fmt=elf ;;
   mips-*-netbsd*)			fmt=elf em=tmips ;;
   mips-*-openbsd*)			fmt=elf em=tmips ;;
+  mips-*-windiss)			fmt=elf ;;
 
   mmix-*-*)				fmt=elf ;;
 

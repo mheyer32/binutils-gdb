@@ -1416,7 +1416,7 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
 	  && name[1] == '_'
 	  && strcmp (name + (name[2] == '_'), "__gnu_lto_slim") == 0)
 	_bfd_error_handler
-	  (_("%B: plugin needed to handle lto object"), abfd);
+	  (_("%pB: plugin needed to handle lto object"), abfd);
     }
   else
     row = DEF_ROW;
@@ -1698,7 +1698,7 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
 	    {
 	      _bfd_error_handler
 		/* xgettext:c-format */
-		(_("%B: indirect symbol `%s' to `%s' is a loop"),
+		(_("%pB: indirect symbol `%s' to `%s' is a loop"),
 		 abfd, name, string);
 	      bfd_set_error (bfd_error_invalid_operation);
 	      return FALSE;
@@ -2568,7 +2568,7 @@ default_indirect_link_order (bfd *output_bfd,
 	 difficult, and sometimes impossible.  */
       _bfd_error_handler
 	/* xgettext:c-format */
-	(_("Attempt to do relocatable link with %s input and %s output"),
+	(_("attempt to do relocatable link with %s input and %s output"),
 	 bfd_get_target (input_bfd), bfd_get_target (output_bfd));
       bfd_set_error (bfd_error_wrong_format);
       return FALSE;
@@ -2854,7 +2854,7 @@ _bfd_handle_already_linked (asection *sec,
     case SEC_LINK_DUPLICATES_ONE_ONLY:
       info->callbacks->einfo
 	/* xgettext:c-format */
-	(_("%B: ignoring duplicate section `%A'\n"),
+	(_("%pB: ignoring duplicate section `%pA'\n"),
 	 sec->owner, sec);
       break;
 
@@ -2864,7 +2864,7 @@ _bfd_handle_already_linked (asection *sec,
       else if (sec->size != l->sec->size)
 	info->callbacks->einfo
 	  /* xgettext:c-format */
-	  (_("%B: duplicate section `%A' has different size\n"),
+	  (_("%pB: duplicate section `%pA' has different size\n"),
 	   sec->owner, sec);
       break;
 
@@ -2874,7 +2874,7 @@ _bfd_handle_already_linked (asection *sec,
       else if (sec->size != l->sec->size)
 	info->callbacks->einfo
 	  /* xgettext:c-format */
-	  (_("%B: duplicate section `%A' has different size\n"),
+	  (_("%pB: duplicate section `%pA' has different size\n"),
 	   sec->owner, sec);
       else if (sec->size != 0)
 	{
@@ -2883,18 +2883,18 @@ _bfd_handle_already_linked (asection *sec,
 	  if (!bfd_malloc_and_get_section (sec->owner, sec, &sec_contents))
 	    info->callbacks->einfo
 	      /* xgettext:c-format */
-	      (_("%B: could not read contents of section `%A'\n"),
+	      (_("%pB: could not read contents of section `%pA'\n"),
 	       sec->owner, sec);
 	  else if (!bfd_malloc_and_get_section (l->sec->owner, l->sec,
 						&l_sec_contents))
 	    info->callbacks->einfo
 	      /* xgettext:c-format */
-	      (_("%B: could not read contents of section `%A'\n"),
+	      (_("%pB: could not read contents of section `%pA'\n"),
 	       l->sec->owner, l->sec);
 	  else if (memcmp (sec_contents, l_sec_contents, sec->size) != 0)
 	    info->callbacks->einfo
 	      /* xgettext:c-format */
-	      (_("%B: duplicate section `%A' has different contents\n"),
+	      (_("%pB: duplicate section `%pA' has different contents\n"),
 	       sec->owner, sec);
 
 	  if (sec_contents)
@@ -3382,14 +3382,115 @@ _bfd_generic_verify_endian_match (bfd *ibfd, struct bfd_link_info *info)
       && obfd->xvec->byteorder != BFD_ENDIAN_UNKNOWN)
     {
       if (bfd_big_endian (ibfd))
-	_bfd_error_handler (_("%B: compiled for a big endian system "
+	_bfd_error_handler (_("%pB: compiled for a big endian system "
 			      "and target is little endian"), ibfd);
       else
-	_bfd_error_handler (_("%B: compiled for a little endian system "
+	_bfd_error_handler (_("%pB: compiled for a little endian system "
 			      "and target is big endian"), ibfd);
       bfd_set_error (bfd_error_wrong_format);
       return FALSE;
     }
 
   return TRUE;
+}
+
+int
+_bfd_nolink_sizeof_headers (bfd *abfd ATTRIBUTE_UNUSED,
+			    struct bfd_link_info *info ATTRIBUTE_UNUSED)
+{
+  return 0;
+}
+
+bfd_boolean
+_bfd_nolink_bfd_relax_section (bfd *abfd,
+			       asection *section ATTRIBUTE_UNUSED,
+			       struct bfd_link_info *link_info ATTRIBUTE_UNUSED,
+			       bfd_boolean *again ATTRIBUTE_UNUSED)
+{
+  return _bfd_bool_bfd_false_error (abfd);
+}
+
+bfd_byte *
+_bfd_nolink_bfd_get_relocated_section_contents
+    (bfd *abfd,
+     struct bfd_link_info *link_info ATTRIBUTE_UNUSED,
+     struct bfd_link_order *link_order ATTRIBUTE_UNUSED,
+     bfd_byte *data ATTRIBUTE_UNUSED,
+     bfd_boolean relocatable ATTRIBUTE_UNUSED,
+     asymbol **symbols ATTRIBUTE_UNUSED)
+{
+  return (bfd_byte *) _bfd_ptr_bfd_null_error (abfd);
+}
+
+bfd_boolean
+_bfd_nolink_bfd_lookup_section_flags
+    (struct bfd_link_info *info ATTRIBUTE_UNUSED,
+     struct flag_info *flaginfo ATTRIBUTE_UNUSED,
+     asection *section)
+{
+  return _bfd_bool_bfd_false_error (section->owner);
+}
+
+bfd_boolean
+_bfd_nolink_bfd_is_group_section (bfd *abfd,
+				  const asection *sec ATTRIBUTE_UNUSED)
+{
+  return _bfd_bool_bfd_false_error (abfd);
+}
+
+bfd_boolean
+_bfd_nolink_bfd_discard_group (bfd *abfd, asection *sec ATTRIBUTE_UNUSED)
+{
+  return _bfd_bool_bfd_false_error (abfd);
+}
+
+struct bfd_link_hash_table *
+_bfd_nolink_bfd_link_hash_table_create (bfd *abfd)
+{
+  return (struct bfd_link_hash_table *) _bfd_ptr_bfd_null_error (abfd);
+}
+
+void
+_bfd_nolink_bfd_link_just_syms (asection *sec ATTRIBUTE_UNUSED,
+				struct bfd_link_info *info ATTRIBUTE_UNUSED)
+{
+}
+
+void
+_bfd_nolink_bfd_copy_link_hash_symbol_type
+    (bfd *abfd ATTRIBUTE_UNUSED,
+     struct bfd_link_hash_entry *from ATTRIBUTE_UNUSED,
+     struct bfd_link_hash_entry *to ATTRIBUTE_UNUSED)
+{
+}
+
+bfd_boolean
+_bfd_nolink_bfd_link_split_section (bfd *abfd, asection *sec ATTRIBUTE_UNUSED)
+{
+  return _bfd_bool_bfd_false_error (abfd);
+}
+
+bfd_boolean
+_bfd_nolink_section_already_linked (bfd *abfd,
+				    asection *sec ATTRIBUTE_UNUSED,
+				    struct bfd_link_info *info ATTRIBUTE_UNUSED)
+{
+  return _bfd_bool_bfd_false_error (abfd);
+}
+
+bfd_boolean
+_bfd_nolink_bfd_define_common_symbol
+    (bfd *abfd,
+     struct bfd_link_info *info ATTRIBUTE_UNUSED,
+     struct bfd_link_hash_entry *h ATTRIBUTE_UNUSED)
+{
+  return _bfd_bool_bfd_false_error (abfd);
+}
+
+struct bfd_link_hash_entry *
+_bfd_nolink_bfd_define_start_stop (struct bfd_link_info *info ATTRIBUTE_UNUSED,
+				   const char *name ATTRIBUTE_UNUSED,
+				   asection *sec)
+{
+  return (struct bfd_link_hash_entry *) _bfd_ptr_bfd_null_error (sec->owner);
 }

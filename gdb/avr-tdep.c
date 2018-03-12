@@ -1,6 +1,6 @@
 /* Target-dependent code for Atmel AVR, for GDB.
 
-   Copyright (C) 1996-2017 Free Software Foundation, Inc.
+   Copyright (C) 1996-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -367,10 +367,11 @@ avr_integer_to_address (struct gdbarch *gdbarch,
 }
 
 static CORE_ADDR
-avr_read_pc (struct regcache *regcache)
+avr_read_pc (readable_regcache *regcache)
 {
   ULONGEST pc;
-  regcache_cooked_read_unsigned (regcache, AVR_PC_REGNUM, &pc);
+
+  regcache->cooked_read (AVR_PC_REGNUM, &pc);
   return avr_make_iaddr (pc);
 }
 
@@ -382,7 +383,7 @@ avr_write_pc (struct regcache *regcache, CORE_ADDR val)
 }
 
 static enum register_status
-avr_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
+avr_pseudo_register_read (struct gdbarch *gdbarch, readable_regcache *regcache,
                           int regnum, gdb_byte *buf)
 {
   ULONGEST val;
@@ -391,7 +392,7 @@ avr_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
   switch (regnum)
     {
     case AVR_PSEUDO_PC_REGNUM:
-      status = regcache_raw_read_unsigned (regcache, AVR_PC_REGNUM, &val);
+      status = regcache->raw_read (AVR_PC_REGNUM, &val);
       if (status != REG_VALID)
 	return status;
       val >>= 1;
@@ -1546,7 +1547,7 @@ avr_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
    All io registers are 8-bit.  */
 
 static void
-avr_io_reg_read_command (char *args, int from_tty)
+avr_io_reg_read_command (const char *args, int from_tty)
 {
   LONGEST bufsiz = 0;
   gdb_byte *buf;

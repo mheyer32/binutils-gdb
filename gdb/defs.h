@@ -1,7 +1,7 @@
 /* *INDENT-OFF* */ /* ATTRIBUTE_PRINTF confuses indent, avoid running it
 		      for now.  */
 /* Basic, host-specific, and target-specific definitions for GDB.
-   Copyright (C) 1986-2017 Free Software Foundation, Inc.
+   Copyright (C) 1986-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -339,27 +339,6 @@ extern int build_address_symbolic (struct gdbarch *,
 extern void print_address (struct gdbarch *, CORE_ADDR, struct ui_file *);
 extern const char *pc_prefix (CORE_ADDR);
 
-/* From source.c */
-
-/* See openp function definition for their description.  */
-#define OPF_TRY_CWD_FIRST     0x01
-#define OPF_SEARCH_IN_PATH    0x02
-#define OPF_RETURN_REALPATH   0x04
-
-extern int openp (const char *, int, const char *, int, char **);
-
-extern int source_full_path_of (const char *, char **);
-
-extern void mod_path (char *, char **);
-
-extern void add_path (char *, char **, int);
-
-extern void directory_switch (char *, int);
-
-extern char *source_path;
-
-extern void init_source_path (void);
-
 /* From exec.c */
 
 /* * Process memory area starting at ADDR with length SIZE.  Area is
@@ -422,10 +401,6 @@ enum info_proc_what
     /* * Display all of the above.  */
     IP_ALL
   };
-
-/* * String containing the current directory (what getwd would return).  */
-
-extern char *current_directory;
 
 /* * Default radixes for input and output.  Only some values supported.  */
 extern unsigned input_radix;
@@ -556,11 +531,6 @@ enum symbol_needs_kind
 /* Dynamic target-system-dependent parameters for GDB.  */
 #include "gdbarch.h"
 
-/* * Maximum size of a register.  Something small, but large enough for
-   all known ISAs.  If it turns out to be too small, make it bigger.  */
-
-enum { MAX_REGISTER_SIZE = 64 };
-
 /* In findvar.c.  */
 
 template<typename T, typename = RequireLongest<T>>
@@ -660,7 +630,7 @@ extern ptid_t (*deprecated_target_wait_hook) (ptid_t ptid,
 extern void (*deprecated_attach_hook) (void);
 extern void (*deprecated_detach_hook) (void);
 extern void (*deprecated_call_command_hook) (struct cmd_list_element * c,
-					     char *cmd, int from_tty);
+					     const char *cmd, int from_tty);
 
 extern int (*deprecated_ui_load_progress_hook) (const char *section,
 						unsigned long num);

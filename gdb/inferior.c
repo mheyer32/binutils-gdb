@@ -1,6 +1,6 @@
 /* Multi-process control for GDB, the GNU debugger.
 
-   Copyright (C) 2008-2017 Free Software Foundation, Inc.
+   Copyright (C) 2008-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -71,6 +71,8 @@ set_current_inferior (struct inferior *inf)
   current_inferior_ = inf;
 }
 
+private_inferior::~private_inferior () = default;
+
 inferior::~inferior ()
 {
   inferior *inf = this;
@@ -80,7 +82,6 @@ inferior::~inferior ()
   xfree (inf->args);
   xfree (inf->terminal);
   target_desc_info_free (inf->tdesc_info);
-  xfree (inf->priv);
 }
 
 inferior::inferior (int pid_)
@@ -209,7 +210,6 @@ exit_inferior_1 (struct inferior *inftoex, int silent)
 
   inf->pid = 0;
   inf->fake_pid_p = 0;
-  xfree (inf->priv);
   inf->priv = NULL;
 
   if (inf->vfork_parent != NULL)
@@ -224,6 +224,8 @@ exit_inferior_1 (struct inferior *inftoex, int silent)
     }
 
   inf->pending_detach = 0;
+  /* Reset it.  */
+  inf->control = {NO_STOP_QUIETLY};
 }
 
 void
@@ -253,15 +255,26 @@ exit_inferior_num_silent (int num)
   exit_inferior_1 (inf, 1);
 }
 
+/* See inferior.h.  */
+
 void
-detach_inferior (int pid)
+detach_inferior (inferior *inf)
 {
-  struct inferior *inf = find_inferior_pid (pid);
+  /* Save the pid, since exit_inferior_1 will reset it.  */
+  int pid = inf->pid;
 
   exit_inferior_1 (inf, 0);
 
   if (print_inferior_events)
     printf_unfiltered (_("[Inferior %d detached]\n"), pid);
+}
+
+/* See inferior.h.  */
+
+void
+detach_inferior (int pid)
+{
+  detach_inferior (find_inferior_pid (pid));
 }
 
 void
@@ -529,7 +542,7 @@ print_selected_inferior (struct ui_out *uiout)
    printed.  */
 
 static void
-print_inferior (struct ui_out *uiout, char *requested_inferiors)
+print_inferior (struct ui_out *uiout, const char *requested_inferiors)
 {
   struct inferior *inf;
   int inf_count = 0;
@@ -718,7 +731,7 @@ inferior_command (const char *args, int from_tty)
 /* Print information about currently known inferiors.  */
 
 static void
-info_inferiors_command (char *args, int from_tty)
+info_inferiors_command (const char *args, int from_tty)
 {
   print_inferior (current_uiout, args);
 }
@@ -726,7 +739,7 @@ info_inferiors_command (char *args, int from_tty)
 /* remove-inferior ID */
 
 static void
-remove_inferior_command (char *args, int from_tty)
+remove_inferior_command (const char *args, int from_tty)
 {
   if (args == NULL || *args == '\0')
     error (_("Requires an argument (inferior id(s) to remove)"));
@@ -771,7 +784,7 @@ add_inferior_with_spaces (void)
      doesn't really return a new address space; otherwise, it
      really does.  */
   aspace = maybe_new_address_space ();
-  pspace = add_program_space (aspace);
+  pspace = new program_space (aspace);
   inf = add_inferior (0);
   inf->pspace = pspace;
   inf->aspace = pspace->aspace;
@@ -790,7 +803,7 @@ add_inferior_with_spaces (void)
 /* add-inferior [-copies N] [-exec FILENAME]  */
 
 static void
-add_inferior_command (char *args, int from_tty)
+add_inferior_command (const char *args, int from_tty)
 {
   int i, copies = 1;
   gdb::unique_xmalloc_ptr<char> exec;
@@ -852,7 +865,7 @@ add_inferior_command (char *args, int from_tty)
 /* clone-inferior [-copies N] [ID] */
 
 static void
-clone_inferior_command (char *args, int from_tty)
+clone_inferior_command (const char *args, int from_tty)
 {
   int i, copies = 1;
   struct inferior *orginf = NULL;
@@ -915,7 +928,7 @@ clone_inferior_command (char *args, int from_tty)
 	 doesn't really return a new address space; otherwise, it
 	 really does.  */
       aspace = maybe_new_address_space ();
-      pspace = add_program_space (aspace);
+      pspace = new program_space (aspace);
       inf = add_inferior (0);
       inf->pspace = pspace;
       inf->aspace = pspace->aspace;

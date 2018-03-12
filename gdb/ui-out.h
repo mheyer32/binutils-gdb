@@ -1,6 +1,6 @@
 /* Output generating routines for GDB.
 
-   Copyright (C) 1999-2017 Free Software Foundation, Inc.
+   Copyright (C) 1999-2018 Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions.
    Written by Fernando Nasser for Cygnus.
@@ -66,14 +66,6 @@ enum ui_out_type
     ui_out_type_list
   };
 
-/* Compatibility wrappers.  */
-
-extern struct cleanup *make_cleanup_ui_out_list_begin_end (struct ui_out *uiout,
-							   const char *id);
-
-extern struct cleanup *make_cleanup_ui_out_tuple_begin_end (struct ui_out *uiout,
-							    const char *id);
-
 class ui_out
 {
  public:
@@ -104,6 +96,7 @@ class ui_out
   void field_core_addr (const char *fldname, struct gdbarch *gdbarch,
 			CORE_ADDR address);
   void field_string (const char *fldname, const char *string);
+  void field_string (const char *fldname, const std::string &string);
   void field_stream (const char *fldname, string_file &stream);
   void field_skip (const char *fldname);
   void field_fmt (const char *fldname, const char *format, ...)

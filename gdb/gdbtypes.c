@@ -1,6 +1,6 @@
 /* Support routines for manipulating internal types for GDB.
 
-   Copyright (C) 1992-2017 Free Software Foundation, Inc.
+   Copyright (C) 1992-2018 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support, using pieces from other GDB modules.
 
@@ -858,6 +858,44 @@ allocate_stub_method (struct type *type)
   return mtype;
 }
 
+/* See gdbtypes.h.  */
+
+bool
+operator== (const dynamic_prop &l, const dynamic_prop &r)
+{
+  if (l.kind != r.kind)
+    return false;
+
+  switch (l.kind)
+    {
+    case PROP_UNDEFINED:
+      return true;
+    case PROP_CONST:
+      return l.data.const_val == r.data.const_val;
+    case PROP_ADDR_OFFSET:
+    case PROP_LOCEXPR:
+    case PROP_LOCLIST:
+      return l.data.baton == r.data.baton;
+    }
+
+  gdb_assert_not_reached ("unhandled dynamic_prop kind");
+}
+
+/* See gdbtypes.h.  */
+
+bool
+operator== (const range_bounds &l, const range_bounds &r)
+{
+#define FIELD_EQ(FIELD) (l.FIELD == r.FIELD)
+
+  return (FIELD_EQ (low)
+	  && FIELD_EQ (high)
+	  && FIELD_EQ (flag_upper_bound_is_count)
+	  && FIELD_EQ (flag_bound_evaluated));
+
+#undef FIELD_EQ
+}
+
 /* Create a range type with a dynamic range from LOW_BOUND to
    HIGH_BOUND, inclusive.  See create_range_type for further details. */
 
@@ -1090,6 +1128,14 @@ discrete_position (struct type *type, LONGEST val, LONGEST *pos)
    Elements will be of type ELEMENT_TYPE, the indices will be of type
    RANGE_TYPE.
 
+   BYTE_STRIDE_PROP, when not NULL, provides the array's byte stride.
+   This byte stride property is added to the resulting array type
+   as a DYN_PROP_BYTE_STRIDE.  As a consequence, the BYTE_STRIDE_PROP
+   argument can only be used to create types that are objfile-owned
+   (see add_dyn_prop), meaning that either this function must be called
+   with an objfile-owned RESULT_TYPE, or an objfile-owned RANGE_TYPE.
+
+   BIT_STRIDE is taken into account only when BYTE_STRIDE_PROP is NULL.
    If BIT_STRIDE is not zero, build a packed array type whose element
    size is BIT_STRIDE.  Otherwise, ignore this parameter.
 
@@ -1101,14 +1147,27 @@ struct type *
 create_array_type_with_stride (struct type *result_type,
 			       struct type *element_type,
 			       struct type *range_type,
+			       struct dynamic_prop *byte_stride_prop,
 			       unsigned int bit_stride)
 {
+  if (byte_stride_prop != NULL
+      && byte_stride_prop->kind == PROP_CONST)
+    {
+      /* The byte stride is actually not dynamic.  Pretend we were
+	 called with bit_stride set instead of byte_stride_prop.
+	 This will give us the same result type, while avoiding
+	 the need to handle this as a special case.  */
+      bit_stride = byte_stride_prop->data.const_val * 8;
+      byte_stride_prop = NULL;
+    }
+
   if (result_type == NULL)
     result_type = alloc_type_copy (range_type);
 
   TYPE_CODE (result_type) = TYPE_CODE_ARRAY;
   TYPE_TARGET_TYPE (result_type) = element_type;
-  if (has_static_range (TYPE_RANGE_DATA (range_type))
+  if (byte_stride_prop == NULL
+      && has_static_range (TYPE_RANGE_DATA (range_type))
       && (!type_not_associated (result_type)
 	  && !type_not_allocated (result_type)))
     {
@@ -1144,7 +1203,9 @@ create_array_type_with_stride (struct type *result_type,
   TYPE_FIELDS (result_type) =
     (struct field *) TYPE_ZALLOC (result_type, sizeof (struct field));
   TYPE_INDEX_TYPE (result_type) = range_type;
-  if (bit_stride > 0)
+  if (byte_stride_prop != NULL)
+    add_dyn_prop (DYN_PROP_BYTE_STRIDE, *byte_stride_prop, result_type);
+  else if (bit_stride > 0)
     TYPE_FIELD_BITSIZE (result_type, 0) = bit_stride;
 
   /* TYPE_TARGET_STUB will take care of zero length arrays.  */
@@ -1163,17 +1224,22 @@ create_array_type (struct type *result_type,
 		   struct type *range_type)
 {
   return create_array_type_with_stride (result_type, element_type,
-					range_type, 0);
+					range_type, NULL, 0);
 }
 
 struct type *
 lookup_array_range_type (struct type *element_type,
 			 LONGEST low_bound, LONGEST high_bound)
 {
-  struct gdbarch *gdbarch = get_type_arch (element_type);
-  struct type *index_type = builtin_type (gdbarch)->builtin_int;
-  struct type *range_type
-    = create_static_range_type (NULL, index_type, low_bound, high_bound);
+  struct type *index_type;
+  struct type *range_type;
+
+  if (TYPE_OBJFILE_OWNED (element_type))
+    index_type = objfile_type (TYPE_OWNER (element_type).objfile)->builtin_int;
+  else
+    index_type = builtin_type (get_type_arch (element_type))->builtin_int;
+  range_type = create_static_range_type (NULL, index_type,
+					 low_bound, high_bound);
 
   return create_array_type (NULL, element_type, range_type);
 }
@@ -1824,6 +1890,17 @@ stub_noname_complaint (void)
   complaint (&symfile_complaints, _("stub type has NULL name"));
 }
 
+/* Return nonzero if TYPE has a DYN_PROP_BYTE_STRIDE dynamic property
+   attached to it, and that property has a non-constant value.  */
+
+static int
+array_type_has_dynamic_stride (struct type *type)
+{
+  struct dynamic_prop *prop = get_dyn_prop (DYN_PROP_BYTE_STRIDE, type);
+
+  return (prop != NULL && prop->kind != PROP_CONST);
+}
+
 /* Worker for is_dynamic_type.  */
 
 static int
@@ -1869,11 +1946,16 @@ is_dynamic_type_internal (struct type *type, int top_level)
       {
 	gdb_assert (TYPE_NFIELDS (type) == 1);
 
-	/* The array is dynamic if either the bounds are dynamic,
-	   or the elements it contains have a dynamic contents.  */
+	/* The array is dynamic if either the bounds are dynamic...  */
 	if (is_dynamic_type_internal (TYPE_INDEX_TYPE (type), 0))
 	  return 1;
-	return is_dynamic_type_internal (TYPE_TARGET_TYPE (type), 0);
+	/* ... or the elements it contains have a dynamic contents...  */
+	if (is_dynamic_type_internal (TYPE_TARGET_TYPE (type), 0))
+	  return 1;
+	/* ... or if it has a dynamic stride...  */
+	if (array_type_has_dynamic_stride (type))
+	  return 1;
+	return 0;
       }
 
     case TYPE_CODE_STRUCT:
@@ -1969,6 +2051,7 @@ resolve_dynamic_array (struct type *type,
   struct type *range_type;
   struct type *ary_dim;
   struct dynamic_prop *prop;
+  unsigned int bit_stride = 0;
 
   gdb_assert (TYPE_CODE (type) == TYPE_CODE_ARRAY);
 
@@ -2000,8 +2083,31 @@ resolve_dynamic_array (struct type *type,
   else
     elt_type = TYPE_TARGET_TYPE (type);
 
-  return create_array_type_with_stride (type, elt_type, range_type,
-                                        TYPE_FIELD_BITSIZE (type, 0));
+  prop = get_dyn_prop (DYN_PROP_BYTE_STRIDE, type);
+  if (prop != NULL)
+    {
+      int prop_eval_ok
+	= dwarf2_evaluate_property (prop, NULL, addr_stack, &value);
+
+      if (prop_eval_ok)
+	{
+	  remove_dyn_prop (DYN_PROP_BYTE_STRIDE, type);
+	  bit_stride = (unsigned int) (value * 8);
+	}
+      else
+	{
+	  /* Could be a bug in our code, but it could also happen
+	     if the DWARF info is not correct.  Issue a warning,
+	     and assume no byte/bit stride (leave bit_stride = 0).  */
+	  warning (_("cannot determine array stride for type %s"),
+		   TYPE_NAME (type) ? TYPE_NAME (type) : "<no name>");
+	}
+    }
+  else
+    bit_stride = TYPE_FIELD_BITSIZE (type, 0);
+
+  return create_array_type_with_stride (type, elt_type, range_type, NULL,
+                                        bit_stride);
 }
 
 /* Resolve dynamic bounds of members of the union TYPE to static
@@ -2241,13 +2347,14 @@ get_dyn_prop (enum dynamic_prop_node_kind prop_kind, const struct type *type)
 
 void
 add_dyn_prop (enum dynamic_prop_node_kind prop_kind, struct dynamic_prop prop,
-              struct type *type, struct objfile *objfile)
+              struct type *type)
 {
   struct dynamic_prop_list *temp;
 
   gdb_assert (TYPE_OBJFILE_OWNED (type));
 
-  temp = XOBNEW (&objfile->objfile_obstack, struct dynamic_prop_list);
+  temp = XOBNEW (&TYPE_OBJFILE (type)->objfile_obstack,
+		 struct dynamic_prop_list);
   temp->prop_kind = prop_kind;
   temp->prop = prop;
   temp->next = TYPE_DYN_PROP_LIST (type);
@@ -2935,6 +3042,16 @@ is_integral_type (struct type *t)
 	 || (TYPE_CODE (t) == TYPE_CODE_BOOL)));
 }
 
+int
+is_floating_type (struct type *t)
+{
+  t = check_typedef (t);
+  return
+    ((t != NULL)
+     && ((TYPE_CODE (t) == TYPE_CODE_FLT)
+	 || (TYPE_CODE (t) == TYPE_CODE_DECFLOAT)));
+}
+
 /* Return true if TYPE is scalar.  */
 
 int
@@ -3438,8 +3555,7 @@ check_types_equal (struct type *type1, struct type *type2,
 
   if (TYPE_CODE (type1) == TYPE_CODE_RANGE)
     {
-      if (memcmp (TYPE_RANGE_DATA (type1), TYPE_RANGE_DATA (type2),
-		  sizeof (*TYPE_RANGE_DATA (type1))) != 0)
+      if (*TYPE_RANGE_DATA (type1) != *TYPE_RANGE_DATA (type2))
 	return 0;
     }
   else
@@ -4583,9 +4699,13 @@ recursive_dump_type (struct type *type, int spaces)
 /* Trivial helpers for the libiberty hash table, for mapping one
    type to another.  */
 
-struct type_pair
+struct type_pair : public allocate_on_obstack
 {
-  struct type *old, *newobj;
+  type_pair (struct type *old_, struct type *newobj_)
+    : old (old_), newobj (newobj_)
+  {}
+
+  struct type * const old, * const newobj;
 };
 
 static hashval_t
@@ -4653,7 +4773,6 @@ copy_type_recursive (struct objfile *objfile,
 		     struct type *type,
 		     htab_t copied_types)
 {
-  struct type_pair *stored, pair;
   void **slot;
   struct type *new_type;
 
@@ -4664,7 +4783,8 @@ copy_type_recursive (struct objfile *objfile,
      if it did, the type might disappear unexpectedly.  */
   gdb_assert (TYPE_OBJFILE (type) == objfile);
 
-  pair.old = type;
+  struct type_pair pair (type, nullptr);
+
   slot = htab_find_slot (copied_types, &pair, INSERT);
   if (*slot != NULL)
     return ((struct type_pair *) *slot)->newobj;
@@ -4673,9 +4793,9 @@ copy_type_recursive (struct objfile *objfile,
 
   /* We must add the new type to the hash table immediately, in case
      we encounter this type again during a recursive call below.  */
-  stored = XOBNEW (&objfile->objfile_obstack, struct type_pair);
-  stored->old = type;
-  stored->newobj = new_type;
+  struct type_pair *stored
+    = new (&objfile->objfile_obstack) struct type_pair (type, new_type);
+
   *slot = stored;
 
   /* Copy the common fields of types.  For the main type, we simply

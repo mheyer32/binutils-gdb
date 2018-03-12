@@ -1,6 +1,6 @@
 /* GDB routines for manipulating objfiles.
 
-   Copyright (C) 1992-2017 Free Software Foundation, Inc.
+   Copyright (C) 1992-2018 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support, using pieces from other GDB modules.
 
@@ -52,6 +52,7 @@
 #include "solist.h"
 #include "gdb_bfd.h"
 #include "btrace.h"
+#include "common/pathstuff.h"
 
 #include <vector>
 
@@ -704,7 +705,7 @@ objfile::~objfile ()
      FIXME: It's not clear which of these are supposed to persist
      between expressions and which ought to be reset each time.  */
   expression_context_block = NULL;
-  innermost_block = NULL;
+  innermost_block.reset ();
 
   /* Check to see if the current_source_symtab belongs to this objfile,
      and if so, call clear_current_source_symtab_and_line.  */
@@ -727,18 +728,6 @@ objfile::~objfile ()
      themselves since they were allocated on the objstack.  */
   if (static_links != NULL)
     htab_delete (static_links);
-}
-
-static void
-do_free_objfile_cleanup (void *obj)
-{
-  delete (struct objfile *) obj;
-}
-
-struct cleanup *
-make_cleanup_free_objfile (struct objfile *obj)
-{
-  return make_cleanup (do_free_objfile_cleanup, obj);
 }
 
 /* Free all the object files at once and clean up their users.  */

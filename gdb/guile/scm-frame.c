@@ -1,6 +1,6 @@
 /* Scheme interface to stack frames.
 
-   Copyright (C) 2008-2017 Free Software Foundation, Inc.
+   Copyright (C) 2008-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -840,7 +840,6 @@ static SCM
 gdbscm_frame_read_var (SCM self, SCM symbol_scm, SCM rest)
 {
   SCM keywords[] = { block_keyword, SCM_BOOL_F };
-  int rc;
   frame_smob *f_smob;
   int block_arg_pos = -1;
   SCM block_scm = SCM_UNDEFINED;

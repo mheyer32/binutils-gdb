@@ -1,6 +1,6 @@
 /* Rust language support definitions for GDB, the GNU debugger.
 
-   Copyright (C) 2016-2017 Free Software Foundation, Inc.
+   Copyright (C) 2016-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -38,6 +38,11 @@ extern bool rust_tuple_struct_type_p (struct type *type);
 /* Given a block, find the name of the block's crate. Returns an empty
    stringif no crate name can be found.  */
 extern std::string rust_crate_for_block (const struct block *block);
+
+/* Returns the last segment of a Rust path like foo::bar::baz.  Will
+   not handle cases where the last segment contains generics.  */
+
+extern const char *rust_last_path_segment (const char *path);
 
 /* Create a new slice type.  NAME is the name of the type.  ELT_TYPE
    is the type of the elements of the slice.  USIZE_TYPE is the Rust

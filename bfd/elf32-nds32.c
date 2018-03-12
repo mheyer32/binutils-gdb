@@ -1,5 +1,5 @@
 /* NDS32-specific support for 32-bit ELF.
-   Copyright (C) 2012-2017 Free Software Foundation, Inc.
+   Copyright (C) 2012-2018 Free Software Foundation, Inc.
    Contributed by Andes Technology Corporation.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -56,56 +56,8 @@ static bfd_reloc_status_type nds32_elf_sda15_reloc
 static bfd_reloc_status_type nds32_elf_do_9_pcrel_reloc
   (bfd *, reloc_howto_type *, asection *, bfd_byte *, bfd_vma,
    asection *, bfd_vma, bfd_vma);
-static void nds32_elf_relocate_hi20
-  (bfd *, int, Elf_Internal_Rela *, Elf_Internal_Rela *, bfd_byte *, bfd_vma);
-static reloc_howto_type *bfd_elf32_bfd_reloc_type_table_lookup
-  (enum elf_nds32_reloc_type);
-static reloc_howto_type *bfd_elf32_bfd_reloc_type_lookup
-  (bfd *, bfd_reloc_code_real_type);
-
-/* Target hooks.  */
-static void nds32_info_to_howto_rel
-  (bfd *, arelent *, Elf_Internal_Rela *dst);
-static void nds32_info_to_howto
-  (bfd *, arelent *, Elf_Internal_Rela *dst);
-static bfd_boolean nds32_elf_add_symbol_hook
-  (bfd *, struct bfd_link_info *, Elf_Internal_Sym *, const char **,
-   flagword *, asection **, bfd_vma *);
-static bfd_boolean nds32_elf_relocate_section
-  (bfd *, struct bfd_link_info *, bfd *, asection *, bfd_byte *,
-   Elf_Internal_Rela *, Elf_Internal_Sym *, asection **);
-static bfd_boolean nds32_elf_object_p (bfd *);
-static void nds32_elf_final_write_processing (bfd *, bfd_boolean);
-static bfd_boolean nds32_elf_set_private_flags (bfd *, flagword);
-static bfd_boolean nds32_elf_merge_private_bfd_data
-  (bfd *, struct bfd_link_info *);
-static bfd_boolean nds32_elf_print_private_bfd_data (bfd *, void *);
-static bfd_boolean nds32_elf_check_relocs
-  (bfd *, struct bfd_link_info *, asection *, const Elf_Internal_Rela *);
-static asection *nds32_elf_gc_mark_hook
-  (asection *, struct bfd_link_info *, Elf_Internal_Rela *,
-   struct elf_link_hash_entry *, Elf_Internal_Sym *);
-static bfd_boolean nds32_elf_adjust_dynamic_symbol
-  (struct bfd_link_info *, struct elf_link_hash_entry *);
-static bfd_boolean nds32_elf_size_dynamic_sections
-  (bfd *, struct bfd_link_info *);
-static bfd_boolean nds32_elf_create_dynamic_sections
-  (bfd *, struct bfd_link_info *);
-static bfd_boolean nds32_elf_finish_dynamic_sections
-  (bfd *, struct bfd_link_info *info);
-static bfd_boolean nds32_elf_finish_dynamic_symbol
-  (bfd *, struct bfd_link_info *, struct elf_link_hash_entry *,
-   Elf_Internal_Sym *);
-static bfd_boolean nds32_elf_mkobject (bfd *);
 
 /* Nds32 helper functions.  */
-static bfd_reloc_status_type nds32_elf_final_sda_base
-  (bfd *, struct bfd_link_info *, bfd_vma *, bfd_boolean);
-static bfd_boolean allocate_dynrelocs (struct elf_link_hash_entry *, void *);
-static bfd_boolean readonly_dynrelocs (struct elf_link_hash_entry *, void *);
-static Elf_Internal_Rela *find_relocs_at_address
-  (Elf_Internal_Rela *, Elf_Internal_Rela *,
-   Elf_Internal_Rela *, enum elf_nds32_reloc_type);
 static bfd_vma calculate_memory_address
 (bfd *, Elf_Internal_Rela *, Elf_Internal_Sym *, Elf_Internal_Shdr *);
 static int nds32_get_section_contents (bfd *, asection *,
@@ -134,13 +86,6 @@ static bfd_boolean  nds32_relax_fp_as_gp
 static bfd_boolean nds32_fag_remove_unused_fpbase
   (bfd *abfd, asection *sec, Elf_Internal_Rela *internal_relocs,
    Elf_Internal_Rela *irelend);
-static bfd_byte *
-nds32_elf_get_relocated_section_contents (bfd *abfd,
-					  struct bfd_link_info *link_info,
-					  struct bfd_link_order *link_order,
-					  bfd_byte *data,
-					  bfd_boolean relocatable,
-					  asymbol **symbols);
 
 enum
 {
@@ -168,32 +113,32 @@ enum
 /* The first entry in a procedure linkage table are reserved,
    and the initial contents are unimportant (we zero them out).
    Subsequent entries look like this.  */
-#define PLT0_ENTRY_WORD0  0x46f00000		/* sethi   r15, HI20(.got+4)      */
-#define PLT0_ENTRY_WORD1  0x58f78000		/* ori     r15, r25, LO12(.got+4) */
-#define PLT0_ENTRY_WORD2  0x05178000		/* lwi     r17, [r15+0]           */
-#define PLT0_ENTRY_WORD3  0x04f78001		/* lwi     r15, [r15+4]           */
-#define PLT0_ENTRY_WORD4  0x4a003c00		/* jr      r15                    */
+#define PLT0_ENTRY_WORD0  0x46f00000		/* sethi   r15, HI20(.got+4)	  */
+#define PLT0_ENTRY_WORD1  0x58f78000		/* ori	   r15, r25, LO12(.got+4) */
+#define PLT0_ENTRY_WORD2  0x05178000		/* lwi	   r17, [r15+0]		  */
+#define PLT0_ENTRY_WORD3  0x04f78001		/* lwi	   r15, [r15+4]		  */
+#define PLT0_ENTRY_WORD4  0x4a003c00		/* jr	   r15			  */
 
 /* $ta is change to $r15 (from $r25).  */
 #define PLT0_PIC_ENTRY_WORD0  0x46f00000	/* sethi   r15, HI20(got[1]@GOT)  */
-#define PLT0_PIC_ENTRY_WORD1  0x58f78000	/* ori     r15, r15, LO12(got[1]@GOT) */
-#define PLT0_PIC_ENTRY_WORD2  0x40f7f400	/* add     r15, gp, r15           */
-#define PLT0_PIC_ENTRY_WORD3  0x05178000	/* lwi     r17, [r15+0]           */
-#define PLT0_PIC_ENTRY_WORD4  0x04f78001	/* lwi     r15, [r15+4]           */
-#define PLT0_PIC_ENTRY_WORD5  0x4a003c00	/* jr      r15                    */
+#define PLT0_PIC_ENTRY_WORD1  0x58f78000	/* ori	   r15, r15, LO12(got[1]@GOT) */
+#define PLT0_PIC_ENTRY_WORD2  0x40f7f400	/* add	   r15, gp, r15		  */
+#define PLT0_PIC_ENTRY_WORD3  0x05178000	/* lwi	   r17, [r15+0]		  */
+#define PLT0_PIC_ENTRY_WORD4  0x04f78001	/* lwi	   r15, [r15+4]		  */
+#define PLT0_PIC_ENTRY_WORD5  0x4a003c00	/* jr	   r15			  */
 
-#define PLT_ENTRY_WORD0  0x46f00000		/* sethi   r15, HI20(&got[n+3])      */
-#define PLT_ENTRY_WORD1  0x04f78000		/* lwi     r15, r15, LO12(&got[n+3]) */
-#define PLT_ENTRY_WORD2  0x4a003c00		/* jr      r15                       */
-#define PLT_ENTRY_WORD3  0x45000000		/* movi    r16, sizeof(RELA) * n     */
-#define PLT_ENTRY_WORD4  0x48000000		/* j      .plt0.                     */
+#define PLT_ENTRY_WORD0	 0x46f00000		/* sethi   r15, HI20(&got[n+3])	     */
+#define PLT_ENTRY_WORD1	 0x04f78000		/* lwi	   r15, r15, LO12(&got[n+3]) */
+#define PLT_ENTRY_WORD2	 0x4a003c00		/* jr	   r15			     */
+#define PLT_ENTRY_WORD3	 0x45000000		/* movi	   r16, sizeof(RELA) * n     */
+#define PLT_ENTRY_WORD4	 0x48000000		/* j	  .plt0.		     */
 
 #define PLT_PIC_ENTRY_WORD0  0x46f00000		/* sethi  r15, HI20(got[n+3]@GOT)    */
-#define PLT_PIC_ENTRY_WORD1  0x58f78000		/* ori    r15, r15,    LO12(got[n+3]@GOT) */
-#define PLT_PIC_ENTRY_WORD2  0x38febc02		/* lw     r15, [gp+r15]              */
-#define PLT_PIC_ENTRY_WORD3  0x4a003c00		/* jr     r15                        */
-#define PLT_PIC_ENTRY_WORD4  0x45000000		/* movi   r16, sizeof(RELA) * n      */
-#define PLT_PIC_ENTRY_WORD5  0x48000000		/* j      .plt0                      */
+#define PLT_PIC_ENTRY_WORD1  0x58f78000		/* ori	  r15, r15,    LO12(got[n+3]@GOT) */
+#define PLT_PIC_ENTRY_WORD2  0x38febc02		/* lw	  r15, [gp+r15]		     */
+#define PLT_PIC_ENTRY_WORD3  0x4a003c00		/* jr	  r15			     */
+#define PLT_PIC_ENTRY_WORD4  0x45000000		/* movi	  r16, sizeof(RELA) * n	     */
+#define PLT_PIC_ENTRY_WORD5  0x48000000		/* j	  .plt0			     */
 
 /* These are macros used to get the relocation accurate value.  */
 #define ACCURATE_8BIT_S1	(0x100)
@@ -247,26 +192,6 @@ struct elf_nds32_pcrel_relocs_copied
   bfd_size_type count;
 };
 
-/* The sh linker needs to keep track of the number of relocs that it
-   decides to copy as dynamic relocs in check_relocs for each symbol.
-   This is so that it can later discard them if they are found to be
-   unnecessary.  We store the information in a field extending the
-   regular ELF linker hash table.  */
-
-struct elf_nds32_dyn_relocs
-{
-  struct elf_nds32_dyn_relocs *next;
-
-  /* The input section of the reloc.  */
-  asection *sec;
-
-  /* Total number of relocs copied for the input section.  */
-  bfd_size_type count;
-
-  /* Number of pc-relative relocs copied for the input section.  */
-  bfd_size_type pc_count;
-};
-
 /* Nds32 ELF linker hash entry.  */
 
 struct elf_nds32_link_hash_entry
@@ -274,7 +199,7 @@ struct elf_nds32_link_hash_entry
   struct elf_link_hash_entry root;
 
   /* Track dynamic relocs copied for this symbol.  */
-  struct elf_nds32_dyn_relocs *dyn_relocs;
+  struct elf_dyn_relocs *dyn_relocs;
 
   /* For checking relocation type.  */
 #define GOT_UNKNOWN     0
@@ -2959,8 +2884,8 @@ bfd_elf32_bfd_reloc_type_lookup (bfd *abfd ATTRIBUTE_UNUSED,
 
 /* Set the howto pointer for an NDS32 ELF reloc.  */
 
-static void
-nds32_info_to_howto_rel (bfd *abfd ATTRIBUTE_UNUSED, arelent *cache_ptr,
+static bfd_boolean
+nds32_info_to_howto_rel (bfd *abfd, arelent *cache_ptr,
 			 Elf_Internal_Rela *dst)
 {
   enum elf_nds32_reloc_type r_type;
@@ -2969,20 +2894,33 @@ nds32_info_to_howto_rel (bfd *abfd ATTRIBUTE_UNUSED, arelent *cache_ptr,
   if (r_type > R_NDS32_GNU_VTENTRY)
     {
       /* xgettext:c-format */
-      _bfd_error_handler (_("%B: invalid NDS32 reloc number: %d"), abfd, r_type);
-      r_type = 0;
+      _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
+			  abfd, r_type);
+      bfd_set_error (bfd_error_bad_value);
+      return FALSE;
     }
   cache_ptr->howto = bfd_elf32_bfd_reloc_type_table_lookup (r_type);
+  return TRUE;
 }
 
-static void
+static bfd_boolean
 nds32_info_to_howto (bfd *abfd ATTRIBUTE_UNUSED, arelent *cache_ptr,
 		     Elf_Internal_Rela *dst)
 {
-  BFD_ASSERT ((ELF32_R_TYPE (dst->r_info) == R_NDS32_NONE)
-	      || ((ELF32_R_TYPE (dst->r_info) > R_NDS32_GNU_VTENTRY)
-		  && (ELF32_R_TYPE (dst->r_info) < R_NDS32_max)));
-  cache_ptr->howto = bfd_elf32_bfd_reloc_type_table_lookup (ELF32_R_TYPE (dst->r_info));
+  unsigned int r_type = ELF32_R_TYPE (dst->r_info);
+
+  if ((r_type == R_NDS32_NONE)
+      || ((r_type > R_NDS32_GNU_VTENTRY)
+	  && (r_type < R_NDS32_max)))
+    {
+      cache_ptr->howto = bfd_elf32_bfd_reloc_type_table_lookup (r_type);
+      return TRUE;
+    }
+
+  /* xgettext:c-format */
+  _bfd_error_handler (_("%pB: unsupported relocation type %#x"), abfd, r_type);
+  bfd_set_error (bfd_error_bad_value);
+  return FALSE;  
 }
 
 /* Support for core dump NOTE sections.
@@ -3304,7 +3242,7 @@ nds32_elf_final_sda_base (bfd *output_bfd, struct bfd_link_info *info,
 	}
       else
 	{
-	  _bfd_error_handler (_("error: Can't find symbol: _SDA_BASE_."));
+	  _bfd_error_handler (_("error: can't find symbol: %s"), "_SDA_BASE_");
 	  return bfd_reloc_dangerous;
 	}
     }
@@ -3528,8 +3466,8 @@ nds32_elf_copy_indirect_symbol (struct bfd_link_info *info,
     {
       if (edir->dyn_relocs != NULL)
 	{
-	  struct elf_nds32_dyn_relocs **pp;
-	  struct elf_nds32_dyn_relocs *p;
+	  struct elf_dyn_relocs **pp;
+	  struct elf_dyn_relocs *p;
 
 	  if (ind->root.type == bfd_link_hash_indirect)
 	    abort ();
@@ -3538,7 +3476,7 @@ nds32_elf_copy_indirect_symbol (struct bfd_link_info *info,
 	     list.  Merge any entries against the same section.  */
 	  for (pp = &eind->dyn_relocs; (p = *pp) != NULL;)
 	    {
-	      struct elf_nds32_dyn_relocs *q;
+	      struct elf_dyn_relocs *q;
 
 	      for (q = edir->dyn_relocs; q != NULL; q = q->next)
 		if (q->sec == p->sec)
@@ -3561,6 +3499,22 @@ nds32_elf_copy_indirect_symbol (struct bfd_link_info *info,
   _bfd_elf_link_hash_copy_indirect (info, dir, ind);
 }
 
+/* Find dynamic relocs for H that apply to read-only sections.  */
+
+static asection *
+readonly_dynrelocs (struct elf_link_hash_entry *h)
+{
+  struct elf_dyn_relocs *p;
+
+  for (p = elf32_nds32_hash_entry (h)->dyn_relocs; p != NULL; p = p->next)
+    {
+      asection *s = p->sec->output_section;
+
+      if (s != NULL && (s->flags & SEC_READONLY) != 0)
+	return p->sec;
+    }
+  return NULL;
+}
 
 /* Adjust a symbol defined by a dynamic object and referenced by a
    regular object.  The current definition is in some section of the
@@ -3573,8 +3527,6 @@ nds32_elf_adjust_dynamic_symbol (struct bfd_link_info *info,
 				 struct elf_link_hash_entry *h)
 {
   struct elf_nds32_link_hash_table *htab;
-  struct elf_nds32_link_hash_entry *eh;
-  struct elf_nds32_dyn_relocs *p;
   bfd *dynobj;
   asection *s;
   unsigned int power_of_two;
@@ -3584,7 +3536,7 @@ nds32_elf_adjust_dynamic_symbol (struct bfd_link_info *info,
   /* Make sure we know what is going on here.  */
   BFD_ASSERT (dynobj != NULL
 	      && (h->needs_plt
-		  || h->u.weakdef != NULL
+		  || h->is_weakalias
 		  || (h->def_dynamic && h->ref_regular && !h->def_regular)));
 
 
@@ -3616,12 +3568,12 @@ nds32_elf_adjust_dynamic_symbol (struct bfd_link_info *info,
   /* If this is a weak symbol, and there is a real definition, the
      processor independent code will have arranged for us to see the
      real definition first, and we can just use the same value.  */
-  if (h->u.weakdef != NULL)
+  if (h->is_weakalias)
     {
-      BFD_ASSERT (h->u.weakdef->root.type == bfd_link_hash_defined
-		  || h->u.weakdef->root.type == bfd_link_hash_defweak);
-      h->root.u.def.section = h->u.weakdef->root.u.def.section;
-      h->root.u.def.value = h->u.weakdef->root.u.def.value;
+      struct elf_link_hash_entry *def = weakdef (h);
+      BFD_ASSERT (def->root.type == bfd_link_hash_defined);
+      h->root.u.def.section = def->root.u.def.section;
+      h->root.u.def.value = def->root.u.def.value;
       return TRUE;
     }
 
@@ -3641,24 +3593,15 @@ nds32_elf_adjust_dynamic_symbol (struct bfd_link_info *info,
     return TRUE;
 
   /* If -z nocopyreloc was given, we won't generate them either.  */
-  if (info->nocopyreloc)
+  if (0 && info->nocopyreloc)
     {
       h->non_got_ref = 0;
       return TRUE;
     }
 
-  eh = (struct elf_nds32_link_hash_entry *) h;
-  for (p = eh->dyn_relocs; p != NULL; p = p->next)
-    {
-      s = p->sec->output_section;
-      if (s != NULL && (s->flags & (SEC_READONLY | SEC_HAS_CONTENTS)) != 0)
-	break;
-    }
-
-  /* If we didn't find any dynamic relocs in sections which needs the
-     copy reloc, then we'll be keeping the dynamic relocs and avoiding
-     the copy reloc.  */
-  if (p == NULL)
+  /* If we don't find any dynamic relocs in read-only sections, then
+     we'll be keeping the dynamic relocs and avoiding the copy reloc.  */
+  if (0 && !readonly_dynrelocs (h))
     {
       h->non_got_ref = 0;
       return TRUE;
@@ -3725,7 +3668,7 @@ allocate_dynrelocs (struct elf_link_hash_entry *h, void *inf)
   struct bfd_link_info *info;
   struct elf_nds32_link_hash_table *htab;
   struct elf_nds32_link_hash_entry *eh;
-  struct elf_nds32_dyn_relocs *p;
+  struct elf_dyn_relocs *p;
 
   if (h->root.type == bfd_link_hash_indirect)
     return TRUE;
@@ -3839,7 +3782,7 @@ allocate_dynrelocs (struct elf_link_hash_entry *h, void *inf)
     {
       if (h->def_regular && (h->forced_local || info->symbolic))
 	{
-	  struct elf_nds32_dyn_relocs **pp;
+	  struct elf_dyn_relocs **pp;
 
 	  for (pp = &eh->dyn_relocs; (p = *pp) != NULL;)
 	    {
@@ -3893,31 +3836,29 @@ allocate_dynrelocs (struct elf_link_hash_entry *h, void *inf)
   return TRUE;
 }
 
-/* Find any dynamic relocs that apply to read-only sections.  */
+/* Set DF_TEXTREL if we find any dynamic relocs that apply to
+   read-only sections.  */
 
 static bfd_boolean
-readonly_dynrelocs (struct elf_link_hash_entry *h, void *inf)
+maybe_set_textrel (struct elf_link_hash_entry *h, void *info_p)
 {
-  struct elf_nds32_link_hash_entry *eh;
-  struct elf_nds32_dyn_relocs *p;
+  asection *sec;
 
-  if (h->root.type == bfd_link_hash_warning)
-    h = (struct elf_link_hash_entry *) h->root.u.i.link;
+  if (h->root.type == bfd_link_hash_indirect)
+    return TRUE;
 
-  eh = (struct elf_nds32_link_hash_entry *) h;
-  for (p = eh->dyn_relocs; p != NULL; p = p->next)
+  sec = readonly_dynrelocs (h);
+  if (sec != NULL)
     {
-      asection *s = p->sec->output_section;
+      struct bfd_link_info *info = (struct bfd_link_info *) info_p;
 
-      if (s != NULL && (s->flags & SEC_READONLY) != 0)
-	{
-	  struct bfd_link_info *info = (struct bfd_link_info *) inf;
+      info->flags |= DF_TEXTREL;
+      info->callbacks->minfo
+	(_("%pB: dynamic relocation against `%pT' in read-only section `%pA'\n"),
+	 sec->owner, h->root.root.string, sec);
 
-	  info->flags |= DF_TEXTREL;
-
-	  /* Not an error, just cut short the traversal.  */
-	  return FALSE;
-	}
+      /* Not an error, just cut short the traversal.  */
+      return FALSE;
     }
   return TRUE;
 }
@@ -3965,9 +3906,9 @@ nds32_elf_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
 
       for (s = ibfd->sections; s != NULL; s = s->next)
 	{
-	  struct elf_nds32_dyn_relocs *p;
+	  struct elf_dyn_relocs *p;
 
-	  for (p = ((struct elf_nds32_dyn_relocs *)
+	  for (p = ((struct elf_dyn_relocs *)
 		    elf_section_data (s)->local_dynrel);
 	       p != NULL; p = p->next)
 	    {
@@ -4113,7 +4054,7 @@ nds32_elf_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
 	  /* If any dynamic relocs apply to a read-only section,
 	     then we need a DT_TEXTREL entry.  */
 	  if ((info->flags & DF_TEXTREL) == 0)
-	    elf_link_hash_traverse (&htab->root, readonly_dynrelocs,
+	    elf_link_hash_traverse (&htab->root, maybe_set_textrel,
 				    (void *) info);
 
 	  if ((info->flags & DF_TEXTREL) != 0)
@@ -4422,14 +4363,14 @@ dtpoff_base (struct bfd_link_info *info)
 }
 
 static bfd_boolean
-nds32_elf_relocate_section (bfd *                  output_bfd ATTRIBUTE_UNUSED,
+nds32_elf_relocate_section (bfd *		   output_bfd ATTRIBUTE_UNUSED,
 			    struct bfd_link_info * info,
-			    bfd *                  input_bfd,
-			    asection *             input_section,
-			    bfd_byte *             contents,
-			    Elf_Internal_Rela *    relocs,
-			    Elf_Internal_Sym *     local_syms,
-			    asection **            local_sections)
+			    bfd *		   input_bfd,
+			    asection *		   input_section,
+			    bfd_byte *		   contents,
+			    Elf_Internal_Rela *	   relocs,
+			    Elf_Internal_Sym *	   local_syms,
+			    asection **		   local_sections)
 {
   Elf_Internal_Shdr *symtab_hdr;
   struct elf_link_hash_entry **sym_hashes;
@@ -4479,15 +4420,15 @@ nds32_elf_relocate_section (bfd *                  output_bfd ATTRIBUTE_UNUSED,
       /* Set the _ITB_BASE_.  */
       if (!nds32_elf_ex9_itb_base (info))
 	{
-	  _bfd_error_handler (_("%B: error: Cannot set _ITB_BASE_"),
-			      output_bfd);
+	  _bfd_error_handler (_("%pB: error: cannot set %s"),
+			      output_bfd, "_ITB_BASE_");
 	  bfd_set_error (bfd_error_bad_value);
 	}
     }
 
   if (table->target_optimize & NDS32_RELAX_JUMP_IFC_ON)
     if (!nds32_elf_ifc_reloc ())
-      _bfd_error_handler (_("error: IFC relocation error."));
+      _bfd_error_handler (_("error: IFC relocation error"));
 
  /* Relocation for .ex9.itable.  */
   if (table->target_optimize & NDS32_RELAX_EX9_ON
@@ -4521,7 +4462,7 @@ nds32_elf_relocate_section (bfd *                  output_bfd ATTRIBUTE_UNUSED,
       if (r_type >= R_NDS32_max)
 	{
 	  /* xgettext:c-format */
-	  _bfd_error_handler (_("%B: error: unknown relocation type %d."),
+	  _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
 			      input_bfd, r_type);
 	  bfd_set_error (bfd_error_bad_value);
 	  ret = FALSE;
@@ -4967,8 +4908,8 @@ nds32_elf_relocate_section (bfd *                  output_bfd ATTRIBUTE_UNUSED,
 	  if (bfd_link_pic (info))
 	    {
 	      _bfd_error_handler
-		(_("%B: warning: cannot deal R_NDS32_25_ABS_RELA in shared "
-		   "mode."), input_bfd);
+		(_("%pB: warning: %s unsupported in shared mode"),
+		 input_bfd, "R_NDS32_25_ABS_RELA");
 	      return FALSE;
 	    }
 	  break;
@@ -5101,7 +5042,7 @@ nds32_elf_relocate_section (bfd *                  output_bfd ATTRIBUTE_UNUSED,
 	    {
 	      /* Incorrect alignment.  */
 	      _bfd_error_handler
-		(_("%B: warning: unaligned access to GOT entry."), input_bfd);
+		(_("%pB: warning: unaligned access to GOT entry"), input_bfd);
 	      ret = FALSE;
 	      r = bfd_reloc_dangerous;
 	      goto check_reloc;
@@ -5143,7 +5084,7 @@ handle_sda:
 	      if (r != bfd_reloc_ok)
 		{
 		  _bfd_error_handler
-		    (_("%B: warning: relocate SDA_BASE failed."), input_bfd);
+		    (_("%pB: warning: relocate SDA_BASE failed"), input_bfd);
 		  ret = FALSE;
 		  goto check_reloc;
 		}
@@ -5165,7 +5106,8 @@ handle_sda:
 		  /* Incorrect alignment.  */
 		  _bfd_error_handler
 		    /* xgettext:c-format */
-		    (_("%B(%A): warning: unaligned small data access of type %d."),
+		    (_("%pB(%pA): warning: unaligned small data access"
+		       " of type %d"),
 		     input_bfd, input_section, r_type);
 		  ret = FALSE;
 		  goto check_reloc;
@@ -5913,7 +5855,7 @@ nds32_check_vec_size (bfd *ibfd)
 	{
 	  _bfd_error_handler
 	    /* xgettext:c-format */
-	    (_("%B: ISR vector size mismatch"
+	    (_("%pB: ISR vector size mismatch"
 	       " with previous modules, previous %u-byte, current %u-byte"),
 	     ibfd,
 	     nds32_vec_size == 1 ? 4 : nds32_vec_size == 2 ? 16 : 0xffffffff,
@@ -5957,7 +5899,7 @@ nds32_elf_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
   if (bfd_little_endian (ibfd) != bfd_little_endian (obfd))
     {
       _bfd_error_handler
-	(_("%B: warning: Endian mismatch with previous modules."), ibfd);
+	(_("%pB: warning: endian mismatch with previous modules"), ibfd);
 
       bfd_set_error (bfd_error_bad_value);
       return FALSE;
@@ -5967,8 +5909,8 @@ nds32_elf_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
   if (in_version == E_NDS32_ELF_VER_1_2)
     {
       _bfd_error_handler
-	(_("%B: warning: Older version of object file encountered, "
-	   "Please recompile with current tool chain."), ibfd);
+	(_("%pB: warning: older version of object file encountered, "
+	   "please recompile with current tool chain"), ibfd);
     }
 
   /* We may need to merge V1 and V2 arch object files to V2.  */
@@ -6045,7 +5987,7 @@ nds32_elf_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
   if ((in_flags & EF_NDS_ABI) != (out_flags & EF_NDS_ABI))
     {
       _bfd_error_handler
-	(_("%B: error: ABI mismatch with previous modules."), ibfd);
+	(_("%pB: error: ABI mismatch with previous modules"), ibfd);
 
       bfd_set_error (bfd_error_bad_value);
       return FALSE;
@@ -6056,7 +5998,8 @@ nds32_elf_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
       if (((in_flags & EF_NDS_ARCH) != E_N1_ARCH))
 	{
 	  _bfd_error_handler
-	    (_("%B: error: Instruction set mismatch with previous modules."), ibfd);
+	    (_("%pB: error: instruction set mismatch with previous modules"),
+	     ibfd);
 
 	  bfd_set_error (bfd_error_bad_value);
 	  return FALSE;
@@ -6082,7 +6025,7 @@ nds32_elf_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
       if (in_version != out_version)
 	_bfd_error_handler
 	  /* xgettext:c-format */
-	  (_("%B: warning: Incompatible elf-versions %s and  %s."),
+	  (_("%pB: warning: incompatible elf-versions %s and %s"),
 	   ibfd, nds32_elfver_strtab[out_version],
 	   nds32_elfver_strtab[in_version]);
 
@@ -6170,6 +6113,15 @@ nds32_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
   asection *sreloc = NULL;
 
   if (bfd_link_relocatable (info))
+    return TRUE;
+
+  /* Don't do anything special with non-loaded, non-alloced sections.
+     In particular, any relocs in such sections should not affect GOT
+     and PLT reference counting (ie. we don't allow them to create GOT
+     or PLT entries), there's no possibility or desire to optimize TLS
+     relocs, and there's not much point in propagating relocs to shared
+     libs that the dynamic linker won't relocate.  */
+  if ((sec->flags & SEC_ALLOC) == 0)
     return TRUE;
 
   symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
@@ -6393,8 +6345,8 @@ nds32_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 		  && (h->root.type == bfd_link_hash_defweak
 		      || !h->def_regular)))
 	    {
-	      struct elf_nds32_dyn_relocs *p;
-	      struct elf_nds32_dyn_relocs **head;
+	      struct elf_dyn_relocs *p;
+	      struct elf_dyn_relocs **head;
 
 	      if (dynobj == NULL)
 		htab->root.dynobj = dynobj = abfd;
@@ -6456,14 +6408,14 @@ nds32_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 		    return FALSE;
 
 		  vpp = &elf_section_data (s)->local_dynrel;
-		  head = (struct elf_nds32_dyn_relocs **) vpp;
+		  head = (struct elf_dyn_relocs **) vpp;
 		}
 
 	      p = *head;
 	      if (p == NULL || p->sec != sec)
 		{
 		  bfd_size_type amt = sizeof (*p);
-		  p = (struct elf_nds32_dyn_relocs *) bfd_alloc (dynobj, amt);
+		  p = (struct elf_dyn_relocs *) bfd_alloc (dynobj, amt);
 		  if (p == NULL)
 		    return FALSE;
 		  p->next = *head;
@@ -8595,7 +8547,8 @@ done_adjust_diff:
 		  && (blank_t2->offset > raddr
 		      || blank_t2->next->offset <= raddr))
 		_bfd_error_handler
-		  (_("%B: Error: search_nds32_elf_blank reports wrong node\n"), abfd);
+		  (_("%pB: error: search_nds32_elf_blank reports wrong node"),
+		   abfd);
 
 	      /* Mark reloc in deleted portion as NONE.
 		 For some relocs like R_NDS32_LABEL that doesn't modify the
@@ -8854,7 +8807,7 @@ relax_range_measurement (bfd *abfd)
 
 static const char * unrecognized_reloc_msg =
   /* xgettext:c-format */
-  N_("%B: warning: %s points to unrecognized reloc at %#Lx");
+  N_("%pB: warning: %s points to unrecognized reloc at %#" PRIx64);
 
 /* Relax LONGCALL1 relocation for nds32_elf_relax_section.  */
 
@@ -8866,19 +8819,19 @@ nds32_elf_relax_longcall1 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
 {
   /* There are 3 variations for LONGCALL1
      case 4-4-2; 16-bit on, optimize off or optimize for space
-     sethi ta, hi20(symbol)     ; LONGCALL1/HI20
+     sethi ta, hi20(symbol)	; LONGCALL1/HI20
      ori   ta, ta, lo12(symbol) ; LO12S0
-     jral5 ta                   ;
+     jral5 ta			;
 
      case 4-4-4; 16-bit off, optimize don't care
-     sethi ta, hi20(symbol)     ; LONGCALL1/HI20
+     sethi ta, hi20(symbol)	; LONGCALL1/HI20
      ori   ta, ta, lo12(symbol) ; LO12S0
-     jral  ta                   ;
+     jral  ta			;
 
      case 4-4-4; 16-bit on, optimize for speed
-     sethi ta, hi20(symbol)     ; LONGCALL1/HI20
+     sethi ta, hi20(symbol)	; LONGCALL1/HI20
      ori   ta, ta, lo12(symbol) ; LO12S0
-     jral  ta                   ;
+     jral  ta			;
      Check code for -mlong-calls output.  */
 
   /* Get the reloc for the address from which the register is
@@ -8907,7 +8860,7 @@ nds32_elf_relax_longcall1 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
   if (hi_irelfn == irelend || lo_irelfn == irelend)
     {
       _bfd_error_handler (unrecognized_reloc_msg, abfd, "R_NDS32_LONGCALL1",
-			  irel->r_offset);
+			  (uint64_t) irel->r_offset);
       return FALSE;
     }
 
@@ -8988,7 +8941,7 @@ nds32_elf_relax_longcall2 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
   if (i1_irelfn == irelend)
     {
       _bfd_error_handler (unrecognized_reloc_msg, abfd, "R_NDS32_LONGCALL2",
-			  irel->r_offset);
+			  (uint64_t) irel->r_offset);
       return FALSE;
     }
 
@@ -9047,24 +9000,24 @@ nds32_elf_relax_longcall3 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
 {
   /* There are 3 variations for LONGCALL3
      case 4-4-4-2; 16-bit on, optimize off or optimize for space
-     bltz  rt,   $1                ; LONGCALL3
-     sethi ta,   hi20(symbol)      ; HI20
+     bltz  rt,	 $1		   ; LONGCALL3
+     sethi ta,	 hi20(symbol)	   ; HI20
      ori   ta, ta,  lo12(symbol)   ; LO12S0
-     jral5 ta                      ;
+     jral5 ta			   ;
      $1
 
      case 4-4-4-4; 16-bit off, optimize don't care
-     bltz  rt,   $1                ; LONGCALL3
-     sethi ta,   hi20(symbol)      ; HI20
+     bltz  rt,	 $1		   ; LONGCALL3
+     sethi ta,	 hi20(symbol)	   ; HI20
      ori   ta, ta,  lo12(symbol)   ; LO12S0
-     jral  ta                      ;
+     jral  ta			   ;
      $1
 
      case 4-4-4-4; 16-bit on, optimize for speed
-     bltz  rt,   $1                ; LONGCALL3
-     sethi ta,   hi20(symbol)      ; HI20
+     bltz  rt,	 $1		   ; LONGCALL3
+     sethi ta,	 hi20(symbol)	   ; HI20
      ori   ta, ta,  lo12(symbol)   ; LO12S0
-     jral  ta                      ;
+     jral  ta			   ;
      $1 */
 
   /* Get the reloc for the address from which the register is
@@ -9094,7 +9047,7 @@ nds32_elf_relax_longcall3 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
   if (hi_irelfn == irelend || lo_irelfn == irelend)
     {
       _bfd_error_handler (unrecognized_reloc_msg, abfd, "R_NDS32_LONGCALL3",
-			  irel->r_offset);
+			  (uint64_t) irel->r_offset);
       return FALSE;
     }
 
@@ -9185,19 +9138,19 @@ nds32_elf_relax_longjump1 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
 {
   /* There are 3 variations for LONGJUMP1
      case 4-4-2; 16-bit bit on, optimize off or optimize for space
-     sethi ta, hi20(symbol)      ; LONGJUMP1/HI20
-     ori   ta, ta, lo12(symbol)  ; LO12S0
-     jr5   ta                    ;
+     sethi ta, hi20(symbol)	 ; LONGJUMP1/HI20
+     ori   ta, ta, lo12(symbol)	 ; LO12S0
+     jr5   ta			 ;
 
      case 4-4-4; 16-bit off, optimize don't care
-     sethi ta, hi20(symbol)      ; LONGJUMP1/HI20
-     ori   ta, ta, lo12(symbol)  ; LO12S0
-     jr    ta                    ;
+     sethi ta, hi20(symbol)	 ; LONGJUMP1/HI20
+     ori   ta, ta, lo12(symbol)	 ; LO12S0
+     jr	   ta			 ;
 
      case 4-4-4; 16-bit on, optimize for speed
-     sethi ta, hi20(symbol)      ; LONGJUMP1/HI20
-     ori   ta, ta, lo12(symbol)  ; LO12S0
-     jr    ta                    ;	*/
+     sethi ta, hi20(symbol)	 ; LONGJUMP1/HI20
+     ori   ta, ta, lo12(symbol)	 ; LO12S0
+     jr	   ta			 ;	*/
 
   /* Get the reloc for the address from which the register is
      being loaded.  This reloc will tell us which function is
@@ -9228,7 +9181,7 @@ nds32_elf_relax_longjump1 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
   if (hi_irelfn == irelend || lo_irelfn == irelend)
     {
       _bfd_error_handler (unrecognized_reloc_msg, abfd, "R_NDS32_LONGJUMP1",
-			  irel->r_offset);
+			  (uint64_t) irel->r_offset);
       return FALSE;
     }
 
@@ -9434,7 +9387,7 @@ nds32_elf_relax_longjump2 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
   if (i2_irelfn == irelend || cond_irelfn == irelend)
     {
       _bfd_error_handler (unrecognized_reloc_msg, abfd, "R_NDS32_LONGJUMP2",
-			  irel->r_offset);
+			  (uint64_t) irel->r_offset);
       return FALSE;
     }
 
@@ -9539,42 +9492,42 @@ nds32_elf_relax_longjump3 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
   /* There are 5 variations for LONGJUMP3
      case 1: 2-4-4-2; 1st insn convertible, 16-bit on,
      optimize off or optimize for space
-     bnes38   rt, ra, $1            ; LONGJUMP3
-     sethi    ta, hi20(symbol)      ; HI20
+     bnes38   rt, ra, $1	    ; LONGJUMP3
+     sethi    ta, hi20(symbol)	    ; HI20
      ori      ta, ta, lo12(symbol)  ; LO12S0
-     jr5      ta                    ;
-     $1:                            ;
+     jr5      ta		    ;
+     $1:			    ;
 
      case 2: 2-4-4-2; 1st insn convertible, 16-bit on, optimize for speed
-     bnes38   rt, ra, $1           ; LONGJUMP3
-     sethi    ta, hi20(symbol)     ; HI20
+     bnes38   rt, ra, $1	   ; LONGJUMP3
+     sethi    ta, hi20(symbol)	   ; HI20
      ori      ta, ta, lo12(symbol) ; LO12S0
-     jr5      ta                   ;
-     $1:                           ; LABEL
+     jr5      ta		   ;
+     $1:			   ; LABEL
 
      case 3: 4-4-4-2; 1st insn not convertible, 16-bit on,
      optimize off or optimize for space
-     bne   rt, ra, $1           ; LONGJUMP3
-     sethi ta, hi20(symbol)     ; HI20
+     bne   rt, ra, $1		; LONGJUMP3
+     sethi ta, hi20(symbol)	; HI20
      ori   ta, ta, lo12(symbol) ; LO12S0
-     jr5   ta                   ;
-     $1:                        ;
+     jr5   ta			;
+     $1:			;
 
      case 4: 4-4-4-4; 1st insn don't care, 16-bit off, optimize don't care
      16-bit off if no INSN16
-     bne   rt, ra, $1           ; LONGJUMP3
-     sethi ta, hi20(symbol)     ; HI20
+     bne   rt, ra, $1		; LONGJUMP3
+     sethi ta, hi20(symbol)	; HI20
      ori   ta, ta, lo12(symbol) ; LO12S0
-     jr    ta                   ;
-     $1:                        ;
+     jr	   ta			;
+     $1:			;
 
      case 5: 4-4-4-4; 1st insn not convertible, 16-bit on, optimize for speed
      16-bit off if no INSN16
-     bne   rt, ra, $1           ; LONGJUMP3
-     sethi ta, hi20(symbol)     ; HI20
+     bne   rt, ra, $1		; LONGJUMP3
+     sethi ta, hi20(symbol)	; HI20
      ori   ta, ta, lo12(symbol) ; LO12S0
-     jr    ta                   ;
-     $1:                        ; LABEL */
+     jr	   ta			;
+     $1:			; LABEL */
 
   /* Get the reloc for the address from which the register is
      being loaded.  This reloc will tell us which function is
@@ -9626,7 +9579,7 @@ nds32_elf_relax_longjump3 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
   if (hi_irelfn == irelend || lo_irelfn == irelend || cond_irelfn == irelend)
     {
       _bfd_error_handler (unrecognized_reloc_msg, abfd, "R_NDS32_LONGJUMP3",
-			  irel->r_offset);
+			  (uint64_t) irel->r_offset);
       return FALSE;
     }
 
@@ -9753,7 +9706,6 @@ nds32_elf_relax_longjump3 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
     else
       {
 	irel->r_info = ELF32_R_INFO (ELF32_R_SYM (irel->r_info), reloc);
-	irel->r_addend = irel->r_addend;
 	hi_irelfn->r_info = ELF32_R_INFO (ELF32_R_SYM (hi_irelfn->r_info),
 					  cond_reloc);
       }
@@ -9806,7 +9758,7 @@ nds32_elf_relax_longcall4 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
   if (hi_irel == irelend)
     {
       _bfd_error_handler (unrecognized_reloc_msg, abfd, "R_NDS32_LONGCALL4",
-			  irel->r_offset);
+			  (uint64_t) irel->r_offset);
       return FALSE;
     }
 
@@ -9836,7 +9788,7 @@ nds32_elf_relax_longcall4 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
   if (ptr_irel == irelend || em_irel == irelend)
     {
       _bfd_error_handler (unrecognized_reloc_msg, abfd, "R_NDS32_LONGCALL4",
-			  irel->r_offset);
+			  (uint64_t) irel->r_offset);
       return FALSE;
     }
   /* Check these is enough space to insert jal in R_NDS32_EMPTY.  */
@@ -9907,7 +9859,7 @@ nds32_elf_relax_longcall5 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
   if (cond_irel == irelend)
     {
       _bfd_error_handler (unrecognized_reloc_msg, abfd, "R_NDS32_LONGCALL5",
-			  irel->r_offset);
+			  (uint64_t) irel->r_offset);
       return FALSE;
     }
 
@@ -9985,7 +9937,7 @@ nds32_elf_relax_longcall6 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
   if (em_irel == irelend)
     {
       _bfd_error_handler (unrecognized_reloc_msg, abfd, "R_NDS32_LONGCALL6",
-			  irel->r_offset);
+			  (uint64_t) irel->r_offset);
       return FALSE;
     }
 
@@ -10023,7 +9975,7 @@ nds32_elf_relax_longcall6 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
       if (cond_irel == irelend)
 	{
 	  _bfd_error_handler (unrecognized_reloc_msg, abfd,
-			      "R_NDS32_LONGCALL6", irel->r_offset);
+			      "R_NDS32_LONGCALL6", (uint64_t) irel->r_offset);
 	  return FALSE;
 	}
       cond_irel->r_addend = 1;
@@ -10072,7 +10024,7 @@ nds32_elf_relax_longcall6 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
       if (cond_irel == irelend)
 	{
 	  _bfd_error_handler (unrecognized_reloc_msg, abfd,
-			      "R_NDS32_LONGCALL6", irel->r_offset);
+			      "R_NDS32_LONGCALL6", (uint64_t) irel->r_offset);
 	  return FALSE;
 	}
       cond_irel->r_addend = 1;
@@ -10122,7 +10074,7 @@ nds32_elf_relax_longjump4 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
   if (hi_irel == irelend)
     {
       _bfd_error_handler (unrecognized_reloc_msg, abfd, "R_NDS32_LONGJUMP4",
-			  irel->r_offset);
+			  (uint64_t) irel->r_offset);
       return FALSE;
     }
 
@@ -10144,7 +10096,7 @@ nds32_elf_relax_longjump4 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
   if (ptr_irel == irelend || em_irel == irelend)
     {
       _bfd_error_handler (unrecognized_reloc_msg, abfd, "R_NDS32_LONGJUMP4",
-			  irel->r_offset);
+			  (uint64_t) irel->r_offset);
       return FALSE;
     }
 
@@ -10218,7 +10170,7 @@ nds32_elf_relax_longjump5 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
   if (cond_irel == irelend)
     {
       _bfd_error_handler (unrecognized_reloc_msg, abfd, "R_NDS32_LONGJUMP5",
-			  irel->r_offset);
+			  (uint64_t) irel->r_offset);
       return FALSE;
     }
 
@@ -10347,7 +10299,7 @@ nds32_elf_relax_longjump6 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
   if (em_irel == irelend)
     {
       _bfd_error_handler (unrecognized_reloc_msg, abfd, "R_NDS32_LONGJUMP6",
-			  irel->r_offset);
+			  (uint64_t) irel->r_offset);
       return FALSE;
     }
 
@@ -10517,7 +10469,7 @@ nds32_elf_relax_longjump7 (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
   if (cond_irel == irelend)
     {
       _bfd_error_handler (unrecognized_reloc_msg, abfd, "R_NDS32_LONGJUMP7",
-			  irel->r_offset);
+			  (uint64_t) irel->r_offset);
       return FALSE;
     }
 
@@ -10622,7 +10574,7 @@ nds32_elf_relax_loadstore (struct bfd_link_info *link_info, bfd *abfd,
   if (hi_irelfn == irelend)
     {
       _bfd_error_handler (unrecognized_reloc_msg, abfd, "R_NDS32_LOADSTORE",
-			  irel->r_offset);
+			  (uint64_t) irel->r_offset);
 	return FALSE;
     }
 
@@ -10669,7 +10621,7 @@ nds32_elf_relax_loadstore (struct bfd_link_info *link_info, bfd *abfd,
 	break;
 
       if (range_type == NDS32_LOADSTORE_FLOAT_S
-	  || range_type == NDS32_LOADSTORE_FLOAT_S)
+	  || range_type == NDS32_LOADSTORE_FLOAT_D)
 	{
 	  range_l = sdata_range[0][0];
 	  range_h = sdata_range[0][1];
@@ -10956,9 +10908,9 @@ nds32_elf_relax_letlsadd (struct bfd_link_info *link_info, bfd *abfd,
 			  Elf_Internal_Shdr *symtab_hdr, bfd_boolean *again)
 {
   /* Local TLS non-pic
-     sethi    ta, hi20(symbol@tpoff)      ; TLS_LE_HI20
+     sethi    ta, hi20(symbol@tpoff)	  ; TLS_LE_HI20
      ori      ta, ta, lo12(symbol@tpoff)  ; TLS_LE_LO12
-     add      ra, ta, tp                  ; TLS_LE_ADD */
+     add      ra, ta, tp		  ; TLS_LE_ADD */
 
   uint32_t insn;
   bfd_vma laddr;
@@ -11096,7 +11048,7 @@ nds32_elf_relax_ptr (bfd *abfd, asection *sec, Elf_Internal_Rela *irel,
   if (re_irel == irelend)
     {
       _bfd_error_handler (unrecognized_reloc_msg, abfd, "R_NDS32_PTR",
-			  irel->r_offset);
+			  (uint64_t) irel->r_offset);
       return FALSE;
     }
 
@@ -11715,7 +11667,7 @@ nds32_elf_pick_relax (bfd_boolean init, asection *sec, bfd_boolean *again,
 	  break;
 	case NDS32_RELAX_JUMP_IFC_ROUND:
 	  if (!nds32_elf_ifc_finish (link_info))
-	    _bfd_error_handler (_("error: Jump IFC Fail."));
+	    _bfd_error_handler (_("error: jump IFC fail"));
 	  if (table->target_optimize & NDS32_RELAX_EX9_ON)
 	    {
 	      pass++;
@@ -11732,7 +11684,7 @@ nds32_elf_pick_relax (bfd_boolean init, asection *sec, bfd_boolean *again,
 	    {
 	      /* Do jump IFC optimization again.  */
 	      if (!nds32_elf_ifc_finish (link_info))
-		_bfd_error_handler (_("error: Jump IFC Fail."));
+		_bfd_error_handler (_("error: jump IFC fail"));
 	    }
 	  break;
 	default:
@@ -11843,7 +11795,8 @@ nds32_elf_relax_section (bfd *abfd, asection *sec,
       /* Set the _ITB_BASE_.  */
       if (!nds32_elf_ex9_itb_base (link_info))
 	{
-	  _bfd_error_handler (_("%B: error: Cannot set _ITB_BASE_"), abfd);
+	  _bfd_error_handler (_("%pB: error: cannot set %s"),
+			      abfd, "_ITB_BASE_");
 	  bfd_set_error (bfd_error_bad_value);
 	}
     }
@@ -12589,7 +12542,7 @@ nds32_relax_fp_as_gp (struct bfd_link_info *link_info,
 	  /* Begin of the region.  */
 	  if (begin_rel)
 	    /* xgettext:c-format */
-	    _bfd_error_handler (_("%B: Nested OMIT_FP in %A."), abfd, sec);
+	    _bfd_error_handler (_("%pB: nested OMIT_FP in %pA"), abfd, sec);
 
 	  begin_rel = irel;
 	  nds32_fag_init (&fag_head);
@@ -12608,7 +12561,8 @@ nds32_relax_fp_as_gp (struct bfd_link_info *link_info,
 	  if (begin_rel == NULL)
 	    {
 	      /* xgettext:c-format */
-	      _bfd_error_handler (_("%B: Unmatched OMIT_FP in %A."), abfd, sec);
+	      _bfd_error_handler (_("%pB: unmatched OMIT_FP in %pA"),
+				  abfd, sec);
 	      continue;
 	    }
 
@@ -12891,7 +12845,7 @@ nds32_elf_get_relocated_section_contents (bfd *abfd,
 		     message instead.  */
 		  link_info->callbacks->einfo
 		    /* xgettext:c-format */
-		    (_("%X%P: %B(%A): relocation \"%R\" goes out of range\n"),
+		    (_("%X%P: %pB(%pA): relocation \"%pR\" goes out of range\n"),
 		     abfd, input_section, * parent);
 		  goto error_return;
 
@@ -14667,7 +14621,7 @@ nds32_elf_ex9_init (void)
 			      sizeof (struct elf_nds32_code_hash_entry),
 			      1023))
     {
-      _bfd_error_handler (_("Linker: cannot init ex9 hash table error \n"));
+      _bfd_error_handler (_("cannot init ex9 hash table error"));
       return FALSE;
     }
   return TRUE;
@@ -15076,7 +15030,7 @@ nds32_elf_ex9_reloc_jmp (struct bfd_link_info *link_info)
 					 (fix_ptr->sec->owner, fix_ptr->sec,
 					  &source_contents, TRUE))
 				    _bfd_error_handler
-				      (_("Linker: error cannot fixed ex9 relocation \n"));
+				      (_("error: cannot fix ex9 relocation"));
 				  if (temp_ptr->order < 32)
 				    insn_ex9 = INSN_EX9_IT_2;
 				  else
@@ -15301,10 +15255,12 @@ nds32_elf_ex9_build_hash_table (bfd *abfd, asection *sec,
 			  /* Incorrect alignment.  */
 			  _bfd_error_handler
 			    /* xgettext:c-format */
-			    (_("%B: warning: unaligned small data access "
-			       "for entry: {%Ld, %Ld, %Ld}, addr = %#Lx, align = %#x"),
-			     abfd, irel->r_offset,
-			     irel->r_info, irel->r_addend, relocation, align);
+			    (_("%pB: warning: unaligned small data access "
+			       "for entry: {%" PRId64 ", %" PRId64 ", %" PRId64
+			       "}, addr = %#" PRIx64 ", align = %#x"),
+			     abfd, (int64_t) irel->r_offset,
+			     (int64_t) irel->r_info, (int64_t) irel->r_addend,
+			     (uint64_t) relocation, align);
 			  off += 4;
 			  continue;
 			}
@@ -15495,7 +15451,7 @@ nds32_elf_ex9_itb_base (struct bfd_link_info *link_info)
 #define ELF_ARCH				bfd_arch_nds32
 #define ELF_MACHINE_CODE			EM_NDS32
 #define ELF_MAXPAGESIZE				0x1000
-#define ELF_TARGET_ID                           NDS32_ELF_DATA
+#define ELF_TARGET_ID				NDS32_ELF_DATA
 
 #define TARGET_BIG_SYM				nds32_elf32_be_vec
 #define TARGET_BIG_NAME				"elf32-nds32be"
@@ -15511,7 +15467,7 @@ nds32_elf_ex9_itb_base (struct bfd_link_info *link_info)
 #define bfd_elf32_bfd_relax_section		nds32_elf_relax_section
 #define bfd_elf32_bfd_set_private_flags		nds32_elf_set_private_flags
 
-#define bfd_elf32_mkobject		        nds32_elf_mkobject
+#define bfd_elf32_mkobject			nds32_elf_mkobject
 #define elf_backend_action_discarded		nds32_elf_action_discarded
 #define elf_backend_add_symbol_hook		nds32_elf_add_symbol_hook
 #define elf_backend_check_relocs		nds32_elf_check_relocs
@@ -15532,7 +15488,7 @@ nds32_elf_ex9_itb_base (struct bfd_link_info *link_info)
 #define elf_backend_final_write_processing	nds32_elf_final_write_processing
 #define elf_backend_special_sections		nds32_elf_special_sections
 #define bfd_elf32_bfd_get_relocated_section_contents \
-                                nds32_elf_get_relocated_section_contents
+				nds32_elf_get_relocated_section_contents
 
 #define elf_backend_can_gc_sections		1
 #define elf_backend_can_refcount		1

@@ -1,4 +1,4 @@
-/* Copyright (C) 2013-2017 Free Software Foundation, Inc.
+/* Copyright (C) 2013-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -134,30 +134,30 @@ static void
 library_list_start_library (struct gdb_xml_parser *parser,
 			    const struct gdb_xml_element *element,
 			    void *user_data,
-			    VEC (gdb_xml_value_s) *attributes)
+			    std::vector<gdb_xml_value> &attributes)
 {
   VEC (lm_info_aix_p) **list = (VEC (lm_info_aix_p) **) user_data;
   lm_info_aix *item = new lm_info_aix;
   struct gdb_xml_value *attr;
 
   attr = xml_find_attribute (attributes, "name");
-  item->filename = xstrdup ((const char *) attr->value);
+  item->filename = xstrdup ((const char *) attr->value.get ());
 
   attr = xml_find_attribute (attributes, "member");
   if (attr != NULL)
-    item->member_name = xstrdup ((const char *) attr->value);
+    item->member_name = xstrdup ((const char *) attr->value.get ());
 
   attr = xml_find_attribute (attributes, "text_addr");
-  item->text_addr = * (ULONGEST *) attr->value;
+  item->text_addr = * (ULONGEST *) attr->value.get ();
 
   attr = xml_find_attribute (attributes, "text_size");
-  item->text_size = * (ULONGEST *) attr->value;
+  item->text_size = * (ULONGEST *) attr->value.get ();
 
   attr = xml_find_attribute (attributes, "data_addr");
-  item->data_addr = * (ULONGEST *) attr->value;
+  item->data_addr = * (ULONGEST *) attr->value.get ();
 
   attr = xml_find_attribute (attributes, "data_size");
-  item->data_size = * (ULONGEST *) attr->value;
+  item->data_size = * (ULONGEST *) attr->value.get ();
 
   VEC_safe_push (lm_info_aix_p, *list, item);
 }
@@ -167,9 +167,11 @@ library_list_start_library (struct gdb_xml_parser *parser,
 static void
 library_list_start_list (struct gdb_xml_parser *parser,
                          const struct gdb_xml_element *element,
-                         void *user_data, VEC (gdb_xml_value_s) *attributes)
+                         void *user_data,
+			 std::vector<gdb_xml_value> &attributes)
 {
-  char *version = (char *) xml_find_attribute (attributes, "version")->value;
+  char *version
+    = (char *) xml_find_attribute (attributes, "version")->value.get ();
 
   if (strcmp (version, "1.0") != 0)
     gdb_xml_error (parser,
@@ -600,7 +602,7 @@ solib_aix_in_dynsym_resolve_code (CORE_ADDR pc)
 /* Implement the "bfd_open" target_so_ops method.  */
 
 static gdb_bfd_ref_ptr
-solib_aix_bfd_open (char *pathname)
+solib_aix_bfd_open (const char *pathname)
 {
   /* The pathname is actually a synthetic filename with the following
      form: "/path/to/sharedlib(member.o)" (double-quotes excluded).
@@ -609,10 +611,9 @@ solib_aix_bfd_open (char *pathname)
      FIXME: This is a little hacky.  Perhaps we should provide access
      to the solib's lm_info here?  */
   const int path_len = strlen (pathname);
-  char *sep;
+  const char *sep;
   int filename_len;
   int found_file;
-  char *found_pathname;
 
   if (pathname[path_len - 1] != ')')
     return solib_bfd_open (pathname);
@@ -636,10 +637,12 @@ solib_aix_bfd_open (char *pathname)
   /* Calling solib_find makes certain that sysroot path is set properly
      if program has a dependency on .a archive and sysroot is set via
      set sysroot command.  */
-  found_pathname = solib_find (filename.c_str (), &found_file);
+  gdb::unique_xmalloc_ptr<char> found_pathname
+    = solib_find (filename.c_str (), &found_file);
   if (found_pathname == NULL)
       perror_with_name (pathname);
-  gdb_bfd_ref_ptr archive_bfd (solib_bfd_fopen (found_pathname, found_file));
+  gdb_bfd_ref_ptr archive_bfd (solib_bfd_fopen (found_pathname.get (),
+						found_file));
   if (archive_bfd == NULL)
     {
       warning (_("Could not open `%s' as an executable file: %s"),

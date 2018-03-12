@@ -1,6 +1,6 @@
 /* Target-dependent code for SPARC.
 
-   Copyright (C) 2003-2017 Free Software Foundation, Inc.
+   Copyright (C) 2003-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -503,7 +503,7 @@ sparc32_register_type (struct gdbarch *gdbarch, int regnum)
 
 static enum register_status
 sparc32_pseudo_register_read (struct gdbarch *gdbarch,
-			      struct regcache *regcache,
+			      readable_regcache *regcache,
 			      int regnum, gdb_byte *buf)
 {
   enum register_status status;
@@ -512,9 +512,9 @@ sparc32_pseudo_register_read (struct gdbarch *gdbarch,
   gdb_assert (regnum >= SPARC32_D0_REGNUM && regnum <= SPARC32_D30_REGNUM);
 
   regnum = SPARC_F0_REGNUM + 2 * (regnum - SPARC32_D0_REGNUM);
-  status = regcache_raw_read (regcache, regnum, buf);
+  status = regcache->raw_read (regnum, buf);
   if (status == REG_VALID)
-    status = regcache_raw_read (regcache, regnum + 1, buf + 4);
+    status = regcache->raw_read (regnum + 1, buf + 4);
   return status;
 }
 

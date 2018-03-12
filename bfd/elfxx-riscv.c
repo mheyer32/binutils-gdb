@@ -1,5 +1,5 @@
 /* RISC-V-specific support for ELF.
-   Copyright (C) 2011-2017 Free Software Foundation, Inc.
+   Copyright (C) 2011-2018 Free Software Foundation, Inc.
 
    Contributed by Andrew Waterman (andrew@sifive.com).
    Based on TILE-Gx and MIPS targets.
@@ -113,8 +113,8 @@ static reloc_howto_type howto_table[] =
 	 bfd_elf_generic_reloc,		/* special_function */
 	 "R_RISCV_COPY",		/* name */
 	 FALSE,				/* partial_inplace */
-	 0,         			/* src_mask */
-	 0,		        	/* dst_mask */
+	 0,				/* src_mask */
+	 0,				/* dst_mask */
 	 FALSE),			/* pcrel_offset */
 
   HOWTO (R_RISCV_JUMP_SLOT,		/* type */
@@ -127,8 +127,8 @@ static reloc_howto_type howto_table[] =
 	 bfd_elf_generic_reloc,		/* special_function */
 	 "R_RISCV_JUMP_SLOT",		/* name */
 	 FALSE,				/* partial_inplace */
-	 0,         			/* src_mask */
-	 0,		        	/* dst_mask */
+	 0,				/* src_mask */
+	 0,				/* dst_mask */
 	 FALSE),			/* pcrel_offset */
 
   /* Dynamic TLS relocations.  */
@@ -139,7 +139,7 @@ static reloc_howto_type howto_table[] =
 	 FALSE,				/* pc_relative */
 	 0,				/* bitpos */
 	 complain_overflow_dont,	/* complain_on_overflow */
-	 bfd_elf_generic_reloc, 	/* special_function */
+	 bfd_elf_generic_reloc,		/* special_function */
 	 "R_RISCV_TLS_DTPMOD32",	/* name */
 	 FALSE,				/* partial_inplace */
 	 0,				/* src_mask */
@@ -153,7 +153,7 @@ static reloc_howto_type howto_table[] =
 	 FALSE,				/* pc_relative */
 	 0,				/* bitpos */
 	 complain_overflow_dont,	/* complain_on_overflow */
-	 bfd_elf_generic_reloc, 	/* special_function */
+	 bfd_elf_generic_reloc,		/* special_function */
 	 "R_RISCV_TLS_DTPMOD64",	/* name */
 	 FALSE,				/* partial_inplace */
 	 0,				/* src_mask */
@@ -167,7 +167,7 @@ static reloc_howto_type howto_table[] =
 	 FALSE,				/* pc_relative */
 	 0,				/* bitpos */
 	 complain_overflow_dont,	/* complain_on_overflow */
-	 bfd_elf_generic_reloc, 	/* special_function */
+	 bfd_elf_generic_reloc,		/* special_function */
 	 "R_RISCV_TLS_DTPREL32",	/* name */
 	 TRUE,				/* partial_inplace */
 	 0,				/* src_mask */
@@ -181,7 +181,7 @@ static reloc_howto_type howto_table[] =
 	 FALSE,				/* pc_relative */
 	 0,				/* bitpos */
 	 complain_overflow_dont,	/* complain_on_overflow */
-	 bfd_elf_generic_reloc, 	/* special_function */
+	 bfd_elf_generic_reloc,		/* special_function */
 	 "R_RISCV_TLS_DTPREL64",	/* name */
 	 TRUE,				/* partial_inplace */
 	 0,				/* src_mask */
@@ -195,7 +195,7 @@ static reloc_howto_type howto_table[] =
 	 FALSE,				/* pc_relative */
 	 0,				/* bitpos */
 	 complain_overflow_dont,	/* complain_on_overflow */
-	 bfd_elf_generic_reloc, 	/* special_function */
+	 bfd_elf_generic_reloc,		/* special_function */
 	 "R_RISCV_TLS_TPREL32",		/* name */
 	 FALSE,				/* partial_inplace */
 	 0,				/* src_mask */
@@ -209,7 +209,7 @@ static reloc_howto_type howto_table[] =
 	 FALSE,				/* pc_relative */
 	 0,				/* bitpos */
 	 complain_overflow_dont,	/* complain_on_overflow */
-	 bfd_elf_generic_reloc, 	/* special_function */
+	 bfd_elf_generic_reloc,		/* special_function */
 	 "R_RISCV_TLS_TPREL64",		/* name */
 	 FALSE,				/* partial_inplace */
 	 0,				/* src_mask */
@@ -948,11 +948,12 @@ riscv_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED, const char *r_name)
 }
 
 reloc_howto_type *
-riscv_elf_rtype_to_howto (unsigned int r_type)
+riscv_elf_rtype_to_howto (bfd *abfd, unsigned int r_type)
 {
   if (r_type >= ARRAY_SIZE (howto_table))
     {
-      (*_bfd_error_handler) (_("unrecognized relocation (0x%x)"), r_type);
+      (*_bfd_error_handler) (_("%pB: unsupported relocation type %#x"),
+			     abfd, r_type);
       bfd_set_error (bfd_error_bad_value);
       return NULL;
     }

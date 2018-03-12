@@ -1,6 +1,6 @@
 /* Target-dependent code for Motorola 68HC11 & 68HC12
 
-   Copyright (C) 1999-2017 Free Software Foundation, Inc.
+   Copyright (C) 1999-2018 Free Software Foundation, Inc.
 
    Contributed by Stephane Carrez, stcarrez@nerim.fr
 
@@ -112,7 +112,7 @@ enum insn_return_kind {
 #define SOFT_D32_REGNUM     (SOFT_D1_REGNUM+31)
 #define M68HC11_MAX_SOFT_REGS 32
 
-#define M68HC11_NUM_REGS        (8)
+#define M68HC11_NUM_REGS        (M68HC11_LAST_HARD_REG + 1)
 #define M68HC11_NUM_PSEUDO_REGS (M68HC11_MAX_SOFT_REGS+5)
 #define M68HC11_ALL_REGS        (M68HC11_NUM_REGS+M68HC11_NUM_PSEUDO_REGS)
 
@@ -279,7 +279,7 @@ m68hc11_which_soft_register (CORE_ADDR addr)
    fetch into a memory read.  */
 static enum register_status
 m68hc11_pseudo_register_read (struct gdbarch *gdbarch,
-			      struct regcache *regcache,
+			      readable_regcache *regcache,
 			      int regno, gdb_byte *buf)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
@@ -292,14 +292,14 @@ m68hc11_pseudo_register_read (struct gdbarch *gdbarch,
       const int regsize = 4;
       enum register_status status;
 
-      status = regcache_cooked_read_unsigned (regcache, HARD_PC_REGNUM, &pc);
+      status = regcache->cooked_read (HARD_PC_REGNUM, &pc);
       if (status != REG_VALID)
 	return status;
       if (pc >= 0x8000 && pc < 0xc000)
         {
           ULONGEST page;
 
-          regcache_cooked_read_unsigned (regcache, HARD_PAGE_REGNUM, &page);
+	  regcache->cooked_read (HARD_PAGE_REGNUM, &page);
           pc -= 0x8000;
           pc += (page << 14);
           pc += 0x1000000;

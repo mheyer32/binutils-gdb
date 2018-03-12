@@ -192,6 +192,9 @@
 /* Define to 1 if you have the `getpagesize' function. */
 #undef HAVE_GETPAGESIZE
 
+/* Define to 1 if you have the `getpgid' function. */
+#undef HAVE_GETPGID
+
 /* Define to 1 if you have the `getrlimit' function. */
 #undef HAVE_GETRLIMIT
 
@@ -218,6 +221,9 @@
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
+
+/* Define to 1 if your system has the kinfo_getfile function. */
+#undef HAVE_KINFO_GETFILE
 
 /* Define to 1 if your system has the kinfo_getvmmap function. */
 #undef HAVE_KINFO_GETVMMAP
@@ -248,6 +254,9 @@
 
 /* Define to 1 if you have the `mcheck' library (-lmcheck). */
 #undef HAVE_LIBMCHECK
+
+/* Define if you have the mpfr library. */
+#undef HAVE_LIBMPFR
 
 /* Define if Python 2.4 is being used. */
 #undef HAVE_LIBPYTHON2_4
@@ -345,18 +354,6 @@
 /* Define to 1 if you have the <proc_service.h> header file. */
 #undef HAVE_PROC_SERVICE_H
 
-/* Define if <sys/procfs.h> has prsysent_t. */
-#undef HAVE_PRSYSENT_T
-
-/* Define if <sys/procfs.h> has pr_sigaction64_t. */
-#undef HAVE_PR_SIGACTION64_T
-
-/* Define if <sys/procfs.h> has pr_siginfo64_t. */
-#undef HAVE_PR_SIGINFO64_T
-
-/* Define if <sys/procfs.h> has pr_sigset_t. */
-#undef HAVE_PR_SIGSET_T
-
 /* Define if <sys/procfs.h> has psaddr_t. */
 #undef HAVE_PSADDR_T
 
@@ -413,9 +410,6 @@
 
 /* Define to 1 if you have the `setsid' function. */
 #undef HAVE_SETSID
-
-/* Define to 1 if you have the <sgtty.h> header file. */
-#undef HAVE_SGTTY_H
 
 /* Define to 1 if you have the `sigaction' function. */
 #undef HAVE_SIGACTION
@@ -495,9 +489,6 @@
 /* Define to 1 if you have the <sys/debugreg.h> header file. */
 #undef HAVE_SYS_DEBUGREG_H
 
-/* Define to 1 if you have the <sys/fault.h> header file. */
-#undef HAVE_SYS_FAULT_H
-
 /* Define to 1 if you have the <sys/file.h> header file. */
 #undef HAVE_SYS_FILE_H
 
@@ -515,9 +506,6 @@
 
 /* Define to 1 if you have the <sys/procfs.h> header file. */
 #undef HAVE_SYS_PROCFS_H
-
-/* Define to 1 if you have the <sys/proc.h> header file. */
-#undef HAVE_SYS_PROC_H
 
 /* Define to 1 if you have the <sys/ptrace.h> header file. */
 #undef HAVE_SYS_PTRACE_H
@@ -537,9 +525,6 @@
 /* Define to 1 if you have the <sys/stat.h> header file. */
 #undef HAVE_SYS_STAT_H
 
-/* Define to 1 if you have the <sys/syscall.h> header file. */
-#undef HAVE_SYS_SYSCALL_H
-
 /* Define to 1 if you have the <sys/types.h> header file. */
 #undef HAVE_SYS_TYPES_H
 
@@ -554,9 +539,6 @@
 
 /* Define to 1 if you have the <termios.h> header file. */
 #undef HAVE_TERMIOS_H
-
-/* Define to 1 if you have the <termio.h> header file. */
-#undef HAVE_TERMIO_H
 
 /* Define to 1 if you have the <term.h> header file. */
 #undef HAVE_TERM_H
@@ -621,9 +603,6 @@
 /* Define if the jit-reader-dir directory should be relocated when GDB is
    moved. */
 #undef JIT_READER_DIR_RELOCATABLE
-
-/* Define if you want to use new multi-fd /proc interface. */
-#undef NEW_PROC_API
 
 /* Name of this package. */
 #undef PACKAGE

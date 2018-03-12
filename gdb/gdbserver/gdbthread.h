@@ -1,5 +1,5 @@
 /* Multi-thread control defs for remote server for GDB.
-   Copyright (C) 1993-2017 Free Software Foundation, Inc.
+   Copyright (C) 1993-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -123,6 +123,18 @@ find_thread (int pid, Func func)
     });
 }
 
+/* Find the first thread that matches FILTER for which FUNC returns true.
+   Return NULL if no thread satisfying these conditions is found.  */
+
+template <typename Func>
+static thread_info *
+find_thread (ptid_t filter, Func func)
+{
+  return find_thread ([&] (thread_info *thread) {
+    return thread->id.matches (filter) && func (thread);
+  });
+}
+
 /* Invoke FUNC for each thread.  */
 
 template <typename Func>
@@ -211,8 +223,5 @@ lwpid_of (const thread_info *thread)
 {
   return thread->id.lwp ();
 }
-
-/* Create a cleanup to restore current_thread.  */
-struct cleanup *make_cleanup_restore_current_thread (void);
 
 #endif /* GDB_THREAD_H */

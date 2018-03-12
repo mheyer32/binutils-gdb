@@ -1,6 +1,6 @@
 /* Top level stuff for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2017 Free Software Foundation, Inc.
+   Copyright (C) 1986-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -46,6 +46,7 @@
 #include "infrun.h"
 #include "signals-state-save-restore.h"
 #include <vector>
+#include "common/pathstuff.h"
 
 /* The selected interpreter.  This will be used as a set command
    variable, so it should always be malloc'ed - since
@@ -360,39 +361,12 @@ handle_command_errors (struct gdb_exception e)
   return 1;
 }
 
-/* Type of the command callback passed to catch_command_errors.  */
-
-typedef void (catch_command_errors_ftype) (char *, int);
-
-/* Wrap calls to commands run before the event loop is started.  */
-
-static int
-catch_command_errors (catch_command_errors_ftype *command,
-		      char *arg, int from_tty)
-{
-  TRY
-    {
-      int was_sync = current_ui->prompt_state == PROMPT_BLOCKED;
-
-      command (arg, from_tty);
-
-      maybe_wait_sync_command_done (was_sync);
-    }
-  CATCH (e, RETURN_MASK_ALL)
-    {
-      return handle_command_errors (e);
-    }
-  END_CATCH
-
-  return 1;
-}
-
 /* Type of the command callback passed to the const
    catch_command_errors.  */
 
 typedef void (catch_command_errors_const_ftype) (const char *, int);
 
-/* Const-correct catch_command_errors.  */
+/* Wrap calls to commands run before the event loop is started.  */
 
 static int
 catch_command_errors (catch_command_errors_const_ftype command,
@@ -427,6 +401,19 @@ symbol_file_add_main_adapter (const char *arg, int from_tty)
     add_flags |= SYMFILE_VERBOSE;
 
   symbol_file_add_main (arg, add_flags);
+}
+
+/* Perform validation of the '--readnow' and '--readnever' flags.  */
+
+static void
+validate_readnow_readnever ()
+{
+  if (readnever_symbol_files && readnow_symbol_files)
+    {
+      error (_("%s: '--readnow' and '--readnever' cannot be "
+	       "specified simultaneously"),
+	     gdb_program_name);
+    }
 }
 
 /* Type of this option.  */
@@ -520,7 +507,6 @@ captured_main_1 (struct captured_main_args *context)
 
   bfd_init ();
   notice_open_fds ();
-  save_original_signals_state ();
 
   saved_command_line = (char *) xstrdup ("");
 
@@ -606,14 +592,17 @@ captured_main_1 (struct captured_main_args *context)
       OPT_NOWINDOWS,
       OPT_WINDOWS,
       OPT_IX,
-      OPT_IEX
+      OPT_IEX,
+      OPT_READNOW,
+      OPT_READNEVER
     };
     static struct option long_options[] =
     {
       {"tui", no_argument, 0, OPT_TUI},
       {"dbx", no_argument, &dbx_commands, 1},
-      {"readnow", no_argument, &readnow_symbol_files, 1},
-      {"r", no_argument, &readnow_symbol_files, 1},
+      {"readnow", no_argument, NULL, OPT_READNOW},
+      {"readnever", no_argument, NULL, OPT_READNEVER},
+      {"r", no_argument, NULL, OPT_READNOW},
       {"quiet", no_argument, &quiet, 1},
       {"q", no_argument, &quiet, 1},
       {"silent", no_argument, &quiet, 1},
@@ -836,6 +825,20 @@ captured_main_1 (struct captured_main_args *context)
 	    }
 	    break;
 
+	  case OPT_READNOW:
+	    {
+	      readnow_symbol_files = 1;
+	      validate_readnow_readnever ();
+	    }
+	    break;
+
+	  case OPT_READNEVER:
+	    {
+	      readnever_symbol_files = 1;
+	      validate_readnow_readnever ();
+	    }
+	    break;
+
 	  case '?':
 	    error (_("Use `%s --help' for a complete list of options."),
 		   gdb_program_name);
@@ -845,6 +848,8 @@ captured_main_1 (struct captured_main_args *context)
     if (batch_flag)
       quiet = 1;
   }
+
+  save_original_signals_state (quiet);
 
   /* Try to set up an alternate signal stack for SIGSEGV handlers.  */
   setup_alternate_signal_stack ();
@@ -1210,6 +1215,7 @@ Selection of debuggee and its files:\n\n\
   --se=FILE          Use FILE as symbol file and executable file.\n\
   --symbols=SYMFILE  Read symbols from SYMFILE.\n\
   --readnow          Fully read symbol files on first access.\n\
+  --readnever        Do not read symbol files.\n\
   --write            Set writing into executable and core files.\n\n\
 "), stream);
   fputs_unfiltered (_("\

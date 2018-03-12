@@ -1,5 +1,5 @@
 /* ELF program property support.
-   Copyright (C) 2017 Free Software Foundation, Inc.
+   Copyright (C) 2017-2018 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -62,7 +62,7 @@ _bfd_elf_get_property (bfd *abfd, unsigned int type, unsigned int datasz)
   p = (elf_property_list *) bfd_alloc (abfd, sizeof (*p));
   if (p == NULL)
     {
-      _bfd_error_handler (_("%B: out of memory in _bfd_elf_get_property"),
+      _bfd_error_handler (_("%pB: out of memory in _bfd_elf_get_property"),
 			  abfd);
       _exit (EXIT_FAILURE);
     }
@@ -88,7 +88,7 @@ _bfd_elf_parse_gnu_properties (bfd *abfd, Elf_Internal_Note *note)
     {
 bad_size:
       _bfd_error_handler
-	(_("warning: %B: corrupt GNU_PROPERTY_TYPE (%ld) size: %#lx"),
+	(_("warning: %pB: corrupt GNU_PROPERTY_TYPE (%ld) size: %#lx"),
 	 abfd, note->type, note->descsz);
       return FALSE;
     }
@@ -109,7 +109,7 @@ bad_size:
       if (datasz > (size_t) (ptr_end - ptr))
 	{
 	  _bfd_error_handler
-	    (_("warning: %B: corrupt GNU_PROPERTY_TYPE (%ld) type (0x%x) datasz: 0x%x"),
+	    (_("warning: %pB: corrupt GNU_PROPERTY_TYPE (%ld) type (0x%x) datasz: 0x%x"),
 	     abfd, note->type, type, datasz);
 	  /* Clear all properties.  */
 	  elf_properties (abfd) = NULL;
@@ -148,7 +148,7 @@ bad_size:
 	      if (datasz != align_size)
 		{
 		  _bfd_error_handler
-		    (_("warning: %B: corrupt stack size: 0x%x"),
+		    (_("warning: %pB: corrupt stack size: 0x%x"),
 		     abfd, datasz);
 		  /* Clear all properties.  */
 		  elf_properties (abfd) = NULL;
@@ -166,7 +166,7 @@ bad_size:
 	      if (datasz != 0)
 		{
 		  _bfd_error_handler
-		    (_("warning: %B: corrupt no copy on protected size: 0x%x"),
+		    (_("warning: %pB: corrupt no copy on protected size: 0x%x"),
 		     abfd, datasz);
 		  /* Clear all properties.  */
 		  elf_properties (abfd) = NULL;
@@ -183,7 +183,7 @@ bad_size:
 	}
 
       _bfd_error_handler
-	(_("warning: %B: unsupported GNU_PROPERTY_TYPE (%ld) type: 0x%x"),
+	(_("warning: %pB: unsupported GNU_PROPERTY_TYPE (%ld) type: 0x%x"),
 	 abfd, note->type, type);
 
 next:
@@ -328,11 +328,15 @@ _bfd_elf_link_setup_gnu_properties (struct bfd_link_info *info)
 	has_properties = TRUE;
 
 	/* Ignore GNU properties from ELF objects with different machine
-	   code or class.  */
+	   code or class.  Also skip objects without a GNU_PROPERTY note
+	   section.  */
 	if ((elf_machine_code
 	     == get_elf_backend_data (abfd)->elf_machine_code)
 	    && (elfclass
-		== get_elf_backend_data (abfd)->s->elfclass))
+		== get_elf_backend_data (abfd)->s->elfclass)
+	    && bfd_get_section_by_name (abfd,
+					NOTE_GNU_PROPERTY_SECTION_NAME) != NULL
+	    )
 	  {
 	    /* Keep .note.gnu.property section in FIRST_PBFD.  */
 	    first_pbfd = abfd;
@@ -374,10 +378,11 @@ _bfd_elf_link_setup_gnu_properties (struct bfd_link_info *info)
 
 	if (list != NULL)
 	  {
-	    /* Discard .note.gnu.property section in the rest inputs.  */
+	    /* Discard the .note.gnu.property section in this bfd.  */
 	    sec = bfd_get_section_by_name (abfd,
 					   NOTE_GNU_PROPERTY_SECTION_NAME);
-	    sec->output_section = bfd_abs_section_ptr;
+	    if (sec != NULL)
+	      sec->output_section = bfd_abs_section_ptr;
 	  }
       }
 
@@ -393,6 +398,7 @@ _bfd_elf_link_setup_gnu_properties (struct bfd_link_info *info)
 
       sec = bfd_get_section_by_name (first_pbfd,
 				     NOTE_GNU_PROPERTY_SECTION_NAME);
+      BFD_ASSERT (sec != NULL);
 
       /* Update stack size in .note.gnu.property with -z stack-size=N
 	 if N > 0.  */

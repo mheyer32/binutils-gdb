@@ -1,6 +1,6 @@
 /* Common target dependent code for GDB on AArch64 systems.
 
-   Copyright (C) 2009-2017 Free Software Foundation, Inc.
+   Copyright (C) 2009-2018 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of GDB.
@@ -75,7 +75,7 @@ struct gdbarch_tdep
   int (*aarch64_syscall_record) (struct regcache *regcache, unsigned long svc_number);
 };
 
-extern struct target_desc *tdesc_aarch64;
+const target_desc *aarch64_read_description ();
 
 extern int aarch64_process_record (struct gdbarch *gdbarch,
                                struct regcache *regcache, CORE_ADDR addr);

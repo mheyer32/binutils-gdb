@@ -1,6 +1,6 @@
 /* Base/prototype target for default child (native) targets.
 
-   Copyright (C) 1988-2017 Free Software Foundation, Inc.
+   Copyright (C) 1988-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -333,7 +333,7 @@ inf_child_fileio_unlink (struct target_ops *self,
 
 /* Implementation of to_fileio_readlink.  */
 
-static char *
+static gdb::optional<std::string>
 inf_child_fileio_readlink (struct target_ops *self,
 			   struct inferior *inf, const char *filename,
 			   int *target_errno)
@@ -343,22 +343,18 @@ inf_child_fileio_readlink (struct target_ops *self,
 #if defined (PATH_MAX)
   char buf[PATH_MAX];
   int len;
-  char *ret;
 
   len = readlink (filename, buf, sizeof buf);
   if (len < 0)
     {
       *target_errno = host_to_fileio_error (errno);
-      return NULL;
+      return {};
     }
 
-  ret = (char *) xmalloc (len + 1);
-  memcpy (ret, buf, len);
-  ret[len] = '\0';
-  return ret;
+  return std::string (buf, len);
 #else
   *target_errno = FILEIO_ENOSYS;
-  return NULL;
+  return {};
 #endif
 }
 
@@ -408,9 +404,12 @@ inf_child_target (void)
   t->to_remove_breakpoint = memory_remove_breakpoint;
   t->to_terminal_init = child_terminal_init;
   t->to_terminal_inferior = child_terminal_inferior;
+  t->to_terminal_save_inferior = child_terminal_save_inferior;
   t->to_terminal_ours_for_output = child_terminal_ours_for_output;
   t->to_terminal_ours = child_terminal_ours;
   t->to_terminal_info = child_terminal_info;
+  t->to_pass_ctrlc = child_pass_ctrlc;
+  t->to_interrupt = child_interrupt;
   t->to_post_startup_inferior = inf_child_post_startup_inferior;
   t->to_follow_fork = inf_child_follow_fork;
   t->to_can_run = inf_child_can_run;

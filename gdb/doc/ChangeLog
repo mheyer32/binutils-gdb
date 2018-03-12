@@ -1,3 +1,154 @@
+2018-03-04  John Baldwin  <jhb@FreeBSD.org>
+
+	* gdb.texinfo (Debugging Output): Document "set/show debug
+	fbsd-nat".
+
+2018-02-19  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* gdb.texinfo (Machine Code): Additional information about "info
+	line" command.
+
+2018-01-15  Szabolcs Nagy  <szabolcs.nagy@arm.com>
+
+	* gdb.texinfo (gdb-add-index man): Add pindex.
+
+2018-01-15  Szabolcs Nagy  <szabolcs.nagy@arm.com>
+
+	* gdb.texinfo (set cwd): Add period.
+	(gdb-add-index man): Move anchor.
+
+2017-01-12  Tom Tromey  <tom@tromey.com>
+	    Sergio Durigan Junior  <sergiodj@redhat.com>
+
+	* gdb.texinfo (Index Files): Mention gdb-add-index.
+	(gdb-add-index man): New section.
+	* Makefile.in (gdb-add-index.1): New rule to generate manpage
+	from gdb.texinfo.
+
+2018-01-11  Szabolcs Nagy  <szabolcs.nagy@arm.com>
+
+	* gdb.texinfo (pwd): Fix whitespace.
+
+2018-01-09  John Baldwin  <jhb@FreeBSD.org>
+
+	* gdb.texinfo (pwd): Update cross-reference for Process Information
+	node and remove explicit /proc reference.
+	(Native): Rename subsection from SVR4 Process Information to
+	Process Information.
+	(Process Information): Reword introduction to be less /proc
+	centric.  Document support for "info proc" on FreeBSD.
+
+2018-01-03  Xavier Roirand  <roirand@adacore.com>
+
+	* gdb.texinfo (Set Catchpoints): Add documentation for new
+	"catch handlers" action.
+
+2017-12-27  Stafford Horne  <shorne@gmail.com>
+
+	* gdb.texinfo (Target Description Format): Explain that arbitrary
+	strings are now allowed for register groups.
+
+2017-12-27  Stafford Horne  <shorne@gmail.com>
+
+	* gdb.texinfo (Registers): Document info reg $reggroup feature.
+
+2017-12-15  Sergio Durigan Junior  <sergiodj@redhat.com>
+
+	PR cli/16224
+	* gdb.texinfo (ptype): Add documentation for new flag '/o'.
+
+2017-12-13  Simon Marchi  <simon.marchi@ericsson.com>
+
+	* python.texi (Manipulating breakpoints using Python): Document
+	qualified parameter to gdb.Breakpoint.
+
+2017-12-13  Simon Marchi  <simon.marchi@ericsson.com>
+
+	* python.texi (Manipulating breakpoints using Python): Split doc
+	of Breakpoint.__init__ in two, split text in multiple
+	paragraphs, don't nest parameter square brackets.
+
+2017-12-12  Stafford Horne  <shorne@gmail.com>
+	    Stefan Wallentowitz  <stefan@wallentowitz.de>
+	    Franck Jullien  <franck.jullien@gmail.com>
+	    Jeremy Bennett  <jeremy.bennett@embecosm.com>
+
+	* gdb.texinfo: Add OpenRISC documentation.
+
+2017-12-08  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* gdb.texinfo (Index Files): Document .debug_names and -dwarf-5.
+
+2017-12-07  Keith Seitz  <keiths@redhat.com>
+
+	* gdb.texinfo (Symbols): Document "set print type nested-type-limit"
+	and "show print type nested-type-limit".
+
+2017-12-07  Phil Muldoon  <pmuldoon@redhat.com>
+
+       * python.texi (Breakpoints In Python): Add text relating
+	to allowed explicit locations and keywords in gdb.Breakpoints.
+
+2017-12-04  Tom Tromey  <tom@tromey.com>
+
+	* gdb.texinfo (Rust): Update trait object status
+
+2017-12-01  Andrew Cagney  <cagney@redhat.com>
+	    Joel Brobecker  <brobecker@adacore.com>
+	    Sergio Durigan Junior  <sergiodj@redhat.com>
+
+	* gdb.texinfo (File Options): Document --readnever.
+	(Commands to Specify Files): Likewise, for 'symbol-file' and
+	'add-symbol-file'.
+
+2017-11-29  Pedro Alves  <palves@redhat.com>
+
+	PR c++/19436
+	* gdb.texinfo (Debugging C Plus Plus): Document setting
+	breakpoints in functions with ABI tags.
+
+2017-11-29  Pedro Alves  <palves@redhat.com>
+
+	* gdb.texinfo (Linespec Locations): Document how "function" is
+	interpreted in C++ and Ada.  Document "-qualified".
+	(Explicit Locations): Document how "-function" is interpreted in
+	C++ and Ada.  Document "-qualified".
+
+2017-11-26  Dominik Czarnota  <dominik.b.czarnota@gmail.com>
+
+	PR gdb/21945
+	* gdb.texinfo (Search Memory): Update description and example
+	about how to search a string without NULL terminator.
+
+2017-11-24  Joel Brobecker  <brobecker@adacore.com>
+
+	* gdb.texinfo (GDB/MI Ada Exception Information): Document
+	new "exception-message" field.
+
+2017-11-24  Simon Marchi  <simon.marchi@ericsson.com>
+
+	* gdb.texinfo (Memory Map Format): Update gdb-memory-map.dtd.
+
+2017-11-24  Pedro Alves  <palves@redhat.com>
+
+	* gdb.texinfo (Completion): Update need-quoting examples.  Remove
+	false claim that GDB inserts quoting automatically.
+	(Symbols): Add anchor.
+
+2017-11-22  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* gdb.texinfo (Requirements): Document use of GNU MPFR.
+
+2017-11-16  Phil Muldoon  <pmuldoon@redhat.com>
+
+	* python.texi (Basic Python): Add rbreak documentation.
+
+2017-11-07  Xavier Roirand  <roirand@adacore.com>
+	    Pedro Alves  <palves@redhat.com>
+
+	* gdb.texinfo (Set Breaks): Document support for breakpoint
+	location ranges in the enable/disable commands.
+
 2017-10-04  Sergio Durigan Junior  <sergiodj@redhat.com>
 
 	* gdb.texinfo (Starting your Program) <The working directory.>:

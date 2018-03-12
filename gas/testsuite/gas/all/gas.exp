@@ -1,4 +1,4 @@
-# Copyright (C) 2012-2017 Free Software Foundation, Inc.
+# Copyright (C) 2012-2018 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -59,6 +59,7 @@ if { ![istarget cris-*-*] && ![istarget crisv32-*-*]
 if {    ![istarget alpha*-*-*vms*]
      && ![istarget am3*-*-*]
      && ![istarget avr-*-*]
+     && ![istarget ft32-*-*]
      && ![istarget hppa*-*-*]
      && ![istarget microblaze-*-*]
      && ![istarget mn10300-*-*]
@@ -276,6 +277,7 @@ if {    ![istarget *c30*-*-*]
      && ![istarget *c54x*-*-*]
      && ![istarget cr16*-*-*]
      && ![istarget crx*-*-*]
+     && ![istarget ft32-*-*]
      && ![istarget h8300*-*-*]
      && ![istarget hppa*-*-*] } then {
     # The vax fails because VMS can apparently actually handle this

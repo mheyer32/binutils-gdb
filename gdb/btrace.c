@@ -1,6 +1,6 @@
 /* Branch trace support for GDB, the GNU debugger.
 
-   Copyright (C) 2013-2017 Free Software Foundation, Inc.
+   Copyright (C) 2013-2018 Free Software Foundation, Inc.
 
    Contributed by Intel Corp. <markus.t.metzger@intel.com>
 
@@ -1579,11 +1579,8 @@ btrace_enable (struct thread_info *tp, const struct btrace_config *conf)
 
 #if !defined (HAVE_LIBIPT)
   if (conf->format == BTRACE_FORMAT_PT)
-    error (_("GDB does not support Intel Processor Trace."));
+    error (_("Intel Processor Trace support was disabled at compile time."));
 #endif /* !defined (HAVE_LIBIPT) */
-
-  if (!target_supports_btrace (conf->format))
-    error (_("Target does not support branch tracing."));
 
   DEBUG ("enable thread %s (%s)", print_thread_id (tp),
 	 target_pid_to_str (tp->ptid));
@@ -1636,7 +1633,6 @@ void
 btrace_disable (struct thread_info *tp)
 {
   struct btrace_thread_info *btp = &tp->btrace;
-  int errcode = 0;
 
   if (btp->target == NULL)
     return;
@@ -1656,7 +1652,6 @@ void
 btrace_teardown (struct thread_info *tp)
 {
   struct btrace_thread_info *btp = &tp->btrace;
-  int errcode = 0;
 
   if (btp->target == NULL)
     return;
@@ -2004,10 +1999,11 @@ btrace_free_objfile (struct objfile *objfile)
 static void
 check_xml_btrace_version (struct gdb_xml_parser *parser,
 			  const struct gdb_xml_element *element,
-			  void *user_data, VEC (gdb_xml_value_s) *attributes)
+			  void *user_data,
+			  std::vector<gdb_xml_value> &attributes)
 {
   const char *version
-    = (const char *) xml_find_attribute (attributes, "version")->value;
+    = (const char *) xml_find_attribute (attributes, "version")->value.get ();
 
   if (strcmp (version, "1.0") != 0)
     gdb_xml_error (parser, _("Unsupported btrace version: \"%s\""), version);
@@ -2018,7 +2014,8 @@ check_xml_btrace_version (struct gdb_xml_parser *parser,
 static void
 parse_xml_btrace_block (struct gdb_xml_parser *parser,
 			const struct gdb_xml_element *element,
-			void *user_data, VEC (gdb_xml_value_s) *attributes)
+			void *user_data,
+			std::vector<gdb_xml_value> &attributes)
 {
   struct btrace_data *btrace;
   struct btrace_block *block;
@@ -2040,8 +2037,8 @@ parse_xml_btrace_block (struct gdb_xml_parser *parser,
       gdb_xml_error (parser, _("Btrace format error."));
     }
 
-  begin = (ULONGEST *) xml_find_attribute (attributes, "begin")->value;
-  end = (ULONGEST *) xml_find_attribute (attributes, "end")->value;
+  begin = (ULONGEST *) xml_find_attribute (attributes, "begin")->value.get ();
+  end = (ULONGEST *) xml_find_attribute (attributes, "end")->value.get ();
 
   block = VEC_safe_push (btrace_block_s, btrace->variant.bts.blocks, NULL);
   block->begin = *begin;
@@ -2094,16 +2091,20 @@ static void
 parse_xml_btrace_pt_config_cpu (struct gdb_xml_parser *parser,
 				const struct gdb_xml_element *element,
 				void *user_data,
-				VEC (gdb_xml_value_s) *attributes)
+				std::vector<gdb_xml_value> &attributes)
 {
   struct btrace_data *btrace;
   const char *vendor;
   ULONGEST *family, *model, *stepping;
 
-  vendor = (const char *) xml_find_attribute (attributes, "vendor")->value;
-  family = (ULONGEST *) xml_find_attribute (attributes, "family")->value;
-  model = (ULONGEST *) xml_find_attribute (attributes, "model")->value;
-  stepping = (ULONGEST *) xml_find_attribute (attributes, "stepping")->value;
+  vendor =
+    (const char *) xml_find_attribute (attributes, "vendor")->value.get ();
+  family
+    = (ULONGEST *) xml_find_attribute (attributes, "family")->value.get ();
+  model
+    = (ULONGEST *) xml_find_attribute (attributes, "model")->value.get ();
+  stepping
+    = (ULONGEST *) xml_find_attribute (attributes, "stepping")->value.get ();
 
   btrace = (struct btrace_data *) user_data;
 
@@ -2134,7 +2135,8 @@ parse_xml_btrace_pt_raw (struct gdb_xml_parser *parser,
 static void
 parse_xml_btrace_pt (struct gdb_xml_parser *parser,
 		     const struct gdb_xml_element *element,
-		     void *user_data, VEC (gdb_xml_value_s) *attributes)
+		     void *user_data,
+		     std::vector<gdb_xml_value> &attributes)
 {
   struct btrace_data *btrace;
 
@@ -2216,7 +2218,8 @@ parse_xml_btrace (struct btrace_data *btrace, const char *buffer)
 
 #else  /* !defined (HAVE_LIBEXPAT) */
 
-  error (_("Cannot process branch trace.  XML parsing is not supported."));
+  error (_("Cannot process branch trace.  XML support was disabled at "
+	   "compile time."));
 
 #endif  /* !defined (HAVE_LIBEXPAT) */
 }
@@ -2228,7 +2231,8 @@ parse_xml_btrace (struct btrace_data *btrace, const char *buffer)
 static void
 parse_xml_btrace_conf_bts (struct gdb_xml_parser *parser,
 			  const struct gdb_xml_element *element,
-			  void *user_data, VEC (gdb_xml_value_s) *attributes)
+			  void *user_data,
+			  std::vector<gdb_xml_value> &attributes)
 {
   struct btrace_config *conf;
   struct gdb_xml_value *size;
@@ -2239,7 +2243,7 @@ parse_xml_btrace_conf_bts (struct gdb_xml_parser *parser,
 
   size = xml_find_attribute (attributes, "size");
   if (size != NULL)
-    conf->bts.size = (unsigned int) *(ULONGEST *) size->value;
+    conf->bts.size = (unsigned int) *(ULONGEST *) size->value.get ();
 }
 
 /* Parse a btrace-conf "pt" xml record.  */
@@ -2247,7 +2251,8 @@ parse_xml_btrace_conf_bts (struct gdb_xml_parser *parser,
 static void
 parse_xml_btrace_conf_pt (struct gdb_xml_parser *parser,
 			  const struct gdb_xml_element *element,
-			  void *user_data, VEC (gdb_xml_value_s) *attributes)
+			  void *user_data,
+			  std::vector<gdb_xml_value> &attributes)
 {
   struct btrace_config *conf;
   struct gdb_xml_value *size;
@@ -2258,7 +2263,7 @@ parse_xml_btrace_conf_pt (struct gdb_xml_parser *parser,
 
   size = xml_find_attribute (attributes, "size");
   if (size != NULL)
-    conf->pt.size = (unsigned int) *(ULONGEST *) size->value;
+    conf->pt.size = (unsigned int) *(ULONGEST *) size->value.get ();
 }
 
 static const struct gdb_xml_attribute btrace_conf_pt_attributes[] = {
@@ -2308,7 +2313,8 @@ parse_xml_btrace_conf (struct btrace_config *conf, const char *xml)
 
 #else  /* !defined (HAVE_LIBEXPAT) */
 
-  error (_("XML parsing is not supported."));
+  error (_("Cannot process the branch trace configuration.  XML support "
+	   "was disabled at compile time."));
 
 #endif  /* !defined (HAVE_LIBEXPAT) */
 }
@@ -3021,7 +3027,6 @@ btrace_maint_decode_pt (struct btrace_maint_info *maint,
 static void
 btrace_maint_update_pt_packets (struct btrace_thread_info *btinfo)
 {
-  volatile struct gdb_exception except;
   struct pt_packet_decoder *decoder;
   struct btrace_data_pt *pt;
   struct pt_config config;
@@ -3358,7 +3363,6 @@ maint_btrace_clear_packet_history_cmd (const char *args, int from_tty)
 static void
 maint_btrace_clear_cmd (const char *args, int from_tty)
 {
-  struct btrace_thread_info *btinfo;
   struct thread_info *tp;
 
   if (args != NULL && *args != 0)

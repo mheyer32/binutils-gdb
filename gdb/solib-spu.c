@@ -1,5 +1,5 @@
 /* Cell SPU GNU/Linux support -- shared library handling.
-   Copyright (C) 2009-2017 Free Software Foundation, Inc.
+   Copyright (C) 2009-2018 Free Software Foundation, Inc.
 
    Contributed by Ulrich Weigand <uweigand@de.ibm.com>.
 
@@ -320,7 +320,7 @@ spu_bfd_iovec_stat (bfd *abfd, void *stream, struct stat *sb)
 }
 
 static gdb_bfd_ref_ptr
-spu_bfd_fopen (char *name, CORE_ADDR addr)
+spu_bfd_fopen (const char *name, CORE_ADDR addr)
 {
   CORE_ADDR *open_closure = XNEW (CORE_ADDR);
 
@@ -342,9 +342,9 @@ spu_bfd_fopen (char *name, CORE_ADDR addr)
 
 /* Open shared library BFD.  */
 static gdb_bfd_ref_ptr
-spu_bfd_open (char *pathname)
+spu_bfd_open (const char *pathname)
 {
-  char *original_name = strrchr (pathname, '@');
+  const char *original_name = strrchr (pathname, '@');
   asection *spu_name;
   unsigned long long addr;
   int fd;

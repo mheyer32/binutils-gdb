@@ -1,6 +1,6 @@
 /* Self tests for gdbarch for GDB, the GNU debugger.
 
-   Copyright (C) 2017 Free Software Foundation, Inc.
+   Copyright (C) 2017-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -24,57 +24,10 @@
 #include "inferior.h"
 #include "gdbthread.h"
 #include "target.h"
+#include "target-float.h"
+#include "common/def-vector.h"
 
 namespace selftests {
-
-/* A mock process_stratum target_ops that doesn't read/write registers
-   anywhere.  */
-
-static int
-test_target_has_registers (target_ops *self)
-{
-  return 1;
-}
-
-static int
-test_target_has_stack (target_ops *self)
-{
-  return 1;
-}
-
-static int
-test_target_has_memory (target_ops *self)
-{
-  return 1;
-}
-
-static void
-test_target_prepare_to_store (target_ops *self, regcache *regs)
-{
-}
-
-static void
-test_target_store_registers (target_ops *self, regcache *regs, int regno)
-{
-}
-
-class test_target_ops : public target_ops
-{
-public:
-  test_target_ops ()
-    : target_ops {}
-  {
-    to_magic = OPS_MAGIC;
-    to_stratum = process_stratum;
-    to_has_memory = test_target_has_memory;
-    to_has_stack = test_target_has_stack;
-    to_has_registers = test_target_has_registers;
-    to_prepare_to_store = test_target_prepare_to_store;
-    to_store_registers = test_target_store_registers;
-
-    complete_target_initialization (this);
-  }
-};
 
 /* Test gdbarch methods register_to_value and value_to_register.  */
 
@@ -178,11 +131,8 @@ register_to_value_test (struct gdbarch *gdbarch)
 
 	      if (TYPE_CODE (type) == TYPE_CODE_FLT)
 		{
-		  DOUBLEST d = 1.25;
-
 		  /* Generate valid float format.  */
-		  floatformat_from_doublest (floatformat_from_type (type),
-					     &d, expected.data ());
+		  target_float_from_string (expected.data (), type, "1.25");
 		}
 	      else
 		{

@@ -1,6 +1,6 @@
 /* Scheme interface to breakpoints.
 
-   Copyright (C) 2008-2017 Free Software Foundation, Inc.
+   Copyright (C) 2008-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -424,8 +424,10 @@ gdbscm_register_breakpoint_x (SCM self)
   pending_breakpoint_scm = self;
   location = bp_smob->spec.location;
   copy = skip_spaces (location);
-  event_location_up eloc = string_to_event_location_basic (&copy,
-							   current_language);
+  event_location_up eloc
+    = string_to_event_location_basic (&copy,
+				      current_language,
+				      symbol_name_match_type::WILD);
 
   TRY
     {
@@ -973,7 +975,6 @@ gdbscm_breakpoint_commands (SCM self)
   breakpoint_smob *bp_smob
     = bpscm_get_valid_breakpoint_smob_arg_unsafe (self, SCM_ARG1, FUNC_NAME);
   struct breakpoint *bp;
-  long length;
   SCM result;
 
   bp = bp_smob->bp;

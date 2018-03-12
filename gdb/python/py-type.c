@@ -1,6 +1,6 @@
 /* Python interface to types.
 
-   Copyright (C) 2008-2017 Free Software Foundation, Inc.
+   Copyright (C) 2008-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -965,7 +965,6 @@ static PyObject *
 typy_str (PyObject *self)
 {
   string_file thetype;
-  PyObject *result;
 
   TRY
     {

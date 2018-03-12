@@ -1,5 +1,5 @@
 dnl Autoconf configure script for GDB server.
-dnl Copyright (C) 2000-2017 Free Software Foundation, Inc.
+dnl Copyright (C) 2000-2018 Free Software Foundation, Inc.
 dnl
 dnl This file is part of GDB.
 dnl
@@ -57,6 +57,7 @@ fi
 GDB_AC_LIBMCHECK(${libmcheck_default})
 
 if $development; then
+  srv_selftest_objs="common/selftest.o"
   AC_DEFINE(GDB_SELF_TEST, 1,
             [Define if self-testing features should be enabled])
 fi
@@ -68,7 +69,7 @@ ACX_NONCANONICAL_HOST
 ZW_CREATE_DEPDIR
 
 # Create sub-directories for objects and dependencies.
-CONFIG_SRC_SUBDIR="arch"
+CONFIG_SRC_SUBDIR="arch common"
 AC_SUBST(CONFIG_SRC_SUBDIR)
 
 AC_CONFIG_COMMANDS([gdbdepdir],[
@@ -96,7 +97,7 @@ ACX_CONFIGURE_DIR(["../gnulib"], ["build-gnulib-gdbserver"],
 
 ACX_CONFIGURE_DIR(["../../libiberty"], ["build-libiberty-gdbserver"])
 
-AC_CHECK_HEADERS(sgtty.h termio.h termios.h sys/reg.h string.h dnl
+AC_CHECK_HEADERS(termios.h sys/reg.h string.h dnl
 		 proc_service.h sys/procfs.h linux/elf.h dnl
 		 fcntl.h signal.h sys/file.h dnl
 		 sys/ioctl.h netinet/in.h sys/socket.h netdb.h dnl
@@ -184,7 +185,8 @@ AC_CHECK_MEMBERS([struct stat.st_blocks, struct stat.st_blksize])
 # Older amd64 Linux's don't have the fs_base and gs_base members of
 # `struct user_regs_struct'.
 AC_CHECK_MEMBERS([struct user_regs_struct.fs_base, struct user_regs_struct.gs_base],
-		 [], [], [#include <sys/user.h>])
+     [], [], [#include <sys/types.h>
+#include <sys/user.h>])
 
 
 AC_CHECK_TYPES(socklen_t, [], [],
@@ -410,7 +412,7 @@ if test "$srv_xmlfiles" != ""; then
   done
 fi
 
-GDBSERVER_DEPFILES="$srv_regobj $srv_tgtobj $srv_hostio_err_objs $srv_thread_depfiles $srv_host_obs"
+GDBSERVER_DEPFILES="$srv_regobj $srv_tgtobj $srv_hostio_err_objs $srv_thread_depfiles $srv_host_obs $srv_selftest_objs"
 GDBSERVER_LIBS="$srv_libs"
 
 dnl Check whether the target supports __sync_*_compare_and_swap.

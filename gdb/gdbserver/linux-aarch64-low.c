@@ -1,7 +1,7 @@
 /* GNU/Linux/AArch64 specific low level interface, for the remote server for
    GDB.
 
-   Copyright (C) 2009-2017 Free Software Foundation, Inc.
+   Copyright (C) 2009-2018 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of GDB.
@@ -39,10 +39,7 @@
 
 #include "gdb_proc_service.h"
 #include "arch/aarch64.h"
-
-/* Defined in auto-generated files.  */
-void init_registers_aarch64 (void);
-extern const struct target_desc *tdesc_aarch64;
+#include "linux-aarch64-tdesc.h"
 
 #ifdef HAVE_SYS_REG_H
 #include <sys/reg.h>
@@ -467,11 +464,10 @@ aarch64_linux_new_fork (struct process_info *parent,
   *child->priv->arch_private = *parent->priv->arch_private;
 }
 
-/* Return the right target description according to the ELF file of
-   current thread.  */
+/* Implementation of linux_target_ops method "arch_setup".  */
 
-static const struct target_desc *
-aarch64_linux_read_description (void)
+static void
+aarch64_arch_setup (void)
 {
   unsigned int machine;
   int is_elf64;
@@ -482,17 +478,9 @@ aarch64_linux_read_description (void)
   is_elf64 = linux_pid_exe_is_elf_64_file (tid, &machine);
 
   if (is_elf64)
-    return tdesc_aarch64;
+    current_process ()->tdesc = aarch64_linux_read_description ();
   else
-    return tdesc_arm_with_neon;
-}
-
-/* Implementation of linux_target_ops method "arch_setup".  */
-
-static void
-aarch64_arch_setup (void)
-{
-  current_process ()->tdesc = aarch64_linux_read_description ();
+    current_process ()->tdesc = tdesc_arm_with_neon;
 
   aarch64_linux_get_debug_reg_capacity (lwpid_of (current_thread));
 }
@@ -3007,9 +2995,11 @@ struct linux_target_ops the_low_target =
 void
 initialize_low_arch (void)
 {
-  init_registers_aarch64 ();
-
   initialize_low_arch_aarch32 ();
 
   initialize_regsets_info (&aarch64_regsets_info);
+
+#if GDB_SELF_TEST
+  initialize_low_tdesc ();
+#endif
 }

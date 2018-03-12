@@ -1,5 +1,5 @@
 /* Header file for GDB CLI command implementation library.
-   Copyright (C) 2000-2017 Free Software Foundation, Inc.
+   Copyright (C) 2000-2018 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -122,7 +122,7 @@ extern command_line_up copy_command_lines (struct command_line *cmds);
 
 /* Exported to gdb/infrun.c */
 
-extern void execute_user_command (struct cmd_list_element *c, char *args);
+extern void execute_user_command (struct cmd_list_element *c, const char *args);
 
 /* If we're in a user-defined command, replace any $argc/$argN
    reference found in LINE with the arguments that were passed to the

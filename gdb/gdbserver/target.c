@@ -1,5 +1,5 @@
 /* Target operations for the remote server for GDB.
-   Copyright (C) 2002-2017 Free Software Foundation, Inc.
+   Copyright (C) 2002-2018 Free Software Foundation, Inc.
 
    Contributed by MontaVista Software.
 
@@ -360,8 +360,8 @@ default_breakpoint_kind_from_pc (CORE_ADDR *pcptr)
 
 /* Define it.  */
 
-enum target_terminal::terminal_state target_terminal::terminal_state
-  = target_terminal::terminal_is_ours;
+target_terminal_state target_terminal::m_terminal_state
+  = target_terminal_state::is_ours;
 
 /* See target/target.h.  */
 

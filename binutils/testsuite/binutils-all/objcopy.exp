@@ -1,4 +1,4 @@
-#   Copyright (C) 1994-2017 Free Software Foundation, Inc.
+#   Copyright (C) 1994-2018 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -47,7 +47,6 @@ proc objcopy_test {testname srcfile} {
     global copyfile
 
     if {![binutils_assemble $srcdir/$subdir/${srcfile} $tempfile]} then {
- 	perror "unresolved $testname"
 	unresolved "objcopy ($testname)"
 	remote_file host delete $tempfile
 	return
@@ -1052,14 +1051,19 @@ if [is_elf_format] {
     objcopy_test_readelf "GNU_MBIND section" mbind1.s
     run_dump_test "group-5"
     run_dump_test "group-6"
+    run_dump_test "group-7a"
+    run_dump_test "group-7b"
+    run_dump_test "group-7c"
     run_dump_test "copy-1"
     run_dump_test "note-1"
     if [is_elf64 tmpdir/bintest.o] {
 	run_dump_test "note-2-64"
 	run_dump_test "note-3-64"
+	run_dump_test "note-4-64"
     } else {
 	run_dump_test "note-2-32"
 	run_dump_test "note-3-32"
+	run_dump_test "note-4-32"
     }
 }
 
@@ -1080,6 +1084,8 @@ if [is_elf_format] {
     run_dump_test "strip-8"
     run_dump_test "strip-9"
     run_dump_test "strip-12"
+    run_dump_test "strip-13"
+
     # This requires STB_GNU_UNIQUE support with OSABI set to GNU.
     if { [supports_gnu_unique] } {
 	run_dump_test "strip-10"

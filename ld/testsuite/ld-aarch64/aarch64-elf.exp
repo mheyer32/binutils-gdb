@@ -1,5 +1,5 @@
 # Expect script for various AARCH64 ELF tests.
-# Copyright (C) 2009-2017 Free Software Foundation, Inc.
+# Copyright (C) 2009-2018 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -103,6 +103,8 @@ run_dump_test_lp64 "emit-relocs-257"
 run_dump_test_lp64 "emit-relocs-257-be"
 # 258 is tested in 257
 # 259 is tested in 257
+run_dump_test_lp64 "emit-relocs-258-dyn-bad"
+run_dump_test_lp64 "emit-relocs-259-dyn-bad"
 run_dump_test_lp64 "emit-relocs-260"
 run_dump_test_lp64 "emit-relocs-260-be"
 # 261 is tested by 260
@@ -141,7 +143,17 @@ run_dump_test_lp64 "emit-relocs-284"
 run_dump_test_lp64 "emit-relocs-285"
 run_dump_test_lp64 "emit-relocs-286"
 run_dump_test_lp64 "emit-relocs-286-bad"
-# 287-298 are not done yet
+run_dump_test_lp64 "emit-relocs-287"
+run_dump_test_lp64 "emit-relocs-287-overflow"
+run_dump_test_lp64 "emit-relocs-288"
+run_dump_test_lp64 "emit-relocs-289"
+run_dump_test_lp64 "emit-relocs-289-overflow"
+run_dump_test_lp64 "emit-relocs-290"
+run_dump_test_lp64 "emit-relocs-291"
+run_dump_test_lp64 "emit-relocs-291-overflow"
+run_dump_test_lp64 "emit-relocs-292"
+run_dump_test_lp64 "emit-relocs-293"
+# 294-298 are not done yet
 run_dump_test_lp64 "emit-relocs-299"
 # 300 is not done yet
 run_dump_test_lp64 "emit-relocs-301"
@@ -273,6 +285,8 @@ run_dump_test "pr17415"
 run_dump_test_lp64 "tprel_g2_overflow"
 run_dump_test "tprel_add_lo12_overflow"
 run_dump_test "protected-data"
+run_dump_test_lp64 "pr22764"
+run_dump_test_lp64 "pr20402"
 
 # ifunc tests
 run_dump_test "ifunc-1"

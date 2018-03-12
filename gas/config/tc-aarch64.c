@@ -1,6 +1,6 @@
 /* tc-aarch64.c -- Assemble for the AArch64 ISA
 
-   Copyright (C) 2009-2017 Free Software Foundation, Inc.
+   Copyright (C) 2009-2018 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of GAS.
@@ -304,10 +304,11 @@ struct reloc_entry
 		 | REG_TYPE(Z_32) | REG_TYPE(Z_64) | REG_TYPE(VN)	\
 		 | REG_TYPE(FP_B) | REG_TYPE(FP_H)			\
 		 | REG_TYPE(FP_S) | REG_TYPE(FP_D) | REG_TYPE(FP_Q))	\
-  /* Typecheck: as above, but also Zn and Pn.  This should only be	\
-     used for SVE instructions, since Zn and Pn are valid symbols	\
+  /* Typecheck: as above, but also Zn, Pn, and {W}SP.  This should only	\
+     be used for SVE instructions, since Zn and Pn are valid symbols	\
      in other contexts.  */						\
-  MULTI_REG_TYPE(R_Z_BHSDQ_VZP, REG_TYPE(R_32) | REG_TYPE(R_64)		\
+  MULTI_REG_TYPE(R_Z_SP_BHSDQ_VZP, REG_TYPE(R_32) | REG_TYPE(R_64)	\
+		 | REG_TYPE(SP_32) | REG_TYPE(SP_64)			\
 		 | REG_TYPE(Z_32) | REG_TYPE(Z_64) | REG_TYPE(VN)	\
 		 | REG_TYPE(FP_B) | REG_TYPE(FP_H)			\
 		 | REG_TYPE(FP_S) | REG_TYPE(FP_D) | REG_TYPE(FP_Q)	\
@@ -415,7 +416,7 @@ get_reg_expected_msg (aarch64_reg_type reg_type)
 	       "register expected");
       break;
     case REG_TYPE_R_Z_BHSDQ_V:
-    case REG_TYPE_R_Z_BHSDQ_VZP:
+    case REG_TYPE_R_Z_SP_BHSDQ_VZP:
       msg = N_("register expected");
       break;
     case REG_TYPE_BHSDQ:	/* any [BHSDQ]P FP  */
@@ -2572,6 +2573,69 @@ static struct reloc_table_entry reloc_table[] = {
    0,				/* adr_type */
    0,
    BFD_RELOC_AARCH64_MOVW_G3,
+   0,
+   0,
+   0},
+
+  /* Most significant bits 0-15 of signed/unsigned address/value: MOVZ */
+  {"prel_g0", 1,
+   0,				/* adr_type */
+   0,
+   BFD_RELOC_AARCH64_MOVW_PREL_G0,
+   0,
+   0,
+   0},
+
+  /* Most significant bits 0-15 of signed/unsigned address/value: MOVK */
+  {"prel_g0_nc", 1,
+   0,				/* adr_type */
+   0,
+   BFD_RELOC_AARCH64_MOVW_PREL_G0_NC,
+   0,
+   0,
+   0},
+
+  /* Most significant bits 16-31 of signed/unsigned address/value: MOVZ */
+  {"prel_g1", 1,
+   0,				/* adr_type */
+   0,
+   BFD_RELOC_AARCH64_MOVW_PREL_G1,
+   0,
+   0,
+   0},
+
+  /* Most significant bits 16-31 of signed/unsigned address/value: MOVK */
+  {"prel_g1_nc", 1,
+   0,				/* adr_type */
+   0,
+   BFD_RELOC_AARCH64_MOVW_PREL_G1_NC,
+   0,
+   0,
+   0},
+
+  /* Most significant bits 32-47 of signed/unsigned address/value: MOVZ */
+  {"prel_g2", 1,
+   0,				/* adr_type */
+   0,
+   BFD_RELOC_AARCH64_MOVW_PREL_G2,
+   0,
+   0,
+   0},
+
+  /* Most significant bits 32-47 of signed/unsigned address/value: MOVK */
+  {"prel_g2_nc", 1,
+   0,				/* adr_type */
+   0,
+   BFD_RELOC_AARCH64_MOVW_PREL_G2_NC,
+   0,
+   0,
+   0},
+
+  /* Most significant bits 48-63 of signed/unsigned address/value: MOVZ */
+  {"prel_g3", 1,
+   0,				/* adr_type */
+   0,
+   BFD_RELOC_AARCH64_MOVW_PREL_G3,
    0,
    0,
    0},
@@ -4910,7 +4974,7 @@ vectype_to_qualifier (const struct vector_type_el *vectype)
     = {1, 2, 4, 8, 16};
   const unsigned int ele_base [5] =
     {
-      AARCH64_OPND_QLF_V_8B,
+      AARCH64_OPND_QLF_V_4B,
       AARCH64_OPND_QLF_V_2H,
       AARCH64_OPND_QLF_V_2S,
       AARCH64_OPND_QLF_V_1D,
@@ -4928,8 +4992,14 @@ vectype_to_qualifier (const struct vector_type_el *vectype)
   gas_assert (vectype->type >= NT_b && vectype->type <= NT_q);
 
   if (vectype->defined & (NTA_HASINDEX | NTA_HASVARWIDTH))
-    /* Vector element register.  */
-    return AARCH64_OPND_QLF_S_B + vectype->type;
+    {
+      /* Special case S_4B.  */
+      if (vectype->type == NT_b && vectype->width == 4)
+	return AARCH64_OPND_QLF_S_4B;
+
+      /* Vector element register.  */
+      return AARCH64_OPND_QLF_S_B + vectype->type;
+    }
   else
     {
       /* Vector register.  */
@@ -4945,7 +5015,7 @@ vectype_to_qualifier (const struct vector_type_el *vectype)
 	 a vector-type dependent amount.  */
       shift = 0;
       if (vectype->type == NT_b)
-	shift = 4;
+	shift = 3;
       else if (vectype->type == NT_h || vectype->type == NT_s)
 	shift = 2;
       else if (vectype->type >= NT_d)
@@ -4954,7 +5024,7 @@ vectype_to_qualifier (const struct vector_type_el *vectype)
 	gas_assert (0);
 
       offset = ele_base [vectype->type] + (vectype->width >> shift);
-      gas_assert (AARCH64_OPND_QLF_V_8B <= offset
+      gas_assert (AARCH64_OPND_QLF_V_4B <= offset
 		  && offset <= AARCH64_OPND_QLF_V_1Q);
       return offset;
     }
@@ -4999,6 +5069,7 @@ process_omitted_operand (enum aarch64_opnd type, const aarch64_opcode *opcode,
     case AARCH64_OPND_Sd:
     case AARCH64_OPND_Sn:
     case AARCH64_OPND_Sm:
+    case AARCH64_OPND_Va:
     case AARCH64_OPND_Vd:
     case AARCH64_OPND_Vn:
     case AARCH64_OPND_Vm:
@@ -5010,6 +5081,7 @@ process_omitted_operand (enum aarch64_opnd type, const aarch64_opcode *opcode,
     case AARCH64_OPND_Ed:
     case AARCH64_OPND_En:
     case AARCH64_OPND_Em:
+    case AARCH64_OPND_SM3_IMM2:
       operand->reglane.regno = default_value;
       break;
 
@@ -5026,6 +5098,7 @@ process_omitted_operand (enum aarch64_opnd type, const aarch64_opcode *opcode,
     case AARCH64_OPND_UIMM3_OP1:
     case AARCH64_OPND_UIMM3_OP2:
     case AARCH64_OPND_IMM:
+    case AARCH64_OPND_IMM_2:
     case AARCH64_OPND_WIDTH:
     case AARCH64_OPND_UIMM7:
     case AARCH64_OPND_NZCV:
@@ -5069,6 +5142,10 @@ process_movw_reloc_info (void)
       case BFD_RELOC_AARCH64_MOVW_G0_S:
       case BFD_RELOC_AARCH64_MOVW_G1_S:
       case BFD_RELOC_AARCH64_MOVW_G2_S:
+      case BFD_RELOC_AARCH64_MOVW_PREL_G0:
+      case BFD_RELOC_AARCH64_MOVW_PREL_G1:
+      case BFD_RELOC_AARCH64_MOVW_PREL_G2:
+      case BFD_RELOC_AARCH64_MOVW_PREL_G3:
       case BFD_RELOC_AARCH64_TLSGD_MOVW_G1:
       case BFD_RELOC_AARCH64_TLSLE_MOVW_TPREL_G0:
       case BFD_RELOC_AARCH64_TLSLE_MOVW_TPREL_G1:
@@ -5086,6 +5163,8 @@ process_movw_reloc_info (void)
     case BFD_RELOC_AARCH64_MOVW_G0_NC:
     case BFD_RELOC_AARCH64_MOVW_G0_S:
     case BFD_RELOC_AARCH64_MOVW_GOTOFF_G0_NC:
+    case BFD_RELOC_AARCH64_MOVW_PREL_G0:
+    case BFD_RELOC_AARCH64_MOVW_PREL_G0_NC:
     case BFD_RELOC_AARCH64_TLSDESC_OFF_G0_NC:
     case BFD_RELOC_AARCH64_TLSGD_MOVW_G0_NC:
     case BFD_RELOC_AARCH64_TLSIE_MOVW_GOTTPREL_G0_NC:
@@ -5099,6 +5178,8 @@ process_movw_reloc_info (void)
     case BFD_RELOC_AARCH64_MOVW_G1_NC:
     case BFD_RELOC_AARCH64_MOVW_G1_S:
     case BFD_RELOC_AARCH64_MOVW_GOTOFF_G1:
+    case BFD_RELOC_AARCH64_MOVW_PREL_G1:
+    case BFD_RELOC_AARCH64_MOVW_PREL_G1_NC:
     case BFD_RELOC_AARCH64_TLSDESC_OFF_G1:
     case BFD_RELOC_AARCH64_TLSGD_MOVW_G1:
     case BFD_RELOC_AARCH64_TLSIE_MOVW_GOTTPREL_G1:
@@ -5111,6 +5192,8 @@ process_movw_reloc_info (void)
     case BFD_RELOC_AARCH64_MOVW_G2:
     case BFD_RELOC_AARCH64_MOVW_G2_NC:
     case BFD_RELOC_AARCH64_MOVW_G2_S:
+    case BFD_RELOC_AARCH64_MOVW_PREL_G2:
+    case BFD_RELOC_AARCH64_MOVW_PREL_G2_NC:
     case BFD_RELOC_AARCH64_TLSLD_MOVW_DTPREL_G2:
     case BFD_RELOC_AARCH64_TLSLE_MOVW_TPREL_G2:
       if (is32)
@@ -5123,6 +5206,7 @@ process_movw_reloc_info (void)
       shift = 32;
       break;
     case BFD_RELOC_AARCH64_MOVW_G3:
+    case BFD_RELOC_AARCH64_MOVW_PREL_G3:
       if (is32)
 	{
 	  set_fatal_syntax_error
@@ -5266,7 +5350,7 @@ parse_operands (char *str, const aarch64_opcode *opcode)
   skip_whitespace (str);
 
   if (AARCH64_CPU_HAS_FEATURE (AARCH64_FEATURE_SVE, *opcode->avariant))
-    imm_reg_type = REG_TYPE_R_Z_BHSDQ_VZP;
+    imm_reg_type = REG_TYPE_R_Z_SP_BHSDQ_VZP;
   else
     imm_reg_type = REG_TYPE_R_Z_BHSDQ_V;
 
@@ -5390,6 +5474,7 @@ parse_operands (char *str, const aarch64_opcode *opcode)
 	  reg_type = REG_TYPE_ZN;
 	  goto vector_reg;
 
+	case AARCH64_OPND_Va:
 	case AARCH64_OPND_Vd:
 	case AARCH64_OPND_Vn:
 	case AARCH64_OPND_Vm:
@@ -5451,6 +5536,7 @@ parse_operands (char *str, const aarch64_opcode *opcode)
 	case AARCH64_OPND_Ed:
 	case AARCH64_OPND_En:
 	case AARCH64_OPND_Em:
+	case AARCH64_OPND_SM3_IMM2:
 	  reg_type = REG_TYPE_VN;
 	vector_reg_index:
 	  val = aarch64_reg_parse (&str, reg_type, NULL, &vectype);
@@ -5561,6 +5647,7 @@ parse_operands (char *str, const aarch64_opcode *opcode)
 	case AARCH64_OPND_UIMM3_OP2:
 	case AARCH64_OPND_IMM_VLSL:
 	case AARCH64_OPND_IMM:
+	case AARCH64_OPND_IMM_2:
 	case AARCH64_OPND_WIDTH:
 	case AARCH64_OPND_SVE_INV_LIMM:
 	case AARCH64_OPND_SVE_LIMM:
@@ -5627,6 +5714,7 @@ parse_operands (char *str, const aarch64_opcode *opcode)
 	  break;
 
 	case AARCH64_OPND_IDX:
+	case AARCH64_OPND_MASK:
 	case AARCH64_OPND_BIT_NUM:
 	case AARCH64_OPND_IMMR:
 	case AARCH64_OPND_IMMS:
@@ -6046,6 +6134,7 @@ parse_operands (char *str, const aarch64_opcode *opcode)
 	  break;
 
 	case AARCH64_OPND_ADDR_SIMM10:
+	case AARCH64_OPND_ADDR_OFFSET:
 	  po_misc_or_fail (parse_address (&str, info));
 	  if (info->addr.pcrel || info->addr.offset.is_reg
 	      || !info->addr.preind || info->addr.postind)
@@ -6795,7 +6884,7 @@ static const reg_entry reg_names[] = {
   REGSET31 (w, R_32), REGSET31 (W, R_32),
 
   REGDEF_ALIAS (ip0, 16, R_64), REGDEF_ALIAS (IP0, 16, R_64),
-  REGDEF_ALIAS (ip1, 17, R_64), REGDEF_ALIAS (IP1, 16, R_64),
+  REGDEF_ALIAS (ip1, 17, R_64), REGDEF_ALIAS (IP1, 17, R_64),
   REGDEF_ALIAS (fp, 29, R_64), REGDEF_ALIAS (FP, 29, R_64),
   REGDEF_ALIAS (lr, 30, R_64), REGDEF_ALIAS (LR, 30, R_64),
   REGDEF (wsp, 31, SP_32), REGDEF (WSP, 31, SP_32),
@@ -7593,12 +7682,16 @@ md_apply_fix (fixS * fixP, valueT * valP, segT seg)
     case BFD_RELOC_AARCH64_MOVW_G0_NC:
     case BFD_RELOC_AARCH64_MOVW_G0_S:
     case BFD_RELOC_AARCH64_MOVW_GOTOFF_G0_NC:
+    case BFD_RELOC_AARCH64_MOVW_PREL_G0:
+    case BFD_RELOC_AARCH64_MOVW_PREL_G0_NC:
       scale = 0;
       goto movw_common;
     case BFD_RELOC_AARCH64_MOVW_G1:
     case BFD_RELOC_AARCH64_MOVW_G1_NC:
     case BFD_RELOC_AARCH64_MOVW_G1_S:
     case BFD_RELOC_AARCH64_MOVW_GOTOFF_G1:
+    case BFD_RELOC_AARCH64_MOVW_PREL_G1:
+    case BFD_RELOC_AARCH64_MOVW_PREL_G1_NC:
       scale = 16;
       goto movw_common;
     case BFD_RELOC_AARCH64_TLSDESC_OFF_G0_NC:
@@ -7620,9 +7713,12 @@ md_apply_fix (fixS * fixP, valueT * valP, segT seg)
     case BFD_RELOC_AARCH64_MOVW_G2:
     case BFD_RELOC_AARCH64_MOVW_G2_NC:
     case BFD_RELOC_AARCH64_MOVW_G2_S:
+    case BFD_RELOC_AARCH64_MOVW_PREL_G2:
+    case BFD_RELOC_AARCH64_MOVW_PREL_G2_NC:
       scale = 32;
       goto movw_common;
     case BFD_RELOC_AARCH64_MOVW_G3:
+    case BFD_RELOC_AARCH64_MOVW_PREL_G3:
       scale = 48;
     movw_common:
       if (fixP->fx_done || !seg->use_rela_p)
@@ -7654,6 +7750,9 @@ md_apply_fix (fixS * fixP, valueT * valP, segT seg)
 		case BFD_RELOC_AARCH64_MOVW_G0_S:
 		case BFD_RELOC_AARCH64_MOVW_G1_S:
 		case BFD_RELOC_AARCH64_MOVW_G2_S:
+		case BFD_RELOC_AARCH64_MOVW_PREL_G0:
+		case BFD_RELOC_AARCH64_MOVW_PREL_G1:
+		case BFD_RELOC_AARCH64_MOVW_PREL_G2:
 		  /* NOTE: We can only come here with movz or movn. */
 		  if (signed_overflow (value, scale + 16))
 		    as_bad_where (fixP->fx_file, fixP->fx_line,
@@ -8420,6 +8519,9 @@ static const struct aarch64_cpu_option_table aarch64_cpus[] = {
 			       AARCH64_FEATURE_CRC | AARCH64_FEATURE_CRYPTO
 			       | AARCH64_FEATURE_RDMA),
    "Qualcomm QDF24XX"},
+  {"saphira", AARCH64_FEATURE (AARCH64_ARCH_V8_3,
+			       AARCH64_FEATURE_CRYPTO | AARCH64_FEATURE_PROFILE),
+   "Qualcomm Saphira"},
   {"thunderx", AARCH64_FEATURE (AARCH64_ARCH_V8,
 				AARCH64_FEATURE_CRC | AARCH64_FEATURE_CRYPTO),
    "Cavium ThunderX"},
@@ -8452,6 +8554,7 @@ static const struct aarch64_arch_option_table aarch64_archs[] = {
   {"armv8.1-a", AARCH64_ARCH_V8_1},
   {"armv8.2-a", AARCH64_ARCH_V8_2},
   {"armv8.3-a", AARCH64_ARCH_V8_3},
+  {"armv8.4-a", AARCH64_ARCH_V8_4},
   {NULL, AARCH64_ARCH_NONE}
 };
 
@@ -8466,7 +8569,9 @@ struct aarch64_option_cpu_value_table
 static const struct aarch64_option_cpu_value_table aarch64_features[] = {
   {"crc",		AARCH64_FEATURE (AARCH64_FEATURE_CRC, 0),
 			AARCH64_ARCH_NONE},
-  {"crypto",		AARCH64_FEATURE (AARCH64_FEATURE_CRYPTO, 0),
+  {"crypto",		AARCH64_FEATURE (AARCH64_FEATURE_CRYPTO
+					 | AARCH64_FEATURE_AES
+					 | AARCH64_FEATURE_SHA2, 0),
 			AARCH64_FEATURE (AARCH64_FEATURE_SIMD, 0)},
   {"fp",		AARCH64_FEATURE (AARCH64_FEATURE_FP, 0),
 			AARCH64_ARCH_NONE},
@@ -8484,6 +8589,9 @@ static const struct aarch64_option_cpu_value_table aarch64_features[] = {
 			AARCH64_FEATURE (AARCH64_FEATURE_SIMD, 0)},
   {"fp16",		AARCH64_FEATURE (AARCH64_FEATURE_F16, 0),
 			AARCH64_FEATURE (AARCH64_FEATURE_FP, 0)},
+  {"fp16fml",		AARCH64_FEATURE (AARCH64_FEATURE_F16_FML, 0),
+			AARCH64_FEATURE (AARCH64_FEATURE_FP
+					 | AARCH64_FEATURE_F16, 0)},
   {"profile",		AARCH64_FEATURE (AARCH64_FEATURE_PROFILE, 0),
 			AARCH64_ARCH_NONE},
   {"sve",		AARCH64_FEATURE (AARCH64_FEATURE_SVE, 0),
@@ -8496,6 +8604,15 @@ static const struct aarch64_option_cpu_value_table aarch64_features[] = {
   {"rcpc",		AARCH64_FEATURE (AARCH64_FEATURE_RCPC, 0),
 			AARCH64_ARCH_NONE},
   {"dotprod",		AARCH64_FEATURE (AARCH64_FEATURE_DOTPROD, 0),
+			AARCH64_ARCH_NONE},
+  {"sha2",		AARCH64_FEATURE (AARCH64_FEATURE_SHA2, 0),
+			AARCH64_ARCH_NONE},
+  {"aes",		AARCH64_FEATURE (AARCH64_FEATURE_AES, 0),
+			AARCH64_ARCH_NONE},
+  {"sm4",		AARCH64_FEATURE (AARCH64_FEATURE_SM4, 0),
+			AARCH64_ARCH_NONE},
+  {"sha3",		AARCH64_FEATURE (AARCH64_FEATURE_SHA2
+					 | AARCH64_FEATURE_SHA3, 0),
 			AARCH64_ARCH_NONE},
   {NULL,		AARCH64_ARCH_NONE, AARCH64_ARCH_NONE},
 };

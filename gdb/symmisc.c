@@ -1,6 +1,6 @@
 /* Do various things to symbol tables (other than lookup), for GDB.
 
-   Copyright (C) 1986-2017 Free Software Foundation, Inc.
+   Copyright (C) 1986-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -949,6 +949,7 @@ maintenance_expand_symtabs (const char *args, int from_tty)
 	       return (!basenames
 		       && (regexp == NULL || re_exec (filename)));
 	     },
+	     lookup_name_info::match_any (),
 	     [] (const char *symname)
 	     {
 	       /* Since we're not searching on symbols, just return true.  */

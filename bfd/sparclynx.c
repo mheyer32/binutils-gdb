@@ -1,5 +1,5 @@
 /* BFD support for Sparc binaries under LynxOS.
-   Copyright (C) 1990-2017 Free Software Foundation, Inc.
+   Copyright (C) 1990-2018 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -219,10 +219,9 @@ static const struct aout_backend_data sparclynx_aout_backend =
   };
 
 
-#define MY_bfd_debug_info_start		bfd_void
-#define MY_bfd_debug_info_end		bfd_void
-#define MY_bfd_debug_info_accumulate	\
-		(void (*) (bfd *, struct bfd_section *)) bfd_void
+#define MY_bfd_debug_info_start		_bfd_void_bfd
+#define MY_bfd_debug_info_end		_bfd_void_bfd
+#define MY_bfd_debug_info_accumulate	_bfd_void_bfd_asection
 
 #define MY_write_object_contents	NAME(aout,sparclynx_write_object_contents)
 #define MY_backend_data			&sparclynx_aout_backend

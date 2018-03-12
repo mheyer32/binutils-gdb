@@ -1,6 +1,6 @@
 /* Definitions for symbol file management in GDB.
 
-   Copyright (C) 1992-2017 Free Software Foundation, Inc.
+   Copyright (C) 1992-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -27,6 +27,7 @@
 #include "progspace.h"
 #include "registry.h"
 #include "gdb_bfd.h"
+#include <vector>
 
 struct bcache;
 struct htab;
@@ -266,6 +267,12 @@ struct objfile_per_bfd_storage
      demangled names.  */
 
   minimal_symbol *msymbol_demangled_hash[MINIMAL_SYMBOL_HASH_SIZE] {};
+
+  /* All the different languages of symbols found in the demangled
+     hash table.  A flat/vector-based map is more efficient than a map
+     or hash table here, since this will only usually contain zero or
+     one entries.  */
+  std::vector<enum language> demangled_hash_languages;
 };
 
 /* Master structure for keeping track of each file from which
@@ -353,6 +360,11 @@ struct objfile
      will not change.  */
 
   struct psymbol_bcache *psymbol_cache;
+
+  /* Map symbol addresses to the partial symtab that defines the
+     object at that address.  */
+
+  std::vector<std::pair<CORE_ADDR, partial_symtab *>> psymbol_map;
 
   /* Vectors of all partial symbols read in from file.  The actual data
      is stored in the objfile_obstack.  */
@@ -478,8 +490,6 @@ extern void add_separate_debug_objfile (struct objfile *, struct objfile *);
 extern void unlink_objfile (struct objfile *);
 
 extern void free_objfile_separate_debug (struct objfile *);
-
-extern struct cleanup *make_cleanup_free_objfile (struct objfile *);
 
 extern void free_all_objfiles (void);
 

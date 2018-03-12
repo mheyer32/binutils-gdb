@@ -1,6 +1,6 @@
 /* Memory attributes support, for GDB.
 
-   Copyright (C) 2001-2017 Free Software Foundation, Inc.
+   Copyright (C) 2001-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -74,9 +74,6 @@ show_inaccessible_by_default (struct ui_file *file, int from_tty,
 static void
 require_user_regions (int from_tty)
 {
-  struct mem_region *m;
-  int ix, length;
-
   /* If we're already using a user-provided list, nothing to do.  */
   if (!mem_use_target ())
     return;
@@ -166,10 +163,8 @@ struct mem_region *
 lookup_mem_region (CORE_ADDR addr)
 {
   static struct mem_region region (0, 0);
-  struct mem_region *m;
   CORE_ADDR lo;
   CORE_ADDR hi;
-  int ix;
 
   require_target_regions ();
 
@@ -251,10 +246,9 @@ user_mem_clear (void)
 
 
 static void
-mem_command (char *args, int from_tty)
+mem_command (const char *args, int from_tty)
 {
   CORE_ADDR lo, hi;
-  char *tok;
 
   if (!args)
     error_no_arg (_("No mem"));
@@ -273,41 +267,41 @@ mem_command (char *args, int from_tty)
 
   require_user_regions (from_tty);
 
-  tok = strtok (args, " \t");
-  if (!tok)
+  std::string tok = extract_arg (&args);
+  if (tok == "")
     error (_("no lo address"));
-  lo = parse_and_eval_address (tok);
+  lo = parse_and_eval_address (tok.c_str ());
 
-  tok = strtok (NULL, " \t");
-  if (!tok)
+  tok = extract_arg (&args);
+  if (tok == "")
     error (_("no hi address"));
-  hi = parse_and_eval_address (tok);
+  hi = parse_and_eval_address (tok.c_str ());
 
   mem_attrib attrib;
-  while ((tok = strtok (NULL, " \t")) != NULL)
+  while ((tok = extract_arg (&args)) != "")
     {
-      if (strcmp (tok, "rw") == 0)
+      if (tok == "rw")
 	attrib.mode = MEM_RW;
-      else if (strcmp (tok, "ro") == 0)
+      else if (tok == "ro")
 	attrib.mode = MEM_RO;
-      else if (strcmp (tok, "wo") == 0)
+      else if (tok == "wo")
 	attrib.mode = MEM_WO;
 
-      else if (strcmp (tok, "8") == 0)
+      else if (tok == "8")
 	attrib.width = MEM_WIDTH_8;
-      else if (strcmp (tok, "16") == 0)
+      else if (tok == "16")
 	{
 	  if ((lo % 2 != 0) || (hi % 2 != 0))
 	    error (_("region bounds not 16 bit aligned"));
 	  attrib.width = MEM_WIDTH_16;
 	}
-      else if (strcmp (tok, "32") == 0)
+      else if (tok == "32")
 	{
 	  if ((lo % 4 != 0) || (hi % 4 != 0))
 	    error (_("region bounds not 32 bit aligned"));
 	  attrib.width = MEM_WIDTH_32;
 	}
-      else if (strcmp (tok, "64") == 0)
+      else if (tok == "64")
 	{
 	  if ((lo % 8 != 0) || (hi % 8 != 0))
 	    error (_("region bounds not 64 bit aligned"));
@@ -315,26 +309,26 @@ mem_command (char *args, int from_tty)
 	}
 
 #if 0
-      else if (strcmp (tok, "hwbreak") == 0)
+      else if (tok == "hwbreak")
 	attrib.hwbreak = 1;
-      else if (strcmp (tok, "swbreak") == 0)
+      else if (tok == "swbreak")
 	attrib.hwbreak = 0;
 #endif
 
-      else if (strcmp (tok, "cache") == 0)
+      else if (tok == "cache")
 	attrib.cache = 1;
-      else if (strcmp (tok, "nocache") == 0)
+      else if (tok == "nocache")
 	attrib.cache = 0;
 
 #if 0
-      else if (strcmp (tok, "verify") == 0)
+      else if (tok == "verify")
 	attrib.verify = 1;
-      else if (strcmp (tok, "noverify") == 0)
+      else if (tok == "noverify")
 	attrib.verify = 0;
 #endif
 
       else
-	error (_("unknown attribute: %s"), tok);
+	error (_("unknown attribute: %s"), tok.c_str ());
     }
 
   create_user_mem_region (lo, hi, attrib);
@@ -342,7 +336,7 @@ mem_command (char *args, int from_tty)
 
 
 static void
-info_mem_command (char *args, int from_tty)
+info_mem_command (const char *args, int from_tty)
 {
   if (mem_use_target ())
     printf_filtered (_("Using memory regions provided by the target.\n"));
@@ -532,9 +526,6 @@ disable_mem_command (const char *args, int from_tty)
 
   if (args == NULL || *args == '\0')
     {
-      struct mem_region *m;
-      int ix;
-
       for (mem_region &m : *mem_region_list)
 	m.enabled_p = false;
     }
@@ -554,9 +545,6 @@ disable_mem_command (const char *args, int from_tty)
 static void
 mem_delete (int num)
 {
-  struct mem_region *m;
-  int ix;
-
   if (!mem_region_list)
     {
       printf_unfiltered (_("No memory region number %d.\n"), num);

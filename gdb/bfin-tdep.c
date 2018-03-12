@@ -1,6 +1,6 @@
 /* Target-dependent code for Analog Devices Blackfin processor, for GDB.
 
-   Copyright (C) 2005-2017 Free Software Foundation, Inc.
+   Copyright (C) 2005-2018 Free Software Foundation, Inc.
 
    Contributed by Analog Devices, Inc.
 
@@ -688,7 +688,7 @@ bfin_register_name (struct gdbarch *gdbarch, int i)
 }
 
 static enum register_status
-bfin_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
+bfin_pseudo_register_read (struct gdbarch *gdbarch, readable_regcache *regcache,
 			   int regnum, gdb_byte *buffer)
 {
   gdb_byte buf[BFIN_MAX_REGISTER_SIZE];
@@ -699,7 +699,7 @@ bfin_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
 		    _("invalid register number %d"), regnum);
 
   /* Extract the CC bit from the ASTAT register.  */
-  status = regcache_raw_read (regcache, BFIN_ASTAT_REGNUM, buf);
+  status = regcache->raw_read (BFIN_ASTAT_REGNUM, buf);
   if (status == REG_VALID)
     {
       buffer[1] = buffer[2] = buffer[3] = 0;

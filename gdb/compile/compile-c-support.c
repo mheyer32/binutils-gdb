@@ -1,6 +1,6 @@
 /* C language support for compilation.
 
-   Copyright (C) 2014-2017 Free Software Foundation, Inc.
+   Copyright (C) 2014-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -157,7 +157,7 @@ static void
 write_macro_definitions (const struct block *block, CORE_ADDR pc,
 			 struct ui_file *file)
 {
-  struct macro_scope *scope;
+  gdb::unique_xmalloc_ptr<struct macro_scope> scope;
 
   if (block != NULL)
     scope = sal_macro_scope (find_pc_line (pc, 0));

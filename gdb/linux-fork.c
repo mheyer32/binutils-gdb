@@ -1,6 +1,6 @@
 /* GNU/Linux native-dependent code for debugging multiple forks.
 
-   Copyright (C) 2005-2017 Free Software Foundation, Inc.
+   Copyright (C) 2005-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -45,8 +45,9 @@ struct fork_info
   ptid_t ptid;
   ptid_t parent_ptid;
   int num;			/* Convenient handle (GDB fork id).  */
-  struct regcache *savedregs;	/* Convenient for info fork, saves
+  readonly_detached_regcache *savedregs;	/* Convenient for info fork, saves
 				   having to actually switch contexts.  */
+  CORE_ADDR pc;
   int clobber_regs;		/* True if we should restore saved regs.  */
   off_t *filepos;		/* Set of open file descriptors' offsets.  */
   int maxfd;
@@ -261,7 +262,7 @@ fork_load_infrun_state (struct fork_info *fp)
   linux_nat_switch_fork (fp->ptid);
 
   if (fp->savedregs && fp->clobber_regs)
-    regcache_cpy (get_current_regcache (), fp->savedregs);
+    get_current_regcache ()->restore (fp->savedregs);
 
   registers_changed ();
   reinit_frame_cache ();
@@ -294,7 +295,8 @@ fork_save_infrun_state (struct fork_info *fp, int clobber_regs)
   if (fp->savedregs)
     delete fp->savedregs;
 
-  fp->savedregs = regcache_dup (get_current_regcache ());
+  fp->savedregs = new readonly_detached_regcache (*get_current_regcache ());
+  fp->pc = regcache_read_pc (get_current_regcache ());
   fp->clobber_regs = clobber_regs;
 
   if (clobber_regs)
@@ -407,7 +409,7 @@ linux_fork_mourn_inferior (void)
    the first available.  */
 
 void
-linux_fork_detach (const char *args, int from_tty)
+linux_fork_detach (int from_tty)
 {
   /* OK, inferior_ptid is the one we are detaching from.  We need to
      delete it from the fork_list, and switch to the next available
@@ -571,7 +573,7 @@ Please switch to another checkpoint before detaching the current one"));
 /* Print information about currently known checkpoints.  */
 
 static void
-info_checkpoints_command (char *arg, int from_tty)
+info_checkpoints_command (const char *arg, int from_tty)
 {
   struct gdbarch *gdbarch = get_current_arch ();
   struct symtab_and_line sal;
@@ -590,15 +592,11 @@ info_checkpoints_command (char *arg, int from_tty)
 
       printed = fp;
       if (ptid_equal (fp->ptid, inferior_ptid))
-	{
-	  printf_filtered ("* ");
-	  pc = regcache_read_pc (get_current_regcache ());
-	}
+	printf_filtered ("* ");
       else
-	{
-	  printf_filtered ("  ");
-	  pc = regcache_read_pc (fp->savedregs);
-	}
+	printf_filtered ("  ");
+
+      pc = fp->pc;
       printf_filtered ("%d %s", fp->num, target_pid_to_str (fp->ptid));
       if (fp->num == 0)
 	printf_filtered (_(" (main process)"));
@@ -668,7 +666,7 @@ inf_has_multiple_threads (void)
 }
 
 static void
-checkpoint_command (char *args, int from_tty)
+checkpoint_command (const char *args, int from_tty)
 {
   struct objfile *fork_objf;
   struct gdbarch *gdbarch;
@@ -761,7 +759,7 @@ linux_fork_context (struct fork_info *newfp, int from_tty)
 
 /* Switch inferior process (checkpoint) context, by checkpoint id.  */
 static void
-restart_command (char *args, int from_tty)
+restart_command (const char *args, int from_tty)
 {
   struct fork_info *fp;
 

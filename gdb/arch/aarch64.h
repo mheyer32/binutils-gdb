@@ -1,6 +1,6 @@
 /* Common target-dependent functionality for AArch64.
 
-   Copyright (C) 2017 Free Software Foundation, Inc.
+   Copyright (C) 2017-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,6 +19,10 @@
 
 #ifndef ARCH_AARCH64_H
 #define ARCH_AARCH64_H
+
+#include "common/tdesc.h"
+
+target_desc *aarch64_create_target_description ();
 
 /* Register numbers of various important registers.  */
 enum aarch64_regnum

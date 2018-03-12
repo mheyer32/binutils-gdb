@@ -1,6 +1,6 @@
 /* Solaris threads debugging interface.
 
-   Copyright (C) 1996-2017 Free Software Foundation, Inc.
+   Copyright (C) 1996-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -348,14 +348,14 @@ lwp_to_thread (ptid_t lwp)
    program was started via the normal ptrace (PTRACE_TRACEME).  */
 
 static void
-sol_thread_detach (struct target_ops *ops, const char *args, int from_tty)
+sol_thread_detach (struct target_ops *ops, inferior *inf, int from_tty)
 {
   struct target_ops *beneath = find_target_beneath (ops);
 
   sol_thread_active = 0;
   inferior_ptid = pid_to_ptid (ptid_get_pid (main_ph.ptid));
   unpush_target (ops);
-  beneath->to_detach (beneath, args, from_tty);
+  beneath->to_detach (beneath, inf, from_tty);
 }
 
 /* Resume execution of process PTID.  If STEP is nozero, then just
@@ -1122,9 +1122,9 @@ info_cb (const td_thrhandle_t *th, void *s)
    inferior.  */
 
 static void
-info_solthreads (char *args, int from_tty)
+info_solthreads (const char *args, int from_tty)
 {
-  p_td_ta_thr_iter (main_ta, info_cb, args,
+  p_td_ta_thr_iter (main_ta, info_cb, (void *) args,
 		    TD_THR_ANY_STATE, TD_THR_LOWEST_PRIORITY,
 		    TD_SIGNO_MASK, TD_THR_ANY_USER_FLAGS);
 }

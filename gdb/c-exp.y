@@ -1,5 +1,5 @@
 /* YACC parser for C expressions, for GDB.
-   Copyright (C) 1986-2017 Free Software Foundation, Inc.
+   Copyright (C) 1986-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -949,12 +949,8 @@ variable:	block COLONCOLON name
 			    error (_("No symbol \"%s\" in specified context."),
 				   copy_name ($3));
 			  if (symbol_read_needs_frame (sym.symbol))
-			    {
-			      if (innermost_block == 0
-				  || contained_in (sym.block,
-						   innermost_block))
-				innermost_block = sym.block;
-			    }
+
+			    innermost_block.update (sym);
 
 			  write_exp_elt_opcode (pstate, OP_VAR_VALUE);
 			  write_exp_elt_block (pstate, sym.block);
@@ -1043,12 +1039,7 @@ variable:	name_not_typename
 			  if (sym.symbol)
 			    {
 			      if (symbol_read_needs_frame (sym.symbol))
-				{
-				  if (innermost_block == 0
-				      || contained_in (sym.block,
-						       innermost_block))
-				    innermost_block = sym.block;
-				}
+				innermost_block.update (sym);
 
 			      write_exp_elt_opcode (pstate, OP_VAR_VALUE);
 			      write_exp_elt_block (pstate, sym.block);
@@ -1060,10 +1051,7 @@ variable:	name_not_typename
 			      /* C++: it hangs off of `this'.  Must
 			         not inadvertently convert from a method call
 				 to data ref.  */
-			      if (innermost_block == 0
-				  || contained_in (sym.block,
-						   innermost_block))
-				innermost_block = sym.block;
+			      innermost_block.update (sym);
 			      write_exp_elt_opcode (pstate, OP_THIS);
 			      write_exp_elt_opcode (pstate, OP_THIS);
 			      write_exp_elt_opcode (pstate, STRUCTOP_PTR);
@@ -2459,24 +2447,23 @@ static struct macro_scope *expression_macro_scope;
 static int saw_name_at_eof;
 
 /* This is set if the previously-returned token was a structure
-   operator -- either '.' or ARROW.  This is used only when parsing to
-   do field name completion.  */
-static int last_was_structop;
+   operator -- either '.' or ARROW.  */
+static bool last_was_structop;
 
 /* Read one token, getting characters through lexptr.  */
 
 static int
-lex_one_token (struct parser_state *par_state, int *is_quoted_name)
+lex_one_token (struct parser_state *par_state, bool *is_quoted_name)
 {
   int c;
   int namelen;
   unsigned int i;
   const char *tokstart;
-  int saw_structop = last_was_structop;
+  bool saw_structop = last_was_structop;
   char *copy;
 
-  last_was_structop = 0;
-  *is_quoted_name = 0;
+  last_was_structop = false;
+  *is_quoted_name = false;
 
  retry:
 
@@ -2517,7 +2504,7 @@ lex_one_token (struct parser_state *par_state, int *is_quoted_name)
 
 	lexptr += 2;
 	yylval.opcode = tokentab2[i].opcode;
-	if (parse_completion && tokentab2[i].token == ARROW)
+	if (tokentab2[i].token == ARROW)
 	  last_was_structop = 1;
 	return tokentab2[i].token;
       }
@@ -2541,7 +2528,7 @@ lex_one_token (struct parser_state *par_state, int *is_quoted_name)
 	  saw_name_at_eof = 0;
 	  return COMPLETE;
 	}
-      else if (saw_structop)
+      else if (parse_completion && saw_structop)
 	return COMPLETE;
       else
         return 0;
@@ -2581,8 +2568,7 @@ lex_one_token (struct parser_state *par_state, int *is_quoted_name)
       /* Might be a floating point number.  */
       if (lexptr[1] < '0' || lexptr[1] > '9')
 	{
-	  if (parse_completion)
-	    last_was_structop = 1;
+	  last_was_structop = true;
 	  goto symbol;		/* Nope, must be a symbol. */
 	}
       /* FALL THRU into number case.  */
@@ -2723,7 +2709,7 @@ lex_one_token (struct parser_state *par_state, int *is_quoted_name)
 	      {
 		++tokstart;
 		namelen = lexptr - tokstart - 1;
-		*is_quoted_name = 1;
+		*is_quoted_name = true;
 
 		goto tryname;
 	      }
@@ -2871,11 +2857,12 @@ auto_obstack name_obstack;
    Updates yylval and returns the new token type.  BLOCK is the block
    in which lookups start; this can be NULL to mean the global scope.
    IS_QUOTED_NAME is non-zero if the name token was originally quoted
-   in single quotes.  */
+   in single quotes.  IS_AFTER_STRUCTOP is true if this name follows
+   a structure operator -- either '.' or ARROW  */
 
 static int
 classify_name (struct parser_state *par_state, const struct block *block,
-	       int is_quoted_name)
+	       bool is_quoted_name, bool is_after_structop)
 {
   struct block_symbol bsym;
   char *copy;
@@ -2919,11 +2906,13 @@ classify_name (struct parser_state *par_state, const struct block *block,
 	    }
 	}
 
-      /* If we found a field, then we want to prefer it over a
+      /* If we found a field on the "this" object, or we are looking
+	 up a field on a struct, then we want to prefer it over a
 	 filename.  However, if the name was quoted, then it is better
 	 to check for a filename or a block, since this is the only
 	 way the user has of requiring the extension to be used.  */
-      if (is_a_field_of_this.type == NULL || is_quoted_name)
+      if ((is_a_field_of_this.type == NULL && !is_after_structop) 
+	  || is_quoted_name)
 	{
 	  /* See if it's a file name. */
 	  struct symtab *symtab;
@@ -3004,7 +2993,7 @@ classify_inner_name (struct parser_state *par_state,
   char *copy;
 
   if (context == NULL)
-    return classify_name (par_state, block, 0);
+    return classify_name (par_state, block, false, false);
 
   type = check_typedef (context);
   if (!type_aggregate_p (type))
@@ -3078,11 +3067,13 @@ yylex (void)
   struct type *context_type = NULL;
   int last_to_examine, next_to_examine, checkpoint;
   const struct block *search_block;
-  int is_quoted_name;
+  bool is_quoted_name, last_lex_was_structop;
 
   if (popping && !VEC_empty (token_and_value, token_fifo))
     goto do_pop;
   popping = 0;
+
+  last_lex_was_structop = last_was_structop;
 
   /* Read the first token and decide what to do.  Most of the
      subsequent code is C++-only; but also depends on seeing a "::" or
@@ -3090,7 +3081,7 @@ yylex (void)
   current.token = lex_one_token (pstate, &is_quoted_name);
   if (current.token == NAME)
     current.token = classify_name (pstate, expression_context_block,
-				   is_quoted_name);
+				   is_quoted_name, last_lex_was_structop);
   if (parse_language (pstate)->la_language != language_cplus
       || (current.token != TYPENAME && current.token != COLONCOLON
 	  && current.token != FILENAME))
@@ -3103,7 +3094,7 @@ yylex (void)
   last_was_coloncolon = current.token == COLONCOLON;
   while (1)
     {
-      int ignore;
+      bool ignore;
 
       /* We ignore quoted names other than the very first one.
 	 Subsequent ones do not have any special meaning.  */
@@ -3229,32 +3220,30 @@ c_parse (struct parser_state *par_state)
   gdb_assert (par_state != NULL);
   pstate = par_state;
 
-  /* Note that parsing (within yyparse) freely installs cleanups
-     assuming they'll be run here (below).  */
-
-  back_to = make_cleanup (free_current_contents, &expression_macro_scope);
-
-  /* Set up the scope for macro expansion.  */
-  expression_macro_scope = NULL;
+  gdb::unique_xmalloc_ptr<struct macro_scope> macro_scope;
 
   if (expression_context_block)
-    expression_macro_scope
-      = sal_macro_scope (find_pc_line (expression_context_pc, 0));
+    macro_scope = sal_macro_scope (find_pc_line (expression_context_pc, 0));
   else
-    expression_macro_scope = default_macro_scope ();
-  if (! expression_macro_scope)
-    expression_macro_scope = user_macro_scope ();
+    macro_scope = default_macro_scope ();
+  if (! macro_scope)
+    macro_scope = user_macro_scope ();
+
+  scoped_restore restore_macro_scope
+    = make_scoped_restore (&expression_macro_scope, macro_scope.get ());
 
   /* Initialize macro expansion code.  */
   obstack_init (&expansion_obstack);
   gdb_assert (! macro_original_text);
-  make_cleanup (scan_macro_cleanup, 0);
+  /* Note that parsing (within yyparse) freely installs cleanups
+     assuming they'll be run here (below).  */
+  back_to = make_cleanup (scan_macro_cleanup, 0);
 
   scoped_restore restore_yydebug = make_scoped_restore (&yydebug,
 							parser_debug);
 
   /* Initialize some state used by the lexer.  */
-  last_was_structop = 0;
+  last_was_structop = false;
   saw_name_at_eof = 0;
 
   VEC_free (token_and_value, token_fifo);

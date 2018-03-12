@@ -1,7 +1,7 @@
 /* Machine independent support for QNX Neutrino /proc (process file system)
    for GDB.  Written by Colin Burgess at QNX Software Systems Limited.
 
-   Copyright (C) 2003-2017 Free Software Foundation, Inc.
+   Copyright (C) 2003-2018 Free Software Foundation, Inc.
 
    Contributed by QNX Software Systems Ltd.
 
@@ -43,6 +43,7 @@
 #include "solib.h"
 #include "inf-child.h"
 #include "common/filestuff.h"
+#include "common/scoped_fd.h"
 
 #define NULL_PID		0
 #define _DEBUG_FLAG_TRACE	(_DEBUG_FLAG_TRACE_EXEC|_DEBUG_FLAG_TRACE_RD|\
@@ -113,9 +114,8 @@ procfs_open_1 (struct target_ops *ops, const char *arg, int from_tty)
 {
   char *endstr;
   char buffer[50];
-  int fd, total_size;
+  int total_size;
   procfs_sysinfo *sysinfo;
-  struct cleanup *cleanups;
   char nto_procfs_path[PATH_MAX];
 
   /* Offer to kill previous inferiors before opening this target.  */
@@ -158,17 +158,16 @@ procfs_open_1 (struct target_ops *ops, const char *arg, int from_tty)
   snprintf (nto_procfs_path, PATH_MAX - 1, "%s%s",
 	    (nodestr != NULL) ? nodestr : "", "/proc");
 
-  fd = open (nto_procfs_path, O_RDONLY);
-  if (fd == -1)
+  scoped_fd fd (open (nto_procfs_path, O_RDONLY));
+  if (fd.get () == -1)
     {
       printf_filtered ("Error opening %s : %d (%s)\n", nto_procfs_path, errno,
 		       safe_strerror (errno));
       error (_("Invalid procfs arg"));
     }
-  cleanups = make_cleanup_close (fd);
 
   sysinfo = (void *) buffer;
-  if (devctl (fd, DCMD_PROC_SYSINFO, sysinfo, sizeof buffer, 0) != EOK)
+  if (devctl (fd.get (), DCMD_PROC_SYSINFO, sysinfo, sizeof buffer, 0) != EOK)
     {
       printf_filtered ("Error getting size: %d (%s)\n", errno,
 		       safe_strerror (errno));
@@ -186,7 +185,8 @@ procfs_open_1 (struct target_ops *ops, const char *arg, int from_tty)
 	}
       else
 	{
-	  if (devctl (fd, DCMD_PROC_SYSINFO, sysinfo, total_size, 0) != EOK)
+	  if (devctl (fd.get (), DCMD_PROC_SYSINFO, sysinfo, total_size, 0)
+	      != EOK)
 	    {
 	      printf_filtered ("Error getting sysinfo: %d (%s)\n", errno,
 			       safe_strerror (errno));
@@ -201,7 +201,6 @@ procfs_open_1 (struct target_ops *ops, const char *arg, int from_tty)
 	    }
 	}
     }
-  do_cleanups (cleanups);
 
   inf_child_open_target (ops, arg, from_tty);
   printf_filtered ("Debugging using %s\n", nto_procfs_path);
@@ -248,38 +247,24 @@ static void
 update_thread_private_data_name (struct thread_info *new_thread,
 				 const char *newname)
 {
-  int newnamelen;
-  struct private_thread_info *pti;
+  nto_thread_info *pti = get_nto_thread_info (new_thread);
 
   gdb_assert (newname != NULL);
   gdb_assert (new_thread != NULL);
-  newnamelen = strlen (newname);
-  if (!new_thread->priv)
-    {
-      new_thread->priv = xmalloc (offsetof (struct private_thread_info,
-					       name)
-				     + newnamelen + 1);
-      memcpy (new_thread->priv->name, newname, newnamelen + 1);
-    }
-  else if (strcmp (newname, new_thread->priv->name) != 0)
-    {
-      /* Reallocate if neccessary.  */
-      int oldnamelen = strlen (new_thread->priv->name);
 
-      if (oldnamelen < newnamelen)
-	new_thread->priv = xrealloc (new_thread->priv,
-					offsetof (struct private_thread_info,
-						  name)
-					+ newnamelen + 1);
-      memcpy (new_thread->priv->name, newname, newnamelen + 1);
+  if (pti)
+    {
+      pti = new nto_thread_info;
+      new_thread->priv.reset (pti);
     }
+
+  pti->name = newname;
 }
 
 static void 
 update_thread_private_data (struct thread_info *new_thread, 
 			    pthread_t tid, int state, int flags)
 {
-  struct private_thread_info *pti;
   procfs_info pidinfo;
   struct _thread_name *tn;
   procfs_threadctl tctl;
@@ -306,7 +291,7 @@ update_thread_private_data (struct thread_info *new_thread,
 
   update_thread_private_data_name (new_thread, tn->name_buf);
 
-  pti = (struct private_thread_info *) new_thread->priv;
+  nto_thread_info *pti = get_nto_thread_info (new_thread);
   pti->tid = tid;
   pti->state = state;
   pti->flags = flags;
@@ -359,7 +344,7 @@ do_closedir_cleanup (void *dir)
 }
 
 static void
-procfs_pidlist (char *args, int from_tty)
+procfs_pidlist (const char *args, int from_tty)
 {
   DIR *dp = NULL;
   struct dirent *dirp = NULL;
@@ -391,9 +376,6 @@ procfs_pidlist (char *args, int from_tty)
 
   do
     {
-      int fd;
-      struct cleanup *inner_cleanup;
-
       /* Get the right pid and procfs path for the pid.  */
       do
 	{
@@ -411,17 +393,16 @@ procfs_pidlist (char *args, int from_tty)
       while (pid == 0);
 
       /* Open the procfs path.  */
-      fd = open (buf, O_RDONLY);
-      if (fd == -1)
+      scoped_fd fd (open (buf, O_RDONLY));
+      if (fd.get () == -1)
 	{
 	  fprintf_unfiltered (gdb_stderr, "failed to open %s - %d (%s)\n",
 			      buf, errno, safe_strerror (errno));
 	  continue;
 	}
-      inner_cleanup = make_cleanup_close (fd);
 
       pidinfo = (procfs_info *) buf;
-      if (devctl (fd, DCMD_PROC_INFO, pidinfo, sizeof (buf), 0) != EOK)
+      if (devctl (fd.get (), DCMD_PROC_INFO, pidinfo, sizeof (buf), 0) != EOK)
 	{
 	  fprintf_unfiltered (gdb_stderr,
 			      "devctl DCMD_PROC_INFO failed - %d (%s)\n",
@@ -431,7 +412,8 @@ procfs_pidlist (char *args, int from_tty)
       num_threads = pidinfo->num_threads;
 
       info = (procfs_debuginfo *) buf;
-      if (devctl (fd, DCMD_PROC_MAPDEBUG_BASE, info, sizeof (buf), 0) != EOK)
+      if (devctl (fd.get (), DCMD_PROC_MAPDEBUG_BASE, info, sizeof (buf), 0)
+	  != EOK)
 	strcpy (name, "unavailable");
       else
 	strcpy (name, info->path);
@@ -441,7 +423,7 @@ procfs_pidlist (char *args, int from_tty)
       for (status->tid = 1; status->tid <= num_threads; status->tid++)
 	{
 	  const int err
-	    = devctl (fd, DCMD_PROC_TIDSTATUS, status, sizeof (buf), 0);
+	    = devctl (fd.get (), DCMD_PROC_TIDSTATUS, status, sizeof (buf), 0);
 	  printf_filtered ("%s - %d", name, pid);
 	  if (err == EOK && status->tid != 0)
 	    printf_filtered ("/%d\n", status->tid);
@@ -451,8 +433,6 @@ procfs_pidlist (char *args, int from_tty)
 	      break;
 	    }
 	}
-
-      do_cleanups (inner_cleanup);
     }
   while (dirp != NULL);
 
@@ -461,7 +441,7 @@ procfs_pidlist (char *args, int from_tty)
 }
 
 static void
-procfs_meminfo (char *args, int from_tty)
+procfs_meminfo (const char *args, int from_tty)
 {
   procfs_mapinfo *mapinfos = NULL;
   static int num_mapinfos = 0;
@@ -746,7 +726,7 @@ nto_handle_sigint (int signo)
   /* If this doesn't work, try more severe steps.  */
   signal (signo, nto_handle_sigint_twice);
 
-  target_interrupt (inferior_ptid);
+  target_interrupt ();
 }
 
 static ptid_t
@@ -957,18 +937,14 @@ procfs_xfer_partial (struct target_ops *ops, enum target_object object,
    on signals, etc.  We'd better not have left any breakpoints
    in the program or it'll die when it hits one.  */
 static void
-procfs_detach (struct target_ops *ops, const char *args, int from_tty)
+procfs_detach (struct target_ops *ops, inferior *inf, int from_tty)
 {
-  int siggnal = 0;
   int pid;
 
   target_announce_detach ();
 
-  if (args)
-    siggnal = atoi (args);
-
   if (siggnal)
-    SignalKill (nto_node (), ptid_get_pid (inferior_ptid), 0, siggnal, 0, 0);
+    SignalKill (nto_node (), ptid_get_pid (inferior_ptid), 0, 0, 0, 0);
 
   close (ctl_fd);
   ctl_fd = -1;
@@ -1293,7 +1269,7 @@ procfs_create_inferior (struct target_ops *ops, const char *exec_file,
 }
 
 static void
-procfs_interrupt (struct target_ops *self, ptid_t ptid)
+procfs_interrupt (struct target_ops *self)
 {
   devctl (ctl_fd, DCMD_PROC_STOP, NULL, 0, 0);
 }

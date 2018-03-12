@@ -1,6 +1,6 @@
 /* Python interface to inferior function events.
 
-   Copyright (C) 2013-2017 Free Software Foundation, Inc.
+   Copyright (C) 2013-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -29,7 +29,6 @@ create_inferior_call_event_object (inferior_call_kind flag, ptid_t ptid,
 				   CORE_ADDR addr)
 {
   gdbpy_ref<> event;
-  int failed;
 
   switch (flag)
     {

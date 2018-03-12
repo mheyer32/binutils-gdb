@@ -1,6 +1,6 @@
 /* Work with executable files, for GDB. 
 
-   Copyright (C) 1988-2017 Free Software Foundation, Inc.
+   Copyright (C) 1988-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -35,6 +35,7 @@
 #include "progspace.h"
 #include "gdb_bfd.h"
 #include "gcore.h"
+#include "source.h"
 
 #include <fcntl.h>
 #include "readline/readline.h"
@@ -44,12 +45,11 @@
 #include <sys/stat.h>
 #include "solist.h"
 #include <algorithm>
+#include "common/pathstuff.h"
 
 void (*deprecated_file_changed_hook) (const char *);
 
 /* Prototypes for local functions */
-
-static void set_section_command (char *, int);
 
 static void exec_files_info (struct target_ops *);
 
@@ -192,8 +192,7 @@ try_open_exec_file (const char *exec_file_host, struct inferior *inf,
 void
 exec_file_locate_attach (int pid, int defer_bp_reset, int from_tty)
 {
-  char *exec_file_target, *exec_file_host;
-  struct cleanup *old_chain;
+  char *exec_file_target;
   symfile_add_flags add_flags = 0;
 
   /* Do nothing if we already have an executable filename.  */
@@ -211,8 +210,8 @@ exec_file_locate_attach (int pid, int defer_bp_reset, int from_tty)
       return;
     }
 
-  exec_file_host = exec_file_find (exec_file_target, NULL);
-  old_chain = make_cleanup (xfree, exec_file_host);
+  gdb::unique_xmalloc_ptr<char> exec_file_host
+    = exec_file_find (exec_file_target, NULL);
 
   if (defer_bp_reset)
     add_flags |= SYMFILE_DEFER_BP_RESET;
@@ -221,8 +220,7 @@ exec_file_locate_attach (int pid, int defer_bp_reset, int from_tty)
     add_flags |= SYMFILE_VERBOSE;
 
   /* Attempt to open the exec file.  */
-  try_open_exec_file (exec_file_host, current_inferior (), add_flags);
-  do_cleanups (old_chain);
+  try_open_exec_file (exec_file_host.get (), current_inferior (), add_flags);
 }
 
 /* Set FILENAME as the new exec file.
@@ -293,12 +291,10 @@ exec_file_attach (const char *filename, int from_tty)
 	}
       else
 	{
-	  char *temp_pathname;
-
 	  scratch_chan = openp (getenv ("PATH"), OPF_TRY_CWD_FIRST,
 				filename, write_files ?
 				O_RDWR | O_BINARY : O_RDONLY | O_BINARY,
-				&temp_pathname);
+				&scratch_storage);
 #if defined(__GO32__) || defined(_WIN32) || defined(__CYGWIN__)
 	  if (scratch_chan < 0)
 	    {
@@ -309,14 +305,13 @@ exec_file_attach (const char *filename, int from_tty)
 				    exename, write_files ?
 				    O_RDWR | O_BINARY
 				    : O_RDONLY | O_BINARY,
-				    &temp_pathname);
+				    &scratch_storage);
 	    }
 #endif
 	  if (scratch_chan < 0)
 	    perror_with_name (filename);
 
-	  scratch_storage.reset (temp_pathname);
-	  scratch_pathname = temp_pathname;
+	  scratch_pathname = scratch_storage.get ();
 
 	  /* gdb_bfd_open (and its variants) prefers canonicalized
 	     pathname for better BFD caching.  */
@@ -397,8 +392,6 @@ exec_file_attach (const char *filename, int from_tty)
 static void
 exec_file_command (const char *args, int from_tty)
 {
-  char *filename;
-
   if (from_tty && target_has_execution
       && !query (_("A program is being debugged already.\n"
 		   "Are you sure you want to change the file? ")))
@@ -957,10 +950,10 @@ exec_files_info (struct target_ops *t)
 }
 
 static void
-set_section_command (char *args, int from_tty)
+set_section_command (const char *args, int from_tty)
 {
   struct target_section *p;
-  char *secname;
+  const char *secname;
   unsigned seclen;
   unsigned long secaddr;
   char secprint[100];

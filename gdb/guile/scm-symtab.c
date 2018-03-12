@@ -1,6 +1,6 @@
 /* Scheme interface to symbol tables.
 
-   Copyright (C) 2008-2017 Free Software Foundation, Inc.
+   Copyright (C) 2008-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -578,7 +578,6 @@ static SCM
 gdbscm_sal_symtab (SCM self)
 {
   sal_smob *s_smob = stscm_get_valid_sal_smob_arg (self, SCM_ARG1, FUNC_NAME);
-  const struct symtab_and_line *sal = &s_smob->sal;
 
   return s_smob->symtab_scm;
 }

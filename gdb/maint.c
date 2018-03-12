@@ -1,6 +1,6 @@
 /* Support for GDB maintenance commands.
 
-   Copyright (C) 1992-2017 Free Software Foundation, Inc.
+   Copyright (C) 1992-2018 Free Software Foundation, Inc.
 
    Written by Fred Fish at Cygnus Support.
 
@@ -43,10 +43,6 @@
 #include "cli/cli-decode.h"
 #include "cli/cli-utils.h"
 #include "cli/cli-setshow.h"
-
-static void maintenance_internal_error (char *args, int from_tty);
-
-static void maintenance_space_display (char *, int);
 
 static void maintenance_do_deprecate (const char *, int);
 
@@ -98,7 +94,7 @@ maintenance_dump_me (const char *args, int from_tty)
    GDB.  */
 
 static void
-maintenance_internal_error (char *args, int from_tty)
+maintenance_internal_error (const char *args, int from_tty)
 {
   internal_error (__FILE__, __LINE__, "%s", (args == NULL ? "" : args));
 }
@@ -109,7 +105,7 @@ maintenance_internal_error (char *args, int from_tty)
    GDB.  */
 
 static void
-maintenance_internal_warning (char *args, int from_tty)
+maintenance_internal_warning (const char *args, int from_tty)
 {
   internal_warning (__FILE__, __LINE__, "%s", (args == NULL ? "" : args));
 }
@@ -118,7 +114,7 @@ maintenance_internal_warning (char *args, int from_tty)
    demangler problem is detected.  Allows testing of the mechanism.  */
 
 static void
-maintenance_demangler_warning (char *args, int from_tty)
+maintenance_demangler_warning (const char *args, int from_tty)
 {
   demangler_warning (__FILE__, __LINE__, "%s", (args == NULL ? "" : args));
 }
@@ -143,7 +139,7 @@ maintenance_time_display (const char *args, int from_tty)
 }
 
 static void
-maintenance_space_display (char *args, int from_tty)
+maintenance_space_display (const char *args, int from_tty)
 {
   if (args == NULL || *args == '\0')
     printf_unfiltered ("\"maintenance space\" takes a numeric argument.\n");
@@ -394,7 +390,7 @@ maintenance_print_statistics (const char *args, int from_tty)
 }
 
 static void
-maintenance_print_architecture (char *args, int from_tty)
+maintenance_print_architecture (const char *args, int from_tty)
 {
   struct gdbarch *gdbarch = get_current_arch ();
 
@@ -429,11 +425,11 @@ maintenance_print_command (const char *arg, int from_tty)
    or   maintenance translate-address <addr>.  */
 
 static void
-maintenance_translate_address (char *arg, int from_tty)
+maintenance_translate_address (const char *arg, int from_tty)
 {
   CORE_ADDR address;
   struct obj_section *sect;
-  char *p;
+  const char *p;
   struct bound_minimal_symbol sym;
   struct objfile *objfile;
 
@@ -449,12 +445,13 @@ maintenance_translate_address (char *arg, int from_tty)
 	p++;
       if (*p == '\000')		/* End of command?  */
 	error (_("Need to specify <section-name> and <address>"));
-      *p++ = '\000';
-      p = skip_spaces (p);
+
+      int arg_len = p - arg;
+      p = skip_spaces (p + 1);
 
       ALL_OBJSECTIONS (objfile, sect)
       {
-	if (strcmp (sect->the_bfd_section->name, arg) == 0)
+	if (strncmp (sect->the_bfd_section->name, arg, arg_len) == 0)
 	  break;
       }
 
@@ -687,7 +684,7 @@ EXTERN_C void monstartup (unsigned long, unsigned long);
 extern int main ();
 
 static void
-maintenance_set_profile_cmd (char *args, int from_tty,
+maintenance_set_profile_cmd (const char *args, int from_tty,
 			     struct cmd_list_element *c)
 {
   if (maintenance_profile_p == profiling_state)
@@ -718,7 +715,7 @@ maintenance_set_profile_cmd (char *args, int from_tty,
 }
 #else
 static void
-maintenance_set_profile_cmd (char *args, int from_tty,
+maintenance_set_profile_cmd (const char *args, int from_tty,
 			     struct cmd_list_element *c)
 {
   error (_("Profiling support is not available on this system."));
@@ -942,16 +939,26 @@ show_per_command_cmd (const char *args, int from_tty)
 static void
 maintenance_selftest (const char *args, int from_tty)
 {
+#if GDB_SELF_TEST
   selftests::run_tests (args);
+#else
+  printf_filtered (_("\
+Selftests are not available in a non-development build.\n"));
+#endif
 }
 
 static void
-maintenance_info_selftests (char *arg, int from_tty)
+maintenance_info_selftests (const char *arg, int from_tty)
 {
+#if GDB_SELF_TEST
   printf_filtered ("Registered selftests:\n");
   selftests::for_each_selftest ([] (const std::string &name) {
     printf_filtered (" - %s\n", name.c_str ());
   });
+#else
+  printf_filtered (_("\
+Selftests are not available in a non-development build.\n"));
+#endif
 }
 
 
@@ -1039,12 +1046,12 @@ This command has been moved to \"demangle\"."),
 
   add_prefix_cmd ("per-command", class_maintenance, set_per_command_cmd, _("\
 Per-command statistics settings."),
-		    &per_command_setlist, "set per-command ",
+		    &per_command_setlist, "maintenance set per-command ",
 		    1/*allow-unknown*/, &maintenance_set_cmdlist);
 
   add_prefix_cmd ("per-command", class_maintenance, show_per_command_cmd, _("\
 Show per-command statistics settings."),
-		    &per_command_showlist, "show per-command ",
+		    &per_command_showlist, "maintenance show per-command ",
 		    0/*allow-unknown*/, &maintenance_show_cmdlist);
 
   add_setshow_boolean_cmd ("time", class_maintenance,

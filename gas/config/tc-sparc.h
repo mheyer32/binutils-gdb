@@ -1,5 +1,5 @@
 /* tc-sparc.h - Macros and type defines for the sparc.
-   Copyright (C) 1989-2017 Free Software Foundation, Inc.
+   Copyright (C) 1989-2018 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -29,6 +29,9 @@ struct frag;
 #define LOCAL_LABELS_FB 1
 
 #define TARGET_ARCH bfd_arch_sparc
+
+extern unsigned long sparc_mach (void);
+#define TARGET_MACH sparc_mach ()
 
 #ifdef TE_FreeBSD
 #define ELF_TARGET_FORMAT	"elf32-sparc"

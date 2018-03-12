@@ -1,6 +1,6 @@
 /* Low-level RSP routines for GDB, the GNU debugger.
 
-   Copyright (C) 1988-2017 Free Software Foundation, Inc.
+   Copyright (C) 1988-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,6 +19,8 @@
 
 #ifndef COMMON_RSP_LOW_H
 #define COMMON_RSP_LOW_H
+
+#include "common/byte-vector.h"
 
 /* Convert hex digit A to a number, or throw an exception.  */
 
@@ -51,6 +53,10 @@ extern const char *unpack_varlen_hex (const char *buff, ULONGEST *result);
    Returns the number of characters actually converted.  */
 
 extern int hex2bin (const char *hex, gdb_byte *bin, int count);
+
+/* Like the above, but return a gdb::byte_vector.  */
+
+gdb::byte_vector hex2bin (const char *hex);
 
 /* Like hex2bin, but return a std::string.  */
 

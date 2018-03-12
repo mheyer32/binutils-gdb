@@ -1,6 +1,6 @@
 /* Multi-process/thread control for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2017 Free Software Foundation, Inc.
+   Copyright (C) 1986-2018 Free Software Foundation, Inc.
 
    Contributed by Lynx Real-Time Systems, Inc.  Los Gatos, CA.
 
@@ -60,9 +60,7 @@ static int highest_thread_num;
    spawned new threads we haven't heard of yet.  */
 static int threads_executing;
 
-static void thread_apply_all_command (char *, int);
 static int thread_alive (struct thread_info *);
-static void info_threads_command (char *, int);
 
 /* RAII type used to increase / decrease the refcount of each thread
    in a given list of threads.  */
@@ -318,11 +316,11 @@ add_thread_silent (ptid_t ptid)
 }
 
 struct thread_info *
-add_thread_with_info (ptid_t ptid, struct private_thread_info *priv)
+add_thread_with_info (ptid_t ptid, private_thread_info *priv)
 {
   struct thread_info *result = add_thread_silent (ptid);
 
-  result->priv = priv;
+  result->priv.reset (priv);
 
   if (print_thread_events)
     printf_unfiltered (_("[New %s]\n"), target_pid_to_str (ptid));
@@ -336,6 +334,8 @@ add_thread (ptid_t ptid)
 {
   return add_thread_with_info (ptid, NULL);
 }
+
+private_thread_info::~private_thread_info () = default;
 
 thread_info::thread_info (struct inferior *inf_, ptid_t ptid_)
   : ptid (ptid_), inf (inf_)
@@ -353,14 +353,6 @@ thread_info::thread_info (struct inferior *inf_, ptid_t ptid_)
 
 thread_info::~thread_info ()
 {
-  if (this->priv)
-    {
-      if (this->private_dtor)
-	this->private_dtor (this->priv);
-      else
-	xfree (this->priv);
-    }
-
   xfree (this->name);
 }
 
@@ -757,55 +749,16 @@ delete_exited_threads (void)
     }
 }
 
-/* Disable storing stack temporaries for the thread whose id is
-   stored in DATA.  */
-
-static void
-disable_thread_stack_temporaries (void *data)
-{
-  ptid_t *pd = (ptid_t *) data;
-  struct thread_info *tp = find_thread_ptid (*pd);
-
-  if (tp != NULL)
-    {
-      tp->stack_temporaries_enabled = 0;
-      VEC_free (value_ptr, tp->stack_temporaries);
-    }
-
-  xfree (pd);
-}
-
-/* Enable storing stack temporaries for thread with id PTID and return a
-   cleanup which can disable and clear the stack temporaries.  */
-
-struct cleanup *
-enable_thread_stack_temporaries (ptid_t ptid)
-{
-  struct thread_info *tp = find_thread_ptid (ptid);
-  ptid_t  *data;
-  struct cleanup *c;
-
-  gdb_assert (tp != NULL);
-
-  tp->stack_temporaries_enabled = 1;
-  tp->stack_temporaries = NULL;
-  data = XNEW (ptid_t);
-  *data = ptid;
-  c = make_cleanup (disable_thread_stack_temporaries, data);
-
-  return c;
-}
-
-/* Return non-zero value if stack temporaies are enabled for the thread
+/* Return true value if stack temporaies are enabled for the thread
    with id PTID.  */
 
-int
+bool
 thread_stack_temporaries_enabled_p (ptid_t ptid)
 {
   struct thread_info *tp = find_thread_ptid (ptid);
 
   if (tp == NULL)
-    return 0;
+    return false;
   else
     return tp->stack_temporaries_enabled;
 }
@@ -818,29 +771,23 @@ push_thread_stack_temporary (ptid_t ptid, struct value *v)
   struct thread_info *tp = find_thread_ptid (ptid);
 
   gdb_assert (tp != NULL && tp->stack_temporaries_enabled);
-  VEC_safe_push (value_ptr, tp->stack_temporaries, v);
+  tp->stack_temporaries.push_back (v);
 }
 
-/* Return 1 if VAL is among the stack temporaries of the thread
-   with id PTID.  Return 0 otherwise.  */
+/* Return true if VAL is among the stack temporaries of the thread
+   with id PTID.  Return false otherwise.  */
 
-int
+bool
 value_in_thread_stack_temporaries (struct value *val, ptid_t ptid)
 {
   struct thread_info *tp = find_thread_ptid (ptid);
 
   gdb_assert (tp != NULL && tp->stack_temporaries_enabled);
-  if (!VEC_empty (value_ptr, tp->stack_temporaries))
-    {
-      struct value *v;
-      int i;
+  for (struct value *v : tp->stack_temporaries)
+    if (v == val)
+      return true;
 
-      for (i = 0; VEC_iterate (value_ptr, tp->stack_temporaries, i, v); i++)
-	if (v == val)
-	  return 1;
-    }
-
-  return 0;
+  return false;
 }
 
 /* Return the last of the stack temporaries for thread with id PTID.
@@ -853,8 +800,8 @@ get_last_thread_stack_temporary (ptid_t ptid)
   struct thread_info *tp = find_thread_ptid (ptid);
 
   gdb_assert (tp != NULL);
-  if (!VEC_empty (value_ptr, tp->stack_temporaries))
-    lastval = VEC_last (value_ptr, tp->stack_temporaries);
+  if (!tp->stack_temporaries.empty ())
+    lastval = tp->stack_temporaries.back ();
 
   return lastval;
 }
@@ -1197,7 +1144,7 @@ should_print_thread (const char *requested_threads, int default_inf_num,
    thread ids.  */
 
 static void
-print_thread_info_1 (struct ui_out *uiout, char *requested_threads,
+print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 		     int global_ids, int pid,
 		     int show_global_ids)
 {
@@ -1384,7 +1331,7 @@ print_thread_info (struct ui_out *uiout, char *requested_threads, int pid)
 	 effects info-threads command would be nicer.  */
 
 static void
-info_threads_command (char *arg, int from_tty)
+info_threads_command (const char *arg, int from_tty)
 {
   int show_global_ids = 0;
 
@@ -1653,7 +1600,7 @@ tp_array_compar (const thread_info *a, const thread_info *b)
    thread apply all p x/i $pc   Apply x/i $pc cmd to all threads.  */
 
 static void
-thread_apply_all_command (char *cmd, int from_tty)
+thread_apply_all_command (const char *cmd, int from_tty)
 {
   tp_array_compar_ascending = false;
   if (cmd != NULL
@@ -1667,10 +1614,6 @@ thread_apply_all_command (char *cmd, int from_tty)
     error (_("Please specify a command following the thread ID list"));
 
   update_thread_list ();
-
-  /* Save a copy of the command in case it is clobbered by
-     execute_command.  */
-  std::string saved_cmd = cmd;
 
   int tc = live_threads_count ();
   if (tc != 0)
@@ -1709,10 +1652,8 @@ thread_apply_all_command (char *cmd, int from_tty)
 	    printf_filtered (_("\nThread %s (%s):\n"),
 			     print_thread_id (thr),
 			     target_pid_to_str (inferior_ptid));
-	    execute_command (cmd, from_tty);
 
-	    /* Restore exact command used previously.  */
-	    strcpy (cmd, saved_cmd.c_str ());
+	    execute_command (cmd, from_tty);
 	  }
     }
 }
@@ -1722,7 +1663,7 @@ thread_apply_all_command (char *cmd, int from_tty)
 static void
 thread_apply_command (const char *tidlist, int from_tty)
 {
-  char *cmd = NULL;
+  const char *cmd = NULL;
   tid_range_parser parser;
 
   if (tidlist == NULL || *tidlist == '\000')
@@ -1735,7 +1676,7 @@ thread_apply_command (const char *tidlist, int from_tty)
 
       if (!parser.get_tid_range (&inf_num, &thr_start, &thr_end))
 	{
-	  cmd = (char *) parser.cur_tok ();
+	  cmd = parser.cur_tok ();
 	  break;
 	}
     }
@@ -1745,10 +1686,6 @@ thread_apply_command (const char *tidlist, int from_tty)
 
   if (tidlist == cmd || !isalpha (cmd[0]))
     invalid_thread_id_error (cmd);
-
-  /* Save a copy of the command in case it is clobbered by
-     execute_command.  */
-  std::string saved_cmd = cmd;
 
   scoped_restore_current_thread restore_thread;
 
@@ -1803,9 +1740,6 @@ thread_apply_command (const char *tidlist, int from_tty)
       printf_filtered (_("\nThread %s (%s):\n"), print_thread_id (tp),
 		       target_pid_to_str (inferior_ptid));
       execute_command (cmd, from_tty);
-
-      /* Restore exact command used previously.  */
-      strcpy (cmd, saved_cmd.c_str ());
     }
 }
 
@@ -1964,7 +1898,6 @@ print_selected_thread_frame (struct ui_out *uiout,
 			     user_selected_what selection)
 {
   struct thread_info *tp = inferior_thread ();
-  struct inferior *inf = current_inferior ();
 
   if (selection & USER_SELECTED_THREAD)
     {

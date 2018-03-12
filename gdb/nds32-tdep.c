@@ -1,6 +1,6 @@
 /* Target-dependent code for the NDS32 architecture, for GDB.
 
-   Copyright (C) 2013-2017 Free Software Foundation, Inc.
+   Copyright (C) 2013-2018 Free Software Foundation, Inc.
    Contributed by Andes Technology Corporation.
 
    This file is part of GDB.
@@ -437,7 +437,7 @@ nds32_pseudo_register_name (struct gdbarch *gdbarch, int regnum)
 
 static enum register_status
 nds32_pseudo_register_read (struct gdbarch *gdbarch,
-			    struct regcache *regcache, int regnum,
+			    readable_regcache *regcache, int regnum,
 			    gdb_byte *buf)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
@@ -462,7 +462,7 @@ nds32_pseudo_register_read (struct gdbarch *gdbarch,
 	offset = (regnum & 1) ? 0 : 4;
 
       fdr_regnum = NDS32_FD0_REGNUM + (regnum >> 1);
-      status = regcache_raw_read (regcache, fdr_regnum, reg_buf);
+      status = regcache->raw_read (fdr_regnum, reg_buf);
       if (status == REG_VALID)
 	memcpy (buf, reg_buf + offset, 4);
 

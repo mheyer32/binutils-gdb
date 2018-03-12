@@ -1,3 +1,16 @@
+Changes in 1.15:
+
+* Add support for .MIPS.options sections (MIPS only).
+
+* Add support for compound relocations (MIPS only).
+
+* Add --emit-stub-syms, --no-tls-optimize, --tls-get-addr-optimize options
+  (PowerPC only).
+
+* Add -z text-unlikely-segment option.
+
+* Add plugin support for adding new input files (LDPT_REGISTER_NEW_INPUT_HOOK).
+
 Changes in 1.14:
 
 * Add -z bndplt option (x86-64 only) to support Intel MPX.
@@ -63,7 +76,7 @@ Changes in 1.3:
 
 * gold added to GNU binutils.
 
-Copyright (C) 2012-2017 Free Software Foundation, Inc.
+Copyright (C) 2012-2018 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

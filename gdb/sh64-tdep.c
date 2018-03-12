@@ -1,6 +1,6 @@
 /* Target-dependent code for Renesas Super-H, for GDB.
 
-   Copyright (C) 1993-2017 Free Software Foundation, Inc.
+   Copyright (C) 1993-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -35,7 +35,9 @@
 #include "arch-utils.h"
 #include "regcache.h"
 #include "osabi.h"
+#include "target-float.h"
 #include "valprint.h"
+#include "target-float.h"
 
 #include "elf-bfd.h"
 
@@ -1258,8 +1260,8 @@ sh64_extract_return_value (struct type *type, struct regcache *regcache,
 	  gdb_byte buf[8];
 	  regcache_cooked_read (regcache, DR0_REGNUM, buf);
 	  
-	  convert_typed_floating (buf, sh64_littlebyte_bigword_type (gdbarch),
-				  valbuf, type);
+	  target_float_convert (buf, sh64_littlebyte_bigword_type (gdbarch),
+				valbuf, type);
 	}
     }
   else
@@ -1468,8 +1470,8 @@ sh64_register_convert_to_virtual (struct gdbarch *gdbarch, int regnum,
        && regnum <= DR_LAST_REGNUM)
       || (regnum >= DR0_C_REGNUM 
 	  && regnum <= DR_LAST_C_REGNUM))
-    convert_typed_floating (from, sh64_littlebyte_bigword_type (gdbarch),
-			    to, type);
+    target_float_convert (from, sh64_littlebyte_bigword_type (gdbarch),
+			  to, type);
   else
     error (_("sh64_register_convert_to_virtual "
 	     "called with non DR register number"));
@@ -1477,7 +1479,7 @@ sh64_register_convert_to_virtual (struct gdbarch *gdbarch, int regnum,
 
 static void
 sh64_register_convert_to_raw (struct gdbarch *gdbarch, struct type *type,
-			      int regnum, const void *from, void *to)
+			      int regnum, const gdb_byte *from, gdb_byte *to)
 {
   if (gdbarch_byte_order (gdbarch) != BFD_ENDIAN_LITTLE)
     {
@@ -1490,8 +1492,8 @@ sh64_register_convert_to_raw (struct gdbarch *gdbarch, struct type *type,
        && regnum <= DR_LAST_REGNUM)
       || (regnum >= DR0_C_REGNUM 
 	  && regnum <= DR_LAST_C_REGNUM))
-    convert_typed_floating (from, type,
-			    to, sh64_littlebyte_bigword_type (gdbarch));
+    target_float_convert (from, type,
+			  to, sh64_littlebyte_bigword_type (gdbarch));
   else
     error (_("sh64_register_convert_to_raw called "
 	     "with non DR register number"));
@@ -1502,7 +1504,7 @@ sh64_register_convert_to_raw (struct gdbarch *gdbarch, struct type *type,
 
 static enum register_status
 pseudo_register_read_portions (struct gdbarch *gdbarch,
-			       struct regcache *regcache,
+			       readable_regcache *regcache,
 			       int portions,
 			       int base_regnum, gdb_byte *buffer)
 {
@@ -1514,7 +1516,7 @@ pseudo_register_read_portions (struct gdbarch *gdbarch,
       gdb_byte *b;
 
       b = buffer + register_size (gdbarch, base_regnum) * portion;
-      status = regcache_raw_read (regcache, base_regnum + portion, b);
+      status = regcache->raw_read (base_regnum + portion, b);
       if (status != REG_VALID)
 	return status;
     }
@@ -1523,7 +1525,7 @@ pseudo_register_read_portions (struct gdbarch *gdbarch,
 }
 
 static enum register_status
-sh64_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
+sh64_pseudo_register_read (struct gdbarch *gdbarch, readable_regcache *regcache,
 			   int reg_nr, gdb_byte *buffer)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
@@ -1585,7 +1587,7 @@ sh64_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
       base_regnum = sh64_compact_reg_base_num (gdbarch, reg_nr);
 
       /* Build the value in the provided buffer.  */ 
-      status = regcache_raw_read (regcache, base_regnum, temp_buffer);
+      status = regcache->raw_read (base_regnum, temp_buffer);
       if (status != REG_VALID)
 	return status;
       if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
@@ -1603,7 +1605,7 @@ sh64_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
       /* Build the value in the provided buffer.  */ 
       /* Floating point registers map 1-1 to the media fp regs,
 	 they have the same size and endianness.  */
-      return regcache_raw_read (regcache, base_regnum, buffer);
+      return regcache->raw_read (base_regnum, buffer);
     }
 
   else if (reg_nr >= DR0_C_REGNUM 
@@ -1690,7 +1692,7 @@ sh64_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
 
       /* FPUL_C register is floating point register 32,
 	 same size, same endianness.  */
-      return regcache_raw_read (regcache, base_regnum, buffer);
+      return regcache->raw_read (base_regnum, buffer);
     }
   else
     gdb_assert_not_reached ("invalid pseudo register number");
@@ -1931,9 +1933,8 @@ sh64_do_fp_register (struct gdbarch *gdbarch, struct ui_file *file,
 					(gdbarch, regnum)), file);
 
   /* Print the value.  */
-  const struct floatformat *fmt
-    = floatformat_from_type (builtin_type (gdbarch)->builtin_float);
-  std::string str = floatformat_to_string (fmt, raw_buffer, "%-10.9g");
+  const struct type *flt_type = builtin_type (gdbarch)->builtin_float;
+  std::string str = target_float_to_string (raw_buffer, flt_type, "%-10.9g");
   fprintf_filtered (file, "%s", str.c_str ());
 
   /* Print the fp register as hex.  */

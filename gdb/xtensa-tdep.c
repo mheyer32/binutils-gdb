@@ -1,6 +1,6 @@
 /* Target-dependent code for the Xtensa port of GDB, the GNU debugger.
 
-   Copyright (C) 2003-2017 Free Software Foundation, Inc.
+   Copyright (C) 2003-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -453,7 +453,7 @@ xtensa_register_write_masked (struct regcache *regcache,
    of the registers and assemble them into a single value.  */
 
 static enum register_status
-xtensa_register_read_masked (struct regcache *regcache,
+xtensa_register_read_masked (readable_regcache *regcache,
 			     xtensa_register_t *reg, gdb_byte *buffer)
 {
   unsigned int value[(XTENSA_MAX_REGISTER_SIZE + 3) / 4];
@@ -481,7 +481,7 @@ xtensa_register_read_masked (struct regcache *regcache,
 	  enum register_status status;
 	  ULONGEST val;
 
-	  status = regcache_cooked_read_unsigned (regcache, r, &val);
+	  status = regcache->cooked_read (r, &val);
 	  if (status != REG_VALID)
 	    return status;
 	  regval = (unsigned int) val;
@@ -547,12 +547,10 @@ xtensa_register_read_masked (struct regcache *regcache,
 
 static enum register_status
 xtensa_pseudo_register_read (struct gdbarch *gdbarch,
-			     struct regcache *regcache,
+			     readable_regcache *regcache,
 			     int regnum,
 			     gdb_byte *buffer)
 {
-  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
-
   DEBUGTRACE ("xtensa_pseudo_register_read (... regnum = %d (%s) ...)\n",
 	      regnum, xtensa_register_name (gdbarch, regnum));
 
@@ -564,9 +562,8 @@ xtensa_pseudo_register_read (struct gdbarch *gdbarch,
       ULONGEST value;
       enum register_status status;
 
-      status = regcache_raw_read_unsigned (regcache,
-					   gdbarch_tdep (gdbarch)->wb_regnum,
-					   &value);
+      status = regcache->raw_read (gdbarch_tdep (gdbarch)->wb_regnum,
+				   &value);
       if (status != REG_VALID)
 	return status;
       regnum = arreg_number (gdbarch, regnum, value);
@@ -574,7 +571,7 @@ xtensa_pseudo_register_read (struct gdbarch *gdbarch,
 
   /* We can always read non-pseudo registers.  */
   if (regnum >= 0 && regnum < gdbarch_num_regs (gdbarch))
-    return regcache_raw_read (regcache, regnum, buffer);
+    return regcache->raw_read (regnum, buffer);
 
   /* We have to find out how to deal with priveleged registers.
      Let's treat them as pseudo-registers, but we cannot read/write them.  */
@@ -631,7 +628,7 @@ xtensa_pseudo_register_read (struct gdbarch *gdbarch,
 	return xtensa_register_read_masked (regcache, reg, buffer);
 
       /* Assume that we can read the register.  */
-      return regcache_raw_read (regcache, regnum, buffer);
+      return regcache->raw_read (regnum, buffer);
     }
   else
     internal_error (__FILE__, __LINE__,
@@ -647,8 +644,6 @@ xtensa_pseudo_register_write (struct gdbarch *gdbarch,
 			      int regnum,
 			      const gdb_byte *buffer)
 {
-  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
-
   DEBUGTRACE ("xtensa_pseudo_register_write (... regnum = %d (%s) ...)\n",
 	      regnum, xtensa_register_name (gdbarch, regnum));
 

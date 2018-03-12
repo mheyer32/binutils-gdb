@@ -1,7 +1,7 @@
 /* *INDENT-OFF* */ /* ATTRIBUTE_PRINTF confuses indent, avoid running it
 		      for now.  */
 /* I/O, string, cleanup, and other random utilities for GDB.
-   Copyright (C) 1986-2017 Free Software Foundation, Inc.
+   Copyright (C) 1986-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -31,11 +31,45 @@ extern void initialize_utils (void);
 
 extern int sevenbit_strings;
 
+/* Modes of operation for strncmp_iw_with_mode.  */
+
+enum class strncmp_iw_mode
+{
+/* Do a strcmp() type operation on STRING1 and STRING2, ignoring any
+   differences in whitespace.  Returns 0 if they match, non-zero if
+   they don't (slightly different than strcmp()'s range of return
+   values).  */
+  NORMAL,
+
+  /* Like NORMAL, but also apply the strcmp_iw hack.  I.e.,
+     string1=="FOO(PARAMS)" matches string2=="FOO".  */
+  MATCH_PARAMS,
+};
+
+/* Helper for strcmp_iw and strncmp_iw.  Exported so that languages
+   can implement both NORMAL and MATCH_PARAMS variants in a single
+   function and defer part of the work to strncmp_iw_with_mode.
+
+   LANGUAGE is used to implement some context-sensitive
+   language-specific comparisons.  For example, for C++,
+   "string1=operator()" should not match "string2=operator" even in
+   MATCH_PARAMS mode.
+
+   MATCH_FOR_LCD is passed down so that the function can mark parts of
+   the symbol name as ignored for completion matching purposes (e.g.,
+   to handle abi tags).  */
+extern int strncmp_iw_with_mode
+  (const char *string1, const char *string2, size_t string2_len,
+   strncmp_iw_mode mode, enum language language,
+   completion_match_for_lcd *match_for_lcd = NULL);
+
 /* Do a strncmp() type operation on STRING1 and STRING2, ignoring any
    differences in whitespace.  STRING2_LEN is STRING2's length.
    Returns 0 if STRING1 matches STRING2_LEN characters of STRING2,
    non-zero otherwise (slightly different than strncmp()'s range of
-   return values).  */
+   return values).  Note: passes language_minimal to
+   strncmp_iw_with_mode, and should therefore be avoided if a more
+   suitable language is available.  */
 extern int strncmp_iw (const char *string1, const char *string2,
 		       size_t string2_len);
 
@@ -47,7 +81,10 @@ extern int strncmp_iw (const char *string1, const char *string2,
    As an extra hack, string1=="FOO(ARGS)" matches string2=="FOO".
    This "feature" is useful when searching for matching C++ function
    names (such as if the user types 'break FOO', where FOO is a
-   mangled C++ function).  */
+   mangled C++ function).
+
+   Note: passes language_minimal to strncmp_iw_with_mode, and should
+   therefore be avoided if a more suitable language is available.  */
 extern int strcmp_iw (const char *string1, const char *string2);
 
 extern int strcmp_iw_ordered (const char *, const char *);
@@ -258,12 +295,6 @@ extern struct cleanup *make_bpstat_clear_actions_cleanup (void);
 
 /* Path utilities.  */
 
-extern gdb::unique_xmalloc_ptr<char> gdb_realpath (const char *);
-
-extern gdb::unique_xmalloc_ptr<char> gdb_realpath_keepfile (const char *);
-
-extern gdb::unique_xmalloc_ptr<char> gdb_abspath (const char *);
-
 extern int gdb_filename_fnmatch (const char *pattern, const char *string,
 				 int flags);
 
@@ -400,6 +431,9 @@ extern void gdb_print_host_address_1 (const void *addr, struct ui_file *stream);
 /* Wrapper that avoids adding a pointless cast to all callers.  */
 #define gdb_print_host_address(ADDR, STREAM) \
   gdb_print_host_address_1 ((const void *) ADDR, STREAM)
+
+/* Return the address only having significant bits.  */
+extern CORE_ADDR address_significant (gdbarch *gdbarch, CORE_ADDR addr);
 
 /* Convert CORE_ADDR to string in platform-specific manner.
    This is usually formatted similar to 0x%lx.  */

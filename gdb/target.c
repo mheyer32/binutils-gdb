@@ -1,6 +1,6 @@
 /* Select target systems and architectures at runtime for GDB.
 
-   Copyright (C) 1990-2017 Free Software Foundation, Inc.
+   Copyright (C) 1990-2018 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.
 
@@ -47,8 +47,7 @@
 #include "event-top.h"
 #include <algorithm>
 #include "byte-vector.h"
-
-static void info_target_command (char *, int);
+#include "terminal.h"
 
 static void generic_tls_error (void) ATTRIBUTE_NORETURN;
 
@@ -169,7 +168,7 @@ int may_stop = 1;
 static unsigned int targetdebug = 0;
 
 static void
-set_targetdebug  (char *args, int from_tty, struct cmd_list_element *c)
+set_targetdebug  (const char *args, int from_tty, struct cmd_list_element *c)
 {
   update_current_target ();
 }
@@ -347,7 +346,7 @@ complete_target_initialization (struct target_ops *t)
 /* This is used to implement the various target commands.  */
 
 static void
-open_target (char *args, int from_tty, struct cmd_list_element *command)
+open_target (const char *args, int from_tty, struct cmd_list_element *command)
 {
   struct target_ops *ops = (struct target_ops *) get_cmd_context (command);
 
@@ -433,8 +432,8 @@ target_load (const char *arg, int from_tty)
 
 /* Define it.  */
 
-enum target_terminal::terminal_state target_terminal::terminal_state
-  = target_terminal::terminal_is_ours;
+target_terminal_state target_terminal::m_terminal_state
+  = target_terminal_state::is_ours;
 
 /* See target/target.h.  */
 
@@ -443,7 +442,7 @@ target_terminal::init (void)
 {
   (*current_target.to_terminal_init) (&current_target);
 
-  terminal_state = terminal_is_ours;
+  m_terminal_state = target_terminal_state::is_ours;
 }
 
 /* See target/target.h.  */
@@ -465,18 +464,105 @@ target_terminal::inferior (void)
   if (ui != main_ui)
     return;
 
-  if (terminal_state == terminal_is_inferior)
-    return;
-
   /* If GDB is resuming the inferior in the foreground, install
      inferior's terminal modes.  */
-  (*current_target.to_terminal_inferior) (&current_target);
-  terminal_state = terminal_is_inferior;
+
+  struct inferior *inf = current_inferior ();
+
+  if (inf->terminal_state != target_terminal_state::is_inferior)
+    {
+      (*current_target.to_terminal_inferior) (&current_target);
+      inf->terminal_state = target_terminal_state::is_inferior;
+    }
+
+  m_terminal_state = target_terminal_state::is_inferior;
 
   /* If the user hit C-c before, pretend that it was hit right
      here.  */
   if (check_quit_flag ())
     target_pass_ctrlc ();
+}
+
+/* See target/target.h.  */
+
+void
+target_terminal::restore_inferior (void)
+{
+  struct ui *ui = current_ui;
+
+  /* See target_terminal::inferior().  */
+  if (ui->prompt_state != PROMPT_BLOCKED || ui != main_ui)
+    return;
+
+  /* Restore the terminal settings of inferiors that were in the
+     foreground but are now ours_for_output due to a temporary
+     target_target::ours_for_output() call.  */
+
+  {
+    scoped_restore_current_inferior restore_inferior;
+    struct inferior *inf;
+
+    ALL_INFERIORS (inf)
+      {
+	if (inf->terminal_state == target_terminal_state::is_ours_for_output)
+	  {
+	    set_current_inferior (inf);
+	    (*current_target.to_terminal_inferior) (&current_target);
+	    inf->terminal_state = target_terminal_state::is_inferior;
+	  }
+      }
+  }
+
+  m_terminal_state = target_terminal_state::is_inferior;
+
+  /* If the user hit C-c before, pretend that it was hit right
+     here.  */
+  if (check_quit_flag ())
+    target_pass_ctrlc ();
+}
+
+/* Switch terminal state to DESIRED_STATE, either is_ours, or
+   is_ours_for_output.  */
+
+static void
+target_terminal_is_ours_kind (target_terminal_state desired_state)
+{
+  scoped_restore_current_inferior restore_inferior;
+  struct inferior *inf;
+
+  /* Must do this in two passes.  First, have all inferiors save the
+     current terminal settings.  Then, after all inferiors have add a
+     chance to safely save the terminal settings, restore GDB's
+     terminal settings.  */
+
+  ALL_INFERIORS (inf)
+    {
+      if (inf->terminal_state == target_terminal_state::is_inferior)
+	{
+	  set_current_inferior (inf);
+	  (*current_target.to_terminal_save_inferior) (&current_target);
+	}
+    }
+
+  ALL_INFERIORS (inf)
+    {
+      /* Note we don't check is_inferior here like above because we
+	 need to handle 'is_ours_for_output -> is_ours' too.  Careful
+	 to never transition from 'is_ours' to 'is_ours_for_output',
+	 though.  */
+      if (inf->terminal_state != target_terminal_state::is_ours
+	  && inf->terminal_state != desired_state)
+	{
+	  set_current_inferior (inf);
+	  if (desired_state == target_terminal_state::is_ours)
+	    (*current_target.to_terminal_ours) (&current_target);
+	  else if (desired_state == target_terminal_state::is_ours_for_output)
+	    (*current_target.to_terminal_ours_for_output) (&current_target);
+	  else
+	    gdb_assert_not_reached ("unhandled desired state");
+	  inf->terminal_state = desired_state;
+	}
+    }
 }
 
 /* See target/target.h.  */
@@ -490,11 +576,11 @@ target_terminal::ours ()
   if (ui != main_ui)
     return;
 
-  if (terminal_state == terminal_is_ours)
+  if (m_terminal_state == target_terminal_state::is_ours)
     return;
 
-  (*current_target.to_terminal_ours) (&current_target);
-  terminal_state = terminal_is_ours;
+  target_terminal_is_ours_kind (target_terminal_state::is_ours);
+  m_terminal_state = target_terminal_state::is_ours;
 }
 
 /* See target/target.h.  */
@@ -508,10 +594,11 @@ target_terminal::ours_for_output ()
   if (ui != main_ui)
     return;
 
-  if (terminal_state != terminal_is_inferior)
+  if (!target_terminal::is_inferior ())
     return;
-  (*current_target.to_terminal_ours_for_output) (&current_target);
-  terminal_state = terminal_is_ours_for_output;
+
+  target_terminal_is_ours_kind (target_terminal_state::is_ours_for_output);
+  target_terminal::m_terminal_state = target_terminal_state::is_ours_for_output;
 }
 
 /* See target/target.h.  */
@@ -1215,6 +1302,8 @@ memory_xfer_partial (struct target_ops *ops, enum target_object object,
   /* Zero length requests are ok and require no work.  */
   if (len == 0)
     return TARGET_XFER_EOF;
+
+  memaddr = address_significant (target_gdbarch (), memaddr);
 
   /* Fill in READBUF with breakpoint shadows, or WRITEBUF with
      breakpoint insns, thus hiding out from higher layers whether
@@ -2019,7 +2108,7 @@ target_remove_breakpoint (struct gdbarch *gdbarch,
 }
 
 static void
-info_target_command (char *args, int from_tty)
+info_target_command (const char *args, int from_tty)
 {
   struct target_ops *t;
   int has_all_mem = 0;
@@ -2108,7 +2197,7 @@ dispose_inferior (struct inferior *inf, void *args)
       if (target_has_execution)
 	target_kill ();
       else
-	target_detach (NULL, 0);
+	target_detach (inf, 0);
     }
 
   return 0;
@@ -2141,11 +2230,18 @@ target_preopen (int from_tty)
   target_pre_inferior (from_tty);
 }
 
-/* Detach a target after doing deferred register stores.  */
+/* See target.h.  */
 
 void
-target_detach (const char *args, int from_tty)
+target_detach (inferior *inf, int from_tty)
 {
+  /* As long as some to_detach implementations rely on the current_inferior
+     (either directly, or indirectly, like through target_gdbarch or by
+     reading memory), INF needs to be the current inferior.  When that
+     requirement will become no longer true, then we can remove this
+     assertion.  */
+  gdb_assert (inf == current_inferior ());
+
   if (gdbarch_has_global_breakpoints (target_gdbarch ()))
     /* Don't remove global breakpoints here.  They're removed on
        disconnection from the target.  */
@@ -2157,7 +2253,7 @@ target_detach (const char *args, int from_tty)
 
   prepare_for_detach ();
 
-  current_target.to_detach (&current_target, args, from_tty);
+  current_target.to_detach (&current_target, inf, from_tty);
 }
 
 void
@@ -2233,8 +2329,6 @@ static int defer_target_commit_resume;
 void
 target_commit_resume (void)
 {
-  struct target_ops *t;
-
   if (defer_target_commit_resume)
     return;
 
@@ -2965,7 +3059,7 @@ target_fileio_unlink (struct inferior *inf, const char *filename,
 
 /* See target.h.  */
 
-char *
+gdb::optional<std::string>
 target_fileio_readlink (struct inferior *inf, const char *filename,
 			int *target_errno)
 {
@@ -2975,22 +3069,22 @@ target_fileio_readlink (struct inferior *inf, const char *filename,
     {
       if (t->to_fileio_readlink != NULL)
 	{
-	  char *ret = t->to_fileio_readlink (t, inf, filename,
-					     target_errno);
+	  gdb::optional<std::string> ret
+	    = t->to_fileio_readlink (t, inf, filename, target_errno);
 
 	  if (targetdebug)
 	    fprintf_unfiltered (gdb_stdlog,
 				"target_fileio_readlink (%d,%s)"
 				" = %s (%d)\n",
 				inf == NULL ? 0 : inf->num,
-				filename, ret? ret : "(nil)",
-				ret? 0 : *target_errno);
+				filename, ret ? ret->c_str () : "(nil)",
+				ret ? 0 : *target_errno);
 	  return ret;
 	}
     }
 
   *target_errno = FILEIO_ENOSYS;
-  return NULL;
+  return {};
 }
 
 static void
@@ -3327,7 +3421,7 @@ target_stop (ptid_t ptid)
 }
 
 void
-target_interrupt (ptid_t ptid)
+target_interrupt ()
 {
   if (!may_stop)
     {
@@ -3335,7 +3429,7 @@ target_interrupt (ptid_t ptid)
       return;
     }
 
-  (*current_target.to_interrupt) (&current_target, ptid);
+  (*current_target.to_interrupt) (&current_target);
 }
 
 /* See target.h.  */
@@ -3351,7 +3445,7 @@ target_pass_ctrlc (void)
 void
 default_target_pass_ctrlc (struct target_ops *ops)
 {
-  target_interrupt (inferior_ptid);
+  target_interrupt ();
 }
 
 /* See target/target.h.  */
@@ -3551,14 +3645,6 @@ target_ranged_break_num_registers (void)
 
 /* See target.h.  */
 
-int
-target_supports_btrace (enum btrace_format format)
-{
-  return current_target.to_supports_btrace (&current_target, format);
-}
-
-/* See target.h.  */
-
 struct btrace_target_info *
 target_enable_btrace (ptid_t ptid, const struct btrace_config *conf)
 {
@@ -3723,7 +3809,7 @@ target_insn_history_range (ULONGEST begin, ULONGEST end,
 /* See target.h.  */
 
 void
-target_call_history (int size, int flags)
+target_call_history (int size, record_print_flags flags)
 {
   current_target.to_call_history (&current_target, size, flags);
 }
@@ -3731,7 +3817,7 @@ target_call_history (int size, int flags)
 /* See target.h.  */
 
 void
-target_call_history_from (ULONGEST begin, int size, int flags)
+target_call_history_from (ULONGEST begin, int size, record_print_flags flags)
 {
   current_target.to_call_history_from (&current_target, begin, size, flags);
 }
@@ -3739,7 +3825,7 @@ target_call_history_from (ULONGEST begin, int size, int flags)
 /* See target.h.  */
 
 void
-target_call_history_range (ULONGEST begin, ULONGEST end, int flags)
+target_call_history_range (ULONGEST begin, ULONGEST end, record_print_flags flags)
 {
   current_target.to_call_history_range (&current_target, begin, end, flags);
 }
@@ -3798,8 +3884,7 @@ default_rcmd (struct target_ops *self, const char *command,
 }
 
 static void
-do_monitor_command (char *cmd,
-		 int from_tty)
+do_monitor_command (const char *cmd, int from_tty)
 {
   target_rcmd (cmd, gdb_stdtarg);
 }
@@ -3808,7 +3893,7 @@ do_monitor_command (char *cmd,
    ignored.  */
 
 void
-flash_erase_command (char *cmd, int from_tty)
+flash_erase_command (const char *cmd, int from_tty)
 {
   /* Used to communicate termination of flash operations to the target.  */
   bool found_flash_region = false;
@@ -3883,7 +3968,7 @@ int target_async_permitted = 1;
 static int target_async_permitted_1 = 1;
 
 static void
-maint_set_target_async_command (char *args, int from_tty,
+maint_set_target_async_command (const char *args, int from_tty,
 				struct cmd_list_element *c)
 {
   if (have_live_inferiors ())
@@ -3936,7 +4021,7 @@ static enum auto_boolean target_non_stop_enabled_1 = AUTO_BOOLEAN_AUTO;
 /* Implementation of "maint set target-non-stop".  */
 
 static void
-maint_set_target_non_stop_command (char *args, int from_tty,
+maint_set_target_non_stop_command (const char *args, int from_tty,
 				   struct cmd_list_element *c)
 {
   if (have_live_inferiors ())
@@ -3992,7 +4077,7 @@ update_target_permissions (void)
    way.  */
 
 static void
-set_target_permissions (char *args, int from_tty,
+set_target_permissions (const char *args, int from_tty,
 			struct cmd_list_element *c)
 {
   if (target_has_execution)
@@ -4013,7 +4098,7 @@ set_target_permissions (char *args, int from_tty,
 /* Set memory write permission independently of observer mode.  */
 
 static void
-set_write_memory_permission (char *args, int from_tty,
+set_write_memory_permission (const char *args, int from_tty,
 			struct cmd_list_element *c)
 {
   /* Make the real values match the user-changed values.  */
@@ -4021,6 +4106,53 @@ set_write_memory_permission (char *args, int from_tty,
   update_observer_mode ();
 }
 
+#if GDB_SELF_TEST
+namespace selftests {
+
+static int
+test_target_has_registers (target_ops *self)
+{
+  return 1;
+}
+
+static int
+test_target_has_stack (target_ops *self)
+{
+  return 1;
+}
+
+static int
+test_target_has_memory (target_ops *self)
+{
+  return 1;
+}
+
+static void
+test_target_prepare_to_store (target_ops *self, regcache *regs)
+{
+}
+
+static void
+test_target_store_registers (target_ops *self, regcache *regs, int regno)
+{
+}
+
+test_target_ops::test_target_ops ()
+  : target_ops {}
+{
+  to_magic = OPS_MAGIC;
+  to_stratum = process_stratum;
+  to_has_memory = test_target_has_memory;
+  to_has_stack = test_target_has_stack;
+  to_has_registers = test_target_has_registers;
+  to_prepare_to_store = test_target_prepare_to_store;
+  to_store_registers = test_target_store_registers;
+
+  complete_target_initialization (this);
+}
+
+} // namespace selftests
+#endif /* GDB_SELF_TEST */
 
 void
 initialize_targets (void)

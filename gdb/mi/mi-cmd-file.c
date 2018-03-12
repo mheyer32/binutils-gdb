@@ -1,5 +1,5 @@
 /* MI Command Set - file commands.
-   Copyright (C) 2000-2017 Free Software Foundation, Inc.
+   Copyright (C) 2000-2018 Free Software Foundation, Inc.
    Contributed by Cygnus Solutions (a Red Hat company).
 
    This file is part of GDB.
@@ -119,7 +119,6 @@ mi_cmd_file_list_shared_libraries (const char *command, char **argv, int argc)
   struct ui_out *uiout = current_uiout;
   const char *pattern;
   struct so_list *so = NULL;
-  struct gdbarch *gdbarch = target_gdbarch ();
 
   switch (argc)
     {

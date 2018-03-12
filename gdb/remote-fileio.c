@@ -1,6 +1,6 @@
 /* Remote File-I/O communications
 
-   Copyright (C) 2003-2017 Free Software Foundation, Inc.
+   Copyright (C) 2003-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -1169,8 +1169,6 @@ remote_fileio_reset (void)
 void
 remote_fileio_request (char *buf, int ctrlc_pending_p)
 {
-  int ex;
-
   /* Save the previous quit handler, so we can restore it.  No need
      for a cleanup since we catch all exceptions below.  Note that the
      quit handler is also restored by remote_fileio_reply just before

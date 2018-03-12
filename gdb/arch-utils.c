@@ -1,6 +1,6 @@
 /* Dynamic architecture support for GDB, the GNU debugger.
 
-   Copyright (C) 1998-2017 Free Software Foundation, Inc.
+   Copyright (C) 1998-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -332,7 +332,7 @@ show_endian (struct ui_file *file, int from_tty, struct cmd_list_element *c,
 }
 
 static void
-set_endian (char *ignore_args, int from_tty, struct cmd_list_element *c)
+set_endian (const char *ignore_args, int from_tty, struct cmd_list_element *c)
 {
   struct gdbarch_info info;
 
@@ -490,7 +490,8 @@ show_architecture (struct ui_file *file, int from_tty,
    argument.  */
 
 static void
-set_architecture (char *ignore_args, int from_tty, struct cmd_list_element *c)
+set_architecture (const char *ignore_args,
+		  int from_tty, struct cmd_list_element *c)
 {
   struct gdbarch_info info;
 
@@ -812,12 +813,12 @@ default_has_shared_address_space (struct gdbarch *gdbarch)
 
 int
 default_fast_tracepoint_valid_at (struct gdbarch *gdbarch, CORE_ADDR addr,
-				  char **msg)
+				  std::string *msg)
 {
   /* We don't know if maybe the target has some way to do fast
      tracepoints that doesn't need gdbarch, so always say yes.  */
   if (msg)
-    *msg = NULL;
+    msg->clear ();
   return 1;
 }
 

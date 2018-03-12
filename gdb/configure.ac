@@ -1,5 +1,5 @@
 dnl Autoconf configure script for GDB, the GNU debugger.
-dnl Copyright (C) 1995-2017 Free Software Foundation, Inc.
+dnl Copyright (C) 1995-2018 Free Software Foundation, Inc.
 dnl
 dnl This file is part of GDB.
 dnl
@@ -44,17 +44,6 @@ AX_CXX_COMPILE_STDCXX(11, , mandatory)
 
 # Dependency checking.
 ZW_CREATE_DEPDIR
-# Create sub-directories for objects and dependencies.
-CONFIG_SRC_SUBDIR="arch"
-AC_SUBST(CONFIG_SRC_SUBDIR)
-
-AC_CONFIG_COMMANDS([gdbdepdir],[
-  for subdir in ${CONFIG_SRC_SUBDIR}
-  do
-      $SHELL $ac_aux_dir/mkinstalldirs $subdir/$DEPDIR
-  done],
-  [ac_aux_dir=$ac_aux_dir DEPDIR=$DEPDIR CONFIG_SRC_SUBDIR="$CONFIG_SRC_SUBDIR"])
-
 ZW_PROG_COMPILER_DEPENDENCIES([CC])
 
 gnulib_extra_configure_args=
@@ -534,6 +523,11 @@ AC_SEARCH_LIBS(kinfo_getvmmap, util util-freebsd,
   [AC_DEFINE(HAVE_KINFO_GETVMMAP, 1,
             [Define to 1 if your system has the kinfo_getvmmap function. ])])
 
+# fbsd-nat.c can also use kinfo_getfile.
+AC_SEARCH_LIBS(kinfo_getfile, util util-freebsd,
+  [AC_DEFINE(HAVE_KINFO_GETFILE, 1,
+            [Define to 1 if your system has the kinfo_getfile function. ])])
+
 AM_ICONV
 
 # GDB may fork/exec the iconv program to get the list of supported character
@@ -692,6 +686,28 @@ else
     LIBS="$LIBS $LIBEXPAT"
     AC_CHECK_FUNCS(XML_StopParser)
     LIBS=$save_LIBS
+  fi
+fi
+
+AC_ARG_WITH(mpfr,
+  AS_HELP_STRING([--with-mpfr], [include MPFR support (auto/yes/no)]),
+  [], [with_mpfr=auto])
+AC_MSG_CHECKING([whether to use MPFR])
+AC_MSG_RESULT([$with_mpfr])
+
+if test "${with_mpfr}" = no; then
+  AC_MSG_WARN([MPFR support disabled; some features may be unavailable.])
+  HAVE_LIBMPFR=no
+else
+  AC_LIB_HAVE_LINKFLAGS([mpfr], [], [#include <mpfr.h>],
+			[mpfr_exp_t exp; mpfr_t x;
+			 mpfr_frexp (&exp, x, x, MPFR_RNDN);])
+  if test "$HAVE_LIBMPFR" != yes; then
+    if test "$with_mpfr" = yes; then
+      AC_MSG_ERROR([MPFR is missing or unusable])
+    else
+      AC_MSG_WARN([MPFR is missing or unusable; some features may be unavailable.])
+    fi
   fi
 fi
 
@@ -1016,7 +1032,7 @@ if test "${have_libpython}" != no; then
 else
   # Even if Python support is not compiled in, we need to have this file
   # included so that the "python" command, et.al., still exists.
-  CONFIG_OBS="$CONFIG_OBS python.o"
+  CONFIG_OBS="$CONFIG_OBS python/python.o"
   CONFIG_SRCS="$CONFIG_SRCS python/python.c"
 fi
 
@@ -1216,7 +1232,7 @@ if test "${have_libguile}" != no; then
 else
   # Even if Guile support is not compiled in, we need to have these files
   # included.
-  CONFIG_OBS="$CONFIG_OBS guile.o"
+  CONFIG_OBS="$CONFIG_OBS guile/guile.o"
   CONFIG_SRCS="$CONFIG_SRCS guile/guile.c"
 fi
 AC_SUBST(GUILE_CPPFLAGS)
@@ -1294,18 +1310,11 @@ AC_HEADER_STDC
 # elf_hp.h is for HP/UX 64-bit shared library support.
 AC_CHECK_HEADERS([nlist.h machine/reg.h poll.h sys/poll.h proc_service.h \
                   thread_db.h \
-		  sys/fault.h \
 		  sys/file.h sys/filio.h sys/ioctl.h sys/param.h \
 		  sys/resource.h sys/procfs.h sys/ptrace.h ptrace.h \
-		  sys/reg.h sys/debugreg.h sys/select.h sys/syscall.h \
-		  termios.h termio.h \
-		  sgtty.h elf_hp.h \
+		  sys/reg.h sys/debugreg.h sys/select.h \
+		  termios.h elf_hp.h \
 		  dlfcn.h])
-AC_CHECK_HEADERS(sys/proc.h, [], [],
-[#if HAVE_SYS_PARAM_H
-# include <sys/param.h>
-#endif
-])
 AC_CHECK_HEADERS(sys/user.h, [], [],
 [#if HAVE_SYS_PARAM_H
 # include <sys/param.h>
@@ -1359,7 +1368,7 @@ AC_FUNC_MMAP
 AC_FUNC_VFORK
 AC_CHECK_FUNCS([getauxval getrusage getuid getgid \
 		pipe poll pread pread64 pwrite resize_term \
-		sbrk setpgid setpgrp setsid \
+		sbrk getpgid setpgid setpgrp setsid \
 		sigaction sigprocmask sigsetmask socketpair \
 		ttrace wborder wresize setlocale iconvlist libiconvlist btowc \
 		setrlimit getrlimit posix_madvise waitpid \
@@ -1455,7 +1464,8 @@ AC_CHECK_MEMBERS([struct reg.r_fs, struct reg.r_gs], [], [],
 # Older amd64 Linux's don't have the fs_base and gs_base members of
 # `struct user_regs_struct'.
 AC_CHECK_MEMBERS([struct user_regs_struct.fs_base, struct user_regs_struct.gs_base],
-		 [], [], [#include <sys/user.h>])
+     [], [], [#include <sys/types.h>
+#include <sys/user.h>])
 
 # See if <sys/ptrace.h> provides the PTRACE_GETREGS request.
 AC_MSG_CHECKING(for PTRACE_GETREGS)
@@ -1523,21 +1533,6 @@ AC_CHECK_MEMBERS([struct ptrace_lwpinfo.pl_tdname], [], [],
 AC_CHECK_MEMBERS([struct ptrace_lwpinfo.pl_syscall_code], [], [],
                  [#include <sys/ptrace.h>])
 
-# Detect which type of /proc is in use, such as for Solaris.
-
-if test "${target}" = "${host}"; then
-  case "${host}" in
-  *-*-sysv4.2* | *-*-sysv5* )
-      AC_DEFINE(NEW_PROC_API, 1,
-      [Define if you want to use new multi-fd /proc interface.])
-      ;;
-  *-*-solaris2.[[6789]] | *-*-solaris2.1[[0-9]]*)
-      AC_DEFINE(NEW_PROC_API, 1,
-      [Define if you want to use new multi-fd /proc interface.])
-      ;;
-  esac
-fi
-
 if test "$ac_cv_header_sys_procfs_h" = yes; then
   BFD_HAVE_SYS_PROCFS_TYPE(gregset_t)
   BFD_HAVE_SYS_PROCFS_TYPE(fpregset_t)
@@ -1546,11 +1541,6 @@ if test "$ac_cv_header_sys_procfs_h" = yes; then
   BFD_HAVE_SYS_PROCFS_TYPE(prgregset32_t)
   BFD_HAVE_SYS_PROCFS_TYPE(lwpid_t)
   BFD_HAVE_SYS_PROCFS_TYPE(psaddr_t)
-  BFD_HAVE_SYS_PROCFS_TYPE(prsysent_t)
-  BFD_HAVE_SYS_PROCFS_TYPE(pr_sigset_t)
-  BFD_HAVE_SYS_PROCFS_TYPE(pr_sigaction64_t)
-  BFD_HAVE_SYS_PROCFS_TYPE(pr_siginfo64_t)
-
 
   dnl Check for broken prfpregset_t type
 
@@ -2322,8 +2312,8 @@ AC_DEFINE(GDB_DEFAULT_HOST_CHARSET, "UTF-8",
 if $development; then
   AC_DEFINE(GDB_SELF_TEST, 1,
             [Define if self-testing features should be enabled])
-  CONFIG_OBS="$CONFIG_OBS \$(SUBDIR_UNITTESTS_OBS)"
-  CONFIG_SRCS="$CONFIG_SRCS \$(SUBDIR_UNITTESTS_SRCS)"
+  CONFIG_OBS="$CONFIG_OBS \$(SUBDIR_UNITTESTS_OBS) common/selftest.o selftest-arch.o"
+  CONFIG_SRCS="$CONFIG_SRCS \$(SUBDIR_UNITTESTS_SRCS) common/selftest.c selftest-arch.c"
 fi
 
 GDB_AC_TRANSFORM([gdb], [GDB_TRANSFORM_NAME])

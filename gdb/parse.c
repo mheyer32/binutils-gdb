@@ -1,6 +1,6 @@
 /* Parse expressions for GDB.
 
-   Copyright (C) 1986-2017 Free Software Foundation, Inc.
+   Copyright (C) 1986-2018 Free Software Foundation, Inc.
 
    Modified from expread.y by the Department of Computer Science at the
    State University of New York at Buffalo, 1991.
@@ -44,8 +44,7 @@
 #include "gdbcmd.h"
 #include "symfile.h"		/* for overlay functions */
 #include "inferior.h"
-#include "doublest.h"
-#include "dfp.h"
+#include "target-float.h"
 #include "block.h"
 #include "source.h"
 #include "objfiles.h"
@@ -69,7 +68,7 @@ const struct exp_descriptor exp_descriptor_standard =
 /* Global variables declared in parser-defs.h (and commented there).  */
 const struct block *expression_context_block;
 CORE_ADDR expression_context_pc;
-const struct block *innermost_block;
+innermost_block_tracker innermost_block;
 int arglist_len;
 static struct type_stack type_stack;
 const char *lexptr;
@@ -89,7 +88,7 @@ static int expout_last_struct = -1;
 static enum type_code expout_tag_completion_type = TYPE_CODE_UNDEF;
 
 /* The token for tagged type name completion.  */
-static char *expout_completion_name;
+static gdb::unique_xmalloc_ptr<char> expout_completion_name;
 
 
 static unsigned int expressiondebug = 0;
@@ -122,6 +121,18 @@ static expression_up parse_exp_in_context_1 (const char **, CORE_ADDR,
 					     const struct block *, int,
 					     int, int *);
 
+/* Documented at it's declaration.  */
+
+void
+innermost_block_tracker::update (const struct block *b,
+				 innermost_block_tracker_types t)
+{
+  if ((m_types & t) != 0
+      && (m_innermost_block == NULL
+	  || contained_in (b, m_innermost_block)))
+    m_innermost_block = b;
+}
+
 /* Data structure for saving values of arglist_len for function calls whose
    arguments contain other function calls.  */
 
@@ -153,34 +164,32 @@ end_arglist (void)
 
 /* See definition in parser-defs.h.  */
 
-void
-initialize_expout (struct parser_state *ps, size_t initial_size,
-		   const struct language_defn *lang,
-		   struct gdbarch *gdbarch)
+parser_state::parser_state (size_t initial_size,
+			    const struct language_defn *lang,
+			    struct gdbarch *gdbarch)
+  : expout_size (initial_size),
+    expout (XNEWVAR (expression,
+		     (sizeof (expression)
+		      + EXP_ELEM_TO_BYTES (expout_size)))),
+    expout_ptr (0)
 {
-  ps->expout_size = initial_size;
-  ps->expout_ptr = 0;
-  ps->expout
-    = (struct expression *) xmalloc (sizeof (struct expression)
-				     + EXP_ELEM_TO_BYTES (ps->expout_size));
-  ps->expout->language_defn = lang;
-  ps->expout->gdbarch = gdbarch;
+  expout->language_defn = lang;
+  expout->gdbarch = gdbarch;
 }
 
-/* See definition in parser-defs.h.  */
-
-void
-reallocate_expout (struct parser_state *ps)
+expression_up
+parser_state::release ()
 {
   /* Record the actual number of expression elements, and then
      reallocate the expression memory so that we free up any
      excess elements.  */
 
-  ps->expout->nelts = ps->expout_ptr;
-  ps->expout = (struct expression *)
-     xrealloc (ps->expout,
-	       sizeof (struct expression)
-	       + EXP_ELEM_TO_BYTES (ps->expout_ptr));
+  expout->nelts = expout_ptr;
+  expout.reset (XRESIZEVAR (expression, expout.release (),
+			    (sizeof (expression)
+			     + EXP_ELEM_TO_BYTES (expout_ptr))));
+
+  return std::move (expout);
 }
 
 /* This page contains the functions for adding data to the struct expression
@@ -197,9 +206,9 @@ write_exp_elt (struct parser_state *ps, const union exp_element *expelt)
   if (ps->expout_ptr >= ps->expout_size)
     {
       ps->expout_size *= 2;
-      ps->expout = (struct expression *)
-	xrealloc (ps->expout, sizeof (struct expression)
-		  + EXP_ELEM_TO_BYTES (ps->expout_size));
+      ps->expout.reset (XRESIZEVAR (expression, ps->expout.release (),
+				    (sizeof (expression)
+				     + EXP_ELEM_TO_BYTES (ps->expout_size))));
     }
   ps->expout->elts[ps->expout_ptr++] = *expelt;
 }
@@ -503,8 +512,6 @@ find_minsym_type_and_address (minimal_symbol *msymbol,
   if (address_p != NULL)
     *address_p = addr;
 
-  struct type *the_type;
-
   switch (type)
     {
     case mst_text:
@@ -568,9 +575,7 @@ mark_completion_tag (enum type_code tag, const char *ptr, int length)
 	      || tag == TYPE_CODE_STRUCT
 	      || tag == TYPE_CODE_ENUM);
   expout_tag_completion_type = tag;
-  expout_completion_name = (char *) xmalloc (length + 1);
-  memcpy (expout_completion_name, ptr, length);
-  expout_completion_name[length] = '\0';
+  expout_completion_name.reset (xstrndup (ptr, length));
 }
 
 
@@ -687,6 +692,8 @@ handle_register:
   str.ptr++;
   write_exp_string (ps, str);
   write_exp_elt_opcode (ps, OP_REGISTER);
+  innermost_block.update (expression_context_block,
+			  INNERMOST_BLOCK_FOR_REGISTERS);
   return;
 }
 
@@ -1119,7 +1126,6 @@ parse_exp_in_context_1 (const char **stringptr, CORE_ADDR pc,
 			int comma, int void_context_p, int *out_subexp)
 {
   const struct language_defn *lang = NULL;
-  struct parser_state ps;
   int subexp;
 
   lexptr = *stringptr;
@@ -1129,8 +1135,7 @@ parse_exp_in_context_1 (const char **stringptr, CORE_ADDR pc,
   type_stack.depth = 0;
   expout_last_struct = -1;
   expout_tag_completion_type = TYPE_CODE_UNDEF;
-  xfree (expout_completion_name);
-  expout_completion_name = NULL;
+  expout_completion_name.reset ();
 
   comma_terminates = comma;
 
@@ -1195,7 +1200,7 @@ parse_exp_in_context_1 (const char **stringptr, CORE_ADDR pc,
      and others called from *.y) ensure CURRENT_LANGUAGE gets restored
      to the value matching SELECTED_FRAME as set by get_current_arch.  */
 
-  initialize_expout (&ps, 10, lang, get_current_arch ());
+  parser_state ps (10, lang, get_current_arch ());
 
   scoped_restore_current_language lang_saver;
   set_language (lang->la_language);
@@ -1208,33 +1213,32 @@ parse_exp_in_context_1 (const char **stringptr, CORE_ADDR pc,
   CATCH (except, RETURN_MASK_ALL)
     {
       if (! parse_completion)
-	{
-	  xfree (ps.expout);
-	  throw_exception (except);
-	}
+	throw_exception (except);
     }
   END_CATCH
 
-  reallocate_expout (&ps);
+  /* We have to operate on an "expression *", due to la_post_parser,
+     which explains this funny-looking double release.  */
+  expression_up result = ps.release ();
 
   /* Convert expression from postfix form as generated by yacc
      parser, to a prefix form.  */
 
   if (expressiondebug)
-    dump_raw_expression (ps.expout, gdb_stdlog,
+    dump_raw_expression (result.get (), gdb_stdlog,
 			 "before conversion to prefix form");
 
-  subexp = prefixify_expression (ps.expout);
+  subexp = prefixify_expression (result.get ());
   if (out_subexp)
     *out_subexp = subexp;
 
-  lang->la_post_parser (&ps.expout, void_context_p);
+  lang->la_post_parser (&result, void_context_p);
 
   if (expressiondebug)
-    dump_prefix_expression (ps.expout, gdb_stdlog);
+    dump_prefix_expression (result.get (), gdb_stdlog);
 
   *stringptr = lexptr;
-  return expression_up (ps.expout);
+  return result;
 }
 
 /* Parse STRING as an expression, and complain if this fails
@@ -1270,11 +1274,11 @@ parse_expression_with_language (const char *string, enum language lang)
    reference; furthermore, if the parsing ends in the field name,
    return the field name in *NAME.  If the parsing ends in the middle
    of a field reference, but the reference is somehow invalid, throw
-   an exception.  In all other cases, return NULL.  Returned non-NULL
-   *NAME must be freed by the caller.  */
+   an exception.  In all other cases, return NULL.  */
 
 struct type *
-parse_expression_for_completion (const char *string, char **name,
+parse_expression_for_completion (const char *string,
+				 gdb::unique_xmalloc_ptr<char> *name,
 				 enum type_code *code)
 {
   expression_up exp;
@@ -1299,23 +1303,24 @@ parse_expression_for_completion (const char *string, char **name,
   if (expout_tag_completion_type != TYPE_CODE_UNDEF)
     {
       *code = expout_tag_completion_type;
-      *name = expout_completion_name;
-      expout_completion_name = NULL;
+      *name = std::move (expout_completion_name);
       return NULL;
     }
 
   if (expout_last_struct == -1)
     return NULL;
 
-  *name = extract_field_op (exp.get (), &subexp);
-  if (!*name)
-    return NULL;
+  const char *fieldname = extract_field_op (exp.get (), &subexp);
+  if (fieldname == NULL)
+    {
+      name->reset ();
+      return NULL;
+    }
 
+  name->reset (xstrdup (fieldname));
   /* This might throw an exception.  If so, we want to let it
      propagate.  */
   val = evaluate_subexpression_type (exp.get (), subexp);
-  /* (*NAME) is a part of the EXP memory block freed below.  */
-  *name = xstrdup (*name);
 
   return value_type (val);
 }
@@ -1323,7 +1328,7 @@ parse_expression_for_completion (const char *string, char **name,
 /* A post-parser that does nothing.  */
 
 void
-null_post_parser (struct expression **exp, int void_context_p)
+null_post_parser (expression_up *exp, int void_context_p)
 {
 }
 
@@ -1338,13 +1343,7 @@ bool
 parse_float (const char *p, int len,
 	     const struct type *type, gdb_byte *data)
 {
-  if (TYPE_CODE (type) == TYPE_CODE_FLT)
-    return floatformat_from_string (floatformat_from_type (type),
-				    data, std::string (p, len));
-  else
-    return decimal_from_string (data, TYPE_LENGTH (type),
-				gdbarch_byte_order (get_type_arch (type)),
-				std::string (p, len));
+  return target_float_from_string (data, type, std::string (p, len));
 }
 
 /* Stuff for maintaining a stack of types.  Currently just used by C, but
@@ -1875,10 +1874,11 @@ increase_expout_size (struct parser_state *ps, size_t lenelt)
   if ((ps->expout_ptr + lenelt) >= ps->expout_size)
     {
       ps->expout_size = std::max (ps->expout_size * 2,
-			     ps->expout_ptr + lenelt + 10);
-      ps->expout = (struct expression *)
-	xrealloc (ps->expout, (sizeof (struct expression)
-			       + EXP_ELEM_TO_BYTES (ps->expout_size)));
+				  ps->expout_ptr + lenelt + 10);
+      ps->expout.reset (XRESIZEVAR (expression,
+				    ps->expout.release (),
+				    (sizeof (struct expression)
+				     + EXP_ELEM_TO_BYTES (ps->expout_size))));
     }
 }
 

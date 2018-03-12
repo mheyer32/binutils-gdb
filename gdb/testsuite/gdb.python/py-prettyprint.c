@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2008-2017 Free Software Foundation, Inc.
+   Copyright 2008-2018 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -111,6 +111,16 @@ class Fake
   }
 };
 #endif
+
+struct to_string_returns_value_inner
+{
+  int val;
+};
+
+struct to_string_returns_value_wrapper
+{
+  struct to_string_returns_value_inner inner;
+};
 
 struct substruct {
   int a;
@@ -284,6 +294,7 @@ main ()
   struct lazystring estring, estring2, estring3;
   struct hint_error hint_error;
   struct children_as_list children_as_list;
+  struct to_string_returns_value_wrapper tsrvw = { { 1989 } };
 
   nstype.elements = narray;
   nstype.len = 0;

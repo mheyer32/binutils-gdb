@@ -28,26 +28,26 @@ debug_post_attach (struct target_ops *self, int arg1)
 }
 
 static void
-delegate_detach (struct target_ops *self, const char *arg1, int arg2)
+delegate_detach (struct target_ops *self, inferior *arg1, int arg2)
 {
   self = self->beneath;
   self->to_detach (self, arg1, arg2);
 }
 
 static void
-tdefault_detach (struct target_ops *self, const char *arg1, int arg2)
+tdefault_detach (struct target_ops *self, inferior *arg1, int arg2)
 {
 }
 
 static void
-debug_detach (struct target_ops *self, const char *arg1, int arg2)
+debug_detach (struct target_ops *self, inferior *arg1, int arg2)
 {
   fprintf_unfiltered (gdb_stdlog, "-> %s->to_detach (...)\n", debug_target.to_shortname);
   debug_target.to_detach (&debug_target, arg1, arg2);
   fprintf_unfiltered (gdb_stdlog, "<- %s->to_detach (", debug_target.to_shortname);
   target_debug_print_struct_target_ops_p (&debug_target);
   fputs_unfiltered (", ", gdb_stdlog);
-  target_debug_print_const_char_p (arg1);
+  target_debug_print_inferior_p (arg1);
   fputs_unfiltered (", ", gdb_stdlog);
   target_debug_print_int (arg2);
   fputs_unfiltered (")\n", gdb_stdlog);
@@ -922,6 +922,28 @@ debug_terminal_inferior (struct target_ops *self)
 }
 
 static void
+delegate_terminal_save_inferior (struct target_ops *self)
+{
+  self = self->beneath;
+  self->to_terminal_save_inferior (self);
+}
+
+static void
+tdefault_terminal_save_inferior (struct target_ops *self)
+{
+}
+
+static void
+debug_terminal_save_inferior (struct target_ops *self)
+{
+  fprintf_unfiltered (gdb_stdlog, "-> %s->to_terminal_save_inferior (...)\n", debug_target.to_shortname);
+  debug_target.to_terminal_save_inferior (&debug_target);
+  fprintf_unfiltered (gdb_stdlog, "<- %s->to_terminal_save_inferior (", debug_target.to_shortname);
+  target_debug_print_struct_target_ops_p (&debug_target);
+  fputs_unfiltered (")\n", gdb_stdlog);
+}
+
+static void
 delegate_terminal_ours_for_output (struct target_ops *self)
 {
   self = self->beneath;
@@ -1286,36 +1308,34 @@ debug_follow_exec (struct target_ops *self, struct inferior *arg1, char *arg2)
 }
 
 static int
-delegate_set_syscall_catchpoint (struct target_ops *self, int arg1, int arg2, int arg3, int arg4, int *arg5)
+delegate_set_syscall_catchpoint (struct target_ops *self, int arg1, bool arg2, int arg3, gdb::array_view<const int> arg4)
 {
   self = self->beneath;
-  return self->to_set_syscall_catchpoint (self, arg1, arg2, arg3, arg4, arg5);
+  return self->to_set_syscall_catchpoint (self, arg1, arg2, arg3, arg4);
 }
 
 static int
-tdefault_set_syscall_catchpoint (struct target_ops *self, int arg1, int arg2, int arg3, int arg4, int *arg5)
+tdefault_set_syscall_catchpoint (struct target_ops *self, int arg1, bool arg2, int arg3, gdb::array_view<const int> arg4)
 {
   return 1;
 }
 
 static int
-debug_set_syscall_catchpoint (struct target_ops *self, int arg1, int arg2, int arg3, int arg4, int *arg5)
+debug_set_syscall_catchpoint (struct target_ops *self, int arg1, bool arg2, int arg3, gdb::array_view<const int> arg4)
 {
   int result;
   fprintf_unfiltered (gdb_stdlog, "-> %s->to_set_syscall_catchpoint (...)\n", debug_target.to_shortname);
-  result = debug_target.to_set_syscall_catchpoint (&debug_target, arg1, arg2, arg3, arg4, arg5);
+  result = debug_target.to_set_syscall_catchpoint (&debug_target, arg1, arg2, arg3, arg4);
   fprintf_unfiltered (gdb_stdlog, "<- %s->to_set_syscall_catchpoint (", debug_target.to_shortname);
   target_debug_print_struct_target_ops_p (&debug_target);
   fputs_unfiltered (", ", gdb_stdlog);
   target_debug_print_int (arg1);
   fputs_unfiltered (", ", gdb_stdlog);
-  target_debug_print_int (arg2);
+  target_debug_print_bool (arg2);
   fputs_unfiltered (", ", gdb_stdlog);
   target_debug_print_int (arg3);
   fputs_unfiltered (", ", gdb_stdlog);
-  target_debug_print_int (arg4);
-  fputs_unfiltered (", ", gdb_stdlog);
-  target_debug_print_int_p (arg5);
+  target_debug_print_gdb_array_view_const_int (arg4);
   fputs_unfiltered (") = ", gdb_stdlog);
   target_debug_print_int (result);
   fputs_unfiltered ("\n", gdb_stdlog);
@@ -1641,26 +1661,24 @@ debug_stop (struct target_ops *self, ptid_t arg1)
 }
 
 static void
-delegate_interrupt (struct target_ops *self, ptid_t arg1)
+delegate_interrupt (struct target_ops *self)
 {
   self = self->beneath;
-  self->to_interrupt (self, arg1);
+  self->to_interrupt (self);
 }
 
 static void
-tdefault_interrupt (struct target_ops *self, ptid_t arg1)
+tdefault_interrupt (struct target_ops *self)
 {
 }
 
 static void
-debug_interrupt (struct target_ops *self, ptid_t arg1)
+debug_interrupt (struct target_ops *self)
 {
   fprintf_unfiltered (gdb_stdlog, "-> %s->to_interrupt (...)\n", debug_target.to_shortname);
-  debug_target.to_interrupt (&debug_target, arg1);
+  debug_target.to_interrupt (&debug_target);
   fprintf_unfiltered (gdb_stdlog, "<- %s->to_interrupt (", debug_target.to_shortname);
   target_debug_print_struct_target_ops_p (&debug_target);
-  fputs_unfiltered (", ", gdb_stdlog);
-  target_debug_print_ptid_t (arg1);
   fputs_unfiltered (")\n", gdb_stdlog);
 }
 
@@ -2148,29 +2166,29 @@ debug_get_memory_xfer_limit (struct target_ops *self)
   return result;
 }
 
-static mem_region_vector
+static std::vector<mem_region>
 delegate_memory_map (struct target_ops *self)
 {
   self = self->beneath;
   return self->to_memory_map (self);
 }
 
-static mem_region_vector
+static std::vector<mem_region>
 tdefault_memory_map (struct target_ops *self)
 {
   return std::vector<mem_region> ();
 }
 
-static mem_region_vector
+static std::vector<mem_region>
 debug_memory_map (struct target_ops *self)
 {
-  mem_region_vector result;
+  std::vector<mem_region> result;
   fprintf_unfiltered (gdb_stdlog, "-> %s->to_memory_map (...)\n", debug_target.to_shortname);
   result = debug_target.to_memory_map (&debug_target);
   fprintf_unfiltered (gdb_stdlog, "<- %s->to_memory_map (", debug_target.to_shortname);
   target_debug_print_struct_target_ops_p (&debug_target);
   fputs_unfiltered (") = ", gdb_stdlog);
-  target_debug_print_mem_region_vector (result);
+  target_debug_print_std_vector_mem_region (result);
   fputs_unfiltered ("\n", gdb_stdlog);
   return result;
 }
@@ -3352,7 +3370,7 @@ debug_static_tracepoint_markers_by_strid (struct target_ops *self, const char *a
   fputs_unfiltered (", ", gdb_stdlog);
   target_debug_print_const_char_p (arg1);
   fputs_unfiltered (") = ", gdb_stdlog);
-  target_debug_print_VEC_static_tracepoint_marker_p__p (result);
+  target_debug_print_VEC_static_tracepoint_marker_p_p (result);
   fputs_unfiltered ("\n", gdb_stdlog);
   return result;
 }
@@ -3434,35 +3452,6 @@ debug_can_use_agent (struct target_ops *self)
   result = debug_target.to_can_use_agent (&debug_target);
   fprintf_unfiltered (gdb_stdlog, "<- %s->to_can_use_agent (", debug_target.to_shortname);
   target_debug_print_struct_target_ops_p (&debug_target);
-  fputs_unfiltered (") = ", gdb_stdlog);
-  target_debug_print_int (result);
-  fputs_unfiltered ("\n", gdb_stdlog);
-  return result;
-}
-
-static int
-delegate_supports_btrace (struct target_ops *self, enum btrace_format arg1)
-{
-  self = self->beneath;
-  return self->to_supports_btrace (self, arg1);
-}
-
-static int
-tdefault_supports_btrace (struct target_ops *self, enum btrace_format arg1)
-{
-  return 0;
-}
-
-static int
-debug_supports_btrace (struct target_ops *self, enum btrace_format arg1)
-{
-  int result;
-  fprintf_unfiltered (gdb_stdlog, "-> %s->to_supports_btrace (...)\n", debug_target.to_shortname);
-  result = debug_target.to_supports_btrace (&debug_target, arg1);
-  fprintf_unfiltered (gdb_stdlog, "<- %s->to_supports_btrace (", debug_target.to_shortname);
-  target_debug_print_struct_target_ops_p (&debug_target);
-  fputs_unfiltered (", ", gdb_stdlog);
-  target_debug_print_enum_btrace_format (arg1);
   fputs_unfiltered (") = ", gdb_stdlog);
   target_debug_print_int (result);
   fputs_unfiltered ("\n", gdb_stdlog);
@@ -3972,20 +3961,20 @@ debug_insn_history_range (struct target_ops *self, ULONGEST arg1, ULONGEST arg2,
 }
 
 static void
-delegate_call_history (struct target_ops *self, int arg1, int arg2)
+delegate_call_history (struct target_ops *self, int arg1, record_print_flags arg2)
 {
   self = self->beneath;
   self->to_call_history (self, arg1, arg2);
 }
 
 static void
-tdefault_call_history (struct target_ops *self, int arg1, int arg2)
+tdefault_call_history (struct target_ops *self, int arg1, record_print_flags arg2)
 {
   tcomplain ();
 }
 
 static void
-debug_call_history (struct target_ops *self, int arg1, int arg2)
+debug_call_history (struct target_ops *self, int arg1, record_print_flags arg2)
 {
   fprintf_unfiltered (gdb_stdlog, "-> %s->to_call_history (...)\n", debug_target.to_shortname);
   debug_target.to_call_history (&debug_target, arg1, arg2);
@@ -3994,25 +3983,25 @@ debug_call_history (struct target_ops *self, int arg1, int arg2)
   fputs_unfiltered (", ", gdb_stdlog);
   target_debug_print_int (arg1);
   fputs_unfiltered (", ", gdb_stdlog);
-  target_debug_print_int (arg2);
+  target_debug_print_record_print_flags (arg2);
   fputs_unfiltered (")\n", gdb_stdlog);
 }
 
 static void
-delegate_call_history_from (struct target_ops *self, ULONGEST arg1, int arg2, int arg3)
+delegate_call_history_from (struct target_ops *self, ULONGEST arg1, int arg2, record_print_flags arg3)
 {
   self = self->beneath;
   self->to_call_history_from (self, arg1, arg2, arg3);
 }
 
 static void
-tdefault_call_history_from (struct target_ops *self, ULONGEST arg1, int arg2, int arg3)
+tdefault_call_history_from (struct target_ops *self, ULONGEST arg1, int arg2, record_print_flags arg3)
 {
   tcomplain ();
 }
 
 static void
-debug_call_history_from (struct target_ops *self, ULONGEST arg1, int arg2, int arg3)
+debug_call_history_from (struct target_ops *self, ULONGEST arg1, int arg2, record_print_flags arg3)
 {
   fprintf_unfiltered (gdb_stdlog, "-> %s->to_call_history_from (...)\n", debug_target.to_shortname);
   debug_target.to_call_history_from (&debug_target, arg1, arg2, arg3);
@@ -4023,25 +4012,25 @@ debug_call_history_from (struct target_ops *self, ULONGEST arg1, int arg2, int a
   fputs_unfiltered (", ", gdb_stdlog);
   target_debug_print_int (arg2);
   fputs_unfiltered (", ", gdb_stdlog);
-  target_debug_print_int (arg3);
+  target_debug_print_record_print_flags (arg3);
   fputs_unfiltered (")\n", gdb_stdlog);
 }
 
 static void
-delegate_call_history_range (struct target_ops *self, ULONGEST arg1, ULONGEST arg2, int arg3)
+delegate_call_history_range (struct target_ops *self, ULONGEST arg1, ULONGEST arg2, record_print_flags arg3)
 {
   self = self->beneath;
   self->to_call_history_range (self, arg1, arg2, arg3);
 }
 
 static void
-tdefault_call_history_range (struct target_ops *self, ULONGEST arg1, ULONGEST arg2, int arg3)
+tdefault_call_history_range (struct target_ops *self, ULONGEST arg1, ULONGEST arg2, record_print_flags arg3)
 {
   tcomplain ();
 }
 
 static void
-debug_call_history_range (struct target_ops *self, ULONGEST arg1, ULONGEST arg2, int arg3)
+debug_call_history_range (struct target_ops *self, ULONGEST arg1, ULONGEST arg2, record_print_flags arg3)
 {
   fprintf_unfiltered (gdb_stdlog, "-> %s->to_call_history_range (...)\n", debug_target.to_shortname);
   debug_target.to_call_history_range (&debug_target, arg1, arg2, arg3);
@@ -4052,7 +4041,7 @@ debug_call_history_range (struct target_ops *self, ULONGEST arg1, ULONGEST arg2,
   fputs_unfiltered (", ", gdb_stdlog);
   target_debug_print_ULONGEST (arg2);
   fputs_unfiltered (", ", gdb_stdlog);
-  target_debug_print_int (arg3);
+  target_debug_print_record_print_flags (arg3);
   fputs_unfiltered (")\n", gdb_stdlog);
 }
 
@@ -4250,6 +4239,8 @@ install_delegators (struct target_ops *ops)
     ops->to_terminal_init = delegate_terminal_init;
   if (ops->to_terminal_inferior == NULL)
     ops->to_terminal_inferior = delegate_terminal_inferior;
+  if (ops->to_terminal_save_inferior == NULL)
+    ops->to_terminal_save_inferior = delegate_terminal_save_inferior;
   if (ops->to_terminal_ours_for_output == NULL)
     ops->to_terminal_ours_for_output = delegate_terminal_ours_for_output;
   if (ops->to_terminal_ours == NULL)
@@ -4438,8 +4429,6 @@ install_delegators (struct target_ops *ops)
     ops->to_use_agent = delegate_use_agent;
   if (ops->to_can_use_agent == NULL)
     ops->to_can_use_agent = delegate_can_use_agent;
-  if (ops->to_supports_btrace == NULL)
-    ops->to_supports_btrace = delegate_supports_btrace;
   if (ops->to_enable_btrace == NULL)
     ops->to_enable_btrace = delegate_enable_btrace;
   if (ops->to_disable_btrace == NULL)
@@ -4532,6 +4521,7 @@ install_dummy_methods (struct target_ops *ops)
   ops->to_can_do_single_step = tdefault_can_do_single_step;
   ops->to_terminal_init = tdefault_terminal_init;
   ops->to_terminal_inferior = tdefault_terminal_inferior;
+  ops->to_terminal_save_inferior = tdefault_terminal_save_inferior;
   ops->to_terminal_ours_for_output = tdefault_terminal_ours_for_output;
   ops->to_terminal_ours = tdefault_terminal_ours;
   ops->to_terminal_info = default_terminal_info;
@@ -4626,7 +4616,6 @@ install_dummy_methods (struct target_ops *ops)
   ops->to_traceframe_info = tdefault_traceframe_info;
   ops->to_use_agent = tdefault_use_agent;
   ops->to_can_use_agent = tdefault_can_use_agent;
-  ops->to_supports_btrace = tdefault_supports_btrace;
   ops->to_enable_btrace = tdefault_enable_btrace;
   ops->to_disable_btrace = tdefault_disable_btrace;
   ops->to_teardown_btrace = tdefault_teardown_btrace;
@@ -4692,6 +4681,7 @@ init_debug_target (struct target_ops *ops)
   ops->to_can_do_single_step = debug_can_do_single_step;
   ops->to_terminal_init = debug_terminal_init;
   ops->to_terminal_inferior = debug_terminal_inferior;
+  ops->to_terminal_save_inferior = debug_terminal_save_inferior;
   ops->to_terminal_ours_for_output = debug_terminal_ours_for_output;
   ops->to_terminal_ours = debug_terminal_ours;
   ops->to_terminal_info = debug_terminal_info;
@@ -4786,7 +4776,6 @@ init_debug_target (struct target_ops *ops)
   ops->to_traceframe_info = debug_traceframe_info;
   ops->to_use_agent = debug_use_agent;
   ops->to_can_use_agent = debug_can_use_agent;
-  ops->to_supports_btrace = debug_supports_btrace;
   ops->to_enable_btrace = debug_enable_btrace;
   ops->to_disable_btrace = debug_disable_btrace;
   ops->to_teardown_btrace = debug_teardown_btrace;

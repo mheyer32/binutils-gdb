@@ -1,5 +1,5 @@
 /* Inferior process information for the remote server for GDB.
-   Copyright (C) 2002-2017 Free Software Foundation, Inc.
+   Copyright (C) 2002-2018 Free Software Foundation, Inc.
 
    Contributed by MontaVista Software.
 
@@ -29,63 +29,6 @@ struct thread_info *current_thread;
 
 /* The current working directory used to start the inferior.  */
 static const char *current_inferior_cwd = NULL;
-
-thread_info *
-find_inferior (std::list<thread_info *> *thread_list,
-	       int (*func) (thread_info *, void *),
-	       void *arg)
-{
-  gdb_assert (thread_list == &all_threads);
-
-  return find_thread ([&] (thread_info *thread) {
-    return func (thread, arg);
-  });
-}
-
-thread_info *
-find_inferior_id (std::list<thread_info *> *thread_list, ptid_t id)
-{
-  gdb_assert (thread_list == &all_threads);
-
-  return find_thread ([&] (thread_info *thread) {
-    return thread->id == id;
-  });
-}
-
-thread_info *
-find_inferior_in_random (std::list<thread_info *> *thread_list,
-			 int (*func) (thread_info *, void *),
-			 void *arg)
-{
-  gdb_assert (thread_list == &all_threads);
-
-  return find_thread_in_random ([&] (thread_info *thread) {
-    return func (thread, arg);
-  });
-}
-
-void
-for_each_inferior (std::list<thread_info *> *thread_list,
-		   void (*action) (thread_info *))
-{
-  gdb_assert (thread_list == &all_threads);
-
-  for_each_thread ([&] (thread_info *thread) {
-    action (thread);
-  });
-}
-
-void
-for_each_inferior_with_data (std::list<thread_info *> *thread_list,
-			     void (*action) (thread_info *, void *),
-			     void *data)
-{
-  gdb_assert (thread_list == &all_threads);
-
-  for_each_thread ([&] (thread_info *thread) {
-    action (thread, data);
-  });
-}
 
 struct thread_info *
 add_thread (ptid_t thread_id, void *target_data)
@@ -120,7 +63,9 @@ get_first_thread (void)
 struct thread_info *
 find_thread_ptid (ptid_t ptid)
 {
-  return (struct thread_info *) find_inferior_id (&all_threads, ptid);
+  return find_thread ([&] (thread_info *thread) {
+    return thread->id == ptid;
+  });
 }
 
 /* Find a thread associated with the given PROCESS, or NULL if no
@@ -183,7 +128,7 @@ set_thread_regcache_data (struct thread_info *thread, struct regcache *data)
 void
 clear_inferiors (void)
 {
-  for_each_inferior (&all_threads, free_one_thread);
+  for_each_thread (free_one_thread);
   all_threads.clear ();
 
   clear_dlls ();
@@ -194,10 +139,7 @@ clear_inferiors (void)
 struct process_info *
 add_process (int pid, int attached)
 {
-  struct process_info *process = XCNEW (struct process_info);
-
-  process->pid = pid;
-  process->attached = attached;
+  process_info *process = new process_info (pid, attached);
 
   all_processes.push_back (process);
 
@@ -215,8 +157,7 @@ remove_process (struct process_info *process)
   free_all_breakpoints (process);
   gdb_assert (find_thread_process (process) == NULL);
   all_processes.remove (process);
-  VEC_free (int, process->syscalls_to_catch);
-  free (process);
+  delete process;
 }
 
 process_info *
@@ -270,18 +211,6 @@ current_process (void)
 {
   gdb_assert (current_thread != NULL);
   return get_thread_process (current_thread);
-}
-
-static void
-do_restore_current_thread_cleanup (void *arg)
-{
-  current_thread = (struct thread_info *) arg;
-}
-
-struct cleanup *
-make_cleanup_restore_current_thread (void)
-{
-  return make_cleanup (do_restore_current_thread_cleanup, current_thread);
 }
 
 /* See common/common-gdbthread.h.  */

@@ -1,6 +1,6 @@
 /* Definitions for dealing with stack frames, for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2017 Free Software Foundation, Inc.
+   Copyright (C) 1986-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -494,8 +494,10 @@ extern struct program_space *get_frame_program_space (struct frame_info *);
 /* Unwind THIS frame's program space from the NEXT frame.  */
 extern struct program_space *frame_unwind_program_space (struct frame_info *);
 
+class address_space;
+
 /* Return the frame's address space.  */
-extern struct address_space *get_frame_address_space (struct frame_info *);
+extern const address_space *get_frame_address_space (struct frame_info *);
 
 /* For frames where we can not unwind further, describe why.  */
 
@@ -678,8 +680,9 @@ extern void *frame_obstack_zalloc (unsigned long size);
 #define FRAME_OBSTACK_CALLOC(NUMBER,TYPE) \
   ((TYPE *) frame_obstack_zalloc ((NUMBER) * sizeof (TYPE)))
 
+class readonly_detached_regcache;
 /* Create a regcache, and copy the frame's registers into it.  */
-std::unique_ptr<struct regcache> frame_save_as_regcache
+std::unique_ptr<readonly_detached_regcache> frame_save_as_regcache
     (struct frame_info *this_frame);
 
 extern const struct block *get_frame_block (struct frame_info *,
@@ -784,11 +787,11 @@ extern void read_frame_arg (struct symbol *sym, struct frame_info *frame,
 extern void read_frame_local (struct symbol *sym, struct frame_info *frame,
 			      struct frame_arg *argp);
 
-extern void info_args_command (char *, int);
+extern void info_args_command (const char *, int);
 
-extern void info_locals_command (char *, int);
+extern void info_locals_command (const char *, int);
 
-extern void return_command (char *, int);
+extern void return_command (const char *, int);
 
 /* Set FRAME's unwinder temporarily, so that we can call a sniffer.
    If sniffing fails, the caller should be sure to call

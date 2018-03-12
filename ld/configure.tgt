@@ -1,6 +1,6 @@
 # configure.tgt
 #
-#   Copyright (C) 2013-2017 Free Software Foundation, Inc.
+#   Copyright (C) 2013-2018 Free Software Foundation, Inc.
 #
 # This file is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -966,6 +966,15 @@ frv-*-* | hppa*-*-* | ia64-*-* | mips*-*-*)
 *-*-linux*)
   if test ${ac_default_ld_z_relro} = unset; then
     ac_default_ld_z_relro=1
+  fi
+  ;;
+esac
+
+# Enable -z separate-code by default for Linux/x86.
+case "${target}" in
+i[3-7]86-*-linux-* | x86_64-*-linux-*)
+  if test ${ac_default_ld_z_separate_code} = unset; then
+    ac_default_ld_z_separate_code=1
   fi
   ;;
 esac

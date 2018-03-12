@@ -1,7 +1,7 @@
 /* Variables that describe the inferior process running under GDB:
    Where it is, why it stopped, and how to step it.
 
-   Copyright (C) 1986-2017 Free Software Foundation, Inc.
+   Copyright (C) 1986-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -70,7 +70,7 @@ extern struct cleanup *make_cleanup_restore_infcall_control_state
 extern void discard_infcall_suspend_state (struct infcall_suspend_state *);
 extern void discard_infcall_control_state (struct infcall_control_state *);
 
-extern struct regcache *
+extern readonly_detached_regcache *
   get_infcall_suspend_state_regcache (struct infcall_suspend_state *);
 
 extern void set_sigint_trap (void);
@@ -129,9 +129,15 @@ extern void child_terminal_ours_for_output (struct target_ops *self);
 
 extern void child_terminal_inferior (struct target_ops *self);
 
+extern void child_terminal_save_inferior (struct target_ops *self);
+
 extern void child_terminal_init (struct target_ops *self);
 
 extern void child_terminal_init_with_pgrp (int pgrp);
+
+extern void child_pass_ctrlc (struct target_ops *self);
+
+extern void child_interrupt (struct target_ops *self);
 
 /* From fork-child.c */
 
@@ -152,15 +158,15 @@ extern void setup_inferior (int from_tty);
 
 extern void post_create_inferior (struct target_ops *, int);
 
-extern void attach_command (char *, int);
+extern void attach_command (const char *, int);
 
 extern char *get_inferior_args (void);
 
-extern void set_inferior_args (char *);
+extern void set_inferior_args (const char *);
 
 extern void set_inferior_args_vector (int, char **);
 
-extern void registers_info (char *, int);
+extern void registers_info (const char *, int);
 
 extern void continue_1 (int all_threads);
 
@@ -263,7 +269,12 @@ enum stop_kind
 #define ON_STACK 1
 #define AT_ENTRY_POINT 4
 
-struct private_inferior;
+/* Base class for target-specific inferior data.  */
+
+struct private_inferior
+{
+  virtual ~private_inferior () = 0;
+};
 
 /* Inferior process specific part of `struct infcall_control_state'.
 
@@ -362,6 +373,10 @@ public:
   /* The name of terminal device to use for I/O.  */
   char *terminal = NULL;
 
+  /* The terminal state as set by the last target_terminal::terminal_*
+     call.  */
+  target_terminal_state terminal_state = target_terminal_state::is_ours;
+
   /* Environment to use for running inferior,
      in format described in environ.h.  */
   gdb_environ environment;
@@ -403,7 +418,7 @@ public:
   bool needs_setup = false;
 
   /* Private data used by the target vector implementation.  */
-  private_inferior *priv = NULL;
+  std::unique_ptr<private_inferior> priv;
 
   /* HAS_EXIT_CODE is true if the inferior exited with an exit code.
      In this case, the EXIT_CODE field is also valid.  */
@@ -453,6 +468,9 @@ extern struct inferior *add_inferior_silent (int pid);
 extern void delete_inferior (struct inferior *todel);
 
 /* Delete an existing inferior list entry, due to inferior detaching.  */
+extern void detach_inferior (inferior *inf);
+
+/* Same as the above, but with the inferior specified by PID.  */
 extern void detach_inferior (int pid);
 
 extern void exit_inferior (int pid);

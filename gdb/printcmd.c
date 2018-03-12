@@ -1,6 +1,6 @@
 /* Print values for GNU debugger GDB.
 
-   Copyright (C) 1986-2017 Free Software Foundation, Inc.
+   Copyright (C) 1986-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -38,7 +38,7 @@
 #include "ui-out.h"
 #include "block.h"
 #include "disasm.h"
-#include "dfp.h"
+#include "target-float.h"
 #include "observer.h"
 #include "solist.h"
 #include "parser-defs.h"
@@ -1214,14 +1214,14 @@ print_command_1 (const char *exp, int voidprint)
 }
 
 static void
-print_command (char *exp, int from_tty)
+print_command (const char *exp, int from_tty)
 {
   print_command_1 (exp, 1);
 }
 
 /* Same as print, except it doesn't print void results.  */
 static void
-call_command (char *exp, int from_tty)
+call_command (const char *exp, int from_tty)
 {
   print_command_1 (exp, 0);
 }
@@ -1229,7 +1229,7 @@ call_command (char *exp, int from_tty)
 /* Implementation of the "output" command.  */
 
 static void
-output_command (char *exp, int from_tty)
+output_command (const char *exp, int from_tty)
 {
   output_command_const (exp, from_tty);
 }
@@ -1295,16 +1295,8 @@ set_command (const char *exp, int from_tty)
   evaluate_expression (expr.get ());
 }
 
-/* Temporary non-const version of set_command.  */
-
 static void
-non_const_set_command (char *exp, int from_tty)
-{
-  set_command (exp, from_tty);
-}
-
-static void
-info_symbol_command (char *arg, int from_tty)
+info_symbol_command (const char *arg, int from_tty)
 {
   struct minimal_symbol *msymbol;
   struct objfile *objfile;
@@ -1395,7 +1387,7 @@ info_symbol_command (char *arg, int from_tty)
 }
 
 static void
-info_address_command (char *exp, int from_tty)
+info_address_command (const char *exp, int from_tty)
 {
   struct gdbarch *gdbarch;
   int regno;
@@ -1619,7 +1611,7 @@ info_address_command (char *exp, int from_tty)
 
 
 static void
-x_command (char *exp, int from_tty)
+x_command (const char *exp, int from_tty)
 {
   struct format_data fmt;
   struct value *val;
@@ -1646,7 +1638,7 @@ x_command (char *exp, int from_tty)
          repeated with Newline.  But don't clobber a user-defined
          command's definition.  */
       if (from_tty)
-	*exp = 0;
+	set_repeat_arguments ("");
       val = evaluate_expression (expr.get ());
       if (TYPE_IS_REFERENCE (value_type (val)))
 	val = coerce_ref (val);
@@ -1702,7 +1694,7 @@ x_command (char *exp, int from_tty)
    Specify the expression.  */
 
 static void
-display_command (char *arg, int from_tty)
+display_command (const char *arg, int from_tty)
 {
   struct format_data fmt;
   struct display *newobj;
@@ -1731,14 +1723,14 @@ display_command (char *arg, int from_tty)
       fmt.raw = 0;
     }
 
-  innermost_block = NULL;
+  innermost_block.reset ();
   expression_up expr = parse_expression (exp);
 
   newobj = new display ();
 
   newobj->exp_string = xstrdup (exp);
   newobj->exp = std::move (expr);
-  newobj->block = innermost_block;
+  newobj->block = innermost_block.block ();
   newobj->pspace = current_program_space;
   newobj->number = ++display_number;
   newobj->format = fmt;
@@ -1899,9 +1891,9 @@ do_one_display (struct display *d)
 
       TRY
 	{
-	  innermost_block = NULL;
+	  innermost_block.reset ();
 	  d->exp = parse_expression (d->exp_string);
-	  d->block = innermost_block;
+	  d->block = innermost_block.block ();
 	}
       CATCH (ex, RETURN_MASK_ALL)
 	{
@@ -2061,7 +2053,7 @@ disable_current_display (void)
 }
 
 static void
-info_display_command (char *ignore, int from_tty)
+info_display_command (const char *ignore, int from_tty)
 {
   struct display *d;
 
@@ -2360,13 +2352,8 @@ printf_floating (struct ui_file *stream, const char *format,
   value = value_cast (fmt_type, value);
 
   /* Convert the value to a string and print it.  */
-  std::string str;
-  if (TYPE_CODE (fmt_type) == TYPE_CODE_FLT)
-    str = floatformat_to_string (floatformat_from_type (fmt_type),
-				 value_contents (value), format);
-  else
-    str = decimal_to_string (value_contents (value),
-			     TYPE_LENGTH (fmt_type), byte_order, format);
+  std::string str
+    = target_float_to_string (value_contents (value), fmt_type, format);
   fputs_filtered (str.c_str (), stream);
 }
 
@@ -2440,14 +2427,8 @@ printf_pointer (struct ui_file *stream, const char *format,
 static void
 ui_printf (const char *arg, struct ui_file *stream)
 {
-  struct format_piece *fpieces;
   const char *s = arg;
-  struct value **val_args;
-  int allocated_args = 20;
-  struct cleanup *old_cleanups;
-
-  val_args = XNEWVEC (struct value *, allocated_args);
-  old_cleanups = make_cleanup (free_current_contents, &val_args);
+  std::vector<struct value *> val_args;
 
   if (s == 0)
     error_no_arg (_("format-control string and values to print"));
@@ -2458,9 +2439,7 @@ ui_printf (const char *arg, struct ui_file *stream)
   if (*s++ != '"')
     error (_("Bad format string, missing '\"'."));
 
-  fpieces = parse_format_string (&s);
-
-  make_cleanup (free_format_pieces_cleanup, &fpieces);
+  format_pieces fpieces (&s);
 
   if (*s++ != '"')
     error (_("Bad format string, non-terminated '\"'."));
@@ -2475,14 +2454,13 @@ ui_printf (const char *arg, struct ui_file *stream)
   s = skip_spaces (s);
 
   {
-    int nargs = 0;
     int nargs_wanted;
-    int i, fr;
-    char *current_substring;
+    int i;
+    const char *current_substring;
 
     nargs_wanted = 0;
-    for (fr = 0; fpieces[fr].string != NULL; fr++)
-      if (fpieces[fr].argclass != literal_piece)
+    for (auto &&piece : fpieces)
+      if (piece.argclass != literal_piece)
 	++nargs_wanted;
 
     /* Now, parse all arguments and evaluate them.
@@ -2492,28 +2470,23 @@ ui_printf (const char *arg, struct ui_file *stream)
       {
 	const char *s1;
 
-	if (nargs == allocated_args)
-	  val_args = (struct value **) xrealloc ((char *) val_args,
-						 (allocated_args *= 2)
-						 * sizeof (struct value *));
 	s1 = s;
-	val_args[nargs] = parse_to_comma_and_eval (&s1);
+	val_args.push_back (parse_to_comma_and_eval (&s1));
 
-	nargs++;
 	s = s1;
 	if (*s == ',')
 	  s++;
       }
 
-    if (nargs != nargs_wanted)
+    if (val_args.size () != nargs_wanted)
       error (_("Wrong number of arguments for specified format-string"));
 
     /* Now actually print them.  */
     i = 0;
-    for (fr = 0; fpieces[fr].string != NULL; fr++)
+    for (auto &&piece : fpieces)
       {
-	current_substring = fpieces[fr].string;
-	switch (fpieces[fr].argclass)
+	current_substring = piece.string;
+	switch (piece.argclass)
 	  {
 	  case string_arg:
 	    printf_c_string (stream, current_substring, val_args[i]);
@@ -2582,7 +2555,7 @@ ui_printf (const char *arg, struct ui_file *stream)
 	  case dec64float_arg:
 	  case dec128float_arg:
 	    printf_floating (stream, current_substring, val_args[i],
-			     fpieces[fr].argclass);
+			     piece.argclass);
 	    break;
 	  case ptr_arg:
 	    printf_pointer (stream, current_substring, val_args[i]);
@@ -2603,17 +2576,16 @@ ui_printf (const char *arg, struct ui_file *stream)
 			    _("failed internal consistency check"));
 	  }
 	/* Maybe advance to the next argument.  */
-	if (fpieces[fr].argclass != literal_piece)
+	if (piece.argclass != literal_piece)
 	  ++i;
       }
   }
-  do_cleanups (old_cleanups);
 }
 
 /* Implement the "printf" command.  */
 
 static void
-printf_command (char *arg, int from_tty)
+printf_command (const char *arg, int from_tty)
 {
   ui_printf (arg, gdb_stdout);
   gdb_flush (gdb_stdout);
@@ -2622,7 +2594,7 @@ printf_command (char *arg, int from_tty)
 /* Implement the "eval" command.  */
 
 static void
-eval_command (char *arg, int from_tty)
+eval_command (const char *arg, int from_tty)
 {
   string_file stb;
 
@@ -2630,7 +2602,7 @@ eval_command (char *arg, int from_tty)
 
   std::string expanded = insert_user_defined_cmd_args (stb.c_str ());
 
-  execute_command (&expanded[0], from_tty);
+  execute_command (expanded.c_str (), from_tty);
 }
 
 void
@@ -2727,7 +2699,7 @@ With a subcommand, this command modifies parts of the gdb environment.\n\
 You can see these environment settings with the \"show\" command."),
 		  &setlist, "set ", 1, &cmdlist);
   if (dbx_commands)
-    add_com ("assign", class_vars, non_const_set_command, _("\
+    add_com ("assign", class_vars, set_command, _("\
 Evaluate expression EXP and assign result to variable VAR, using assignment\n\
 syntax appropriate for the current language (VAR = EXP or VAR := EXP for\n\
 example).  VAR may be a debugger \"convenience\" variable (names starting\n\

@@ -1,6 +1,6 @@
 /* Handle JIT code generation in the inferior for GDB, the GNU Debugger.
 
-   Copyright (C) 2009-2017 Free Software Foundation, Inc.
+   Copyright (C) 2009-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -208,7 +208,7 @@ jit_reader_load (const char *file_name)
 /* Provides the jit-reader-load command.  */
 
 static void
-jit_reader_load_command (char *args, int from_tty)
+jit_reader_load_command (const char *args, int from_tty)
 {
   if (args == NULL)
     error (_("No reader name provided."));
@@ -229,7 +229,7 @@ jit_reader_load_command (char *args, int from_tty)
 /* Provides the jit-reader-unload command.  */
 
 static void
-jit_reader_unload_command (char *args, int from_tty)
+jit_reader_unload_command (const char *args, int from_tty)
 {
   if (!loaded_jit_reader)
     error (_("No JIT reader loaded."));
@@ -651,12 +651,14 @@ finalize_symtab (struct gdb_symtab *stab, struct objfile *objfile)
   size_t blockvector_size;
   CORE_ADDR begin, end;
   struct blockvector *bv;
+  enum language language;
 
   actual_nblocks = FIRST_LOCAL_BLOCK + stab->nblocks;
 
   cust = allocate_compunit_symtab (objfile, stab->file_name);
   allocate_symtab (cust, stab->file_name);
   add_compunit_symtab_to_objfile (cust);
+  language = compunit_language (cust);
 
   /* JIT compilers compile in memory.  */
   COMPUNIT_DIRNAME (cust) = NULL;
@@ -701,7 +703,7 @@ finalize_symtab (struct gdb_symtab *stab, struct objfile *objfile)
 					   "void");
 
       BLOCK_DICT (new_block) = dict_create_linear (&objfile->objfile_obstack,
-                                                   NULL);
+						   language, NULL);
       /* The address range.  */
       BLOCK_START (new_block) = (CORE_ADDR) gdb_block_iter->begin;
       BLOCK_END (new_block) = (CORE_ADDR) gdb_block_iter->end;
@@ -739,7 +741,7 @@ finalize_symtab (struct gdb_symtab *stab, struct objfile *objfile)
 		   ? allocate_global_block (&objfile->objfile_obstack)
 		   : allocate_block (&objfile->objfile_obstack));
       BLOCK_DICT (new_block) = dict_create_linear (&objfile->objfile_obstack,
-                                                   NULL);
+						   language, NULL);
       BLOCK_SUPERBLOCK (new_block) = block_iter;
       block_iter = new_block;
 
@@ -1095,7 +1097,7 @@ struct jit_unwind_private
 {
   /* Cached register values.  See jit_frame_sniffer to see how this
      works.  */
-  struct regcache *regcache;
+  detached_regcache *regcache;
 
   /* The frame being unwound.  */
   struct frame_info *this_frame;
@@ -1124,7 +1126,7 @@ jit_unwind_reg_set_impl (struct gdb_unwind_callbacks *cb, int dwarf_regnum,
       return;
     }
 
-  regcache_raw_set_cached_value (priv->regcache, gdb_reg, value->value);
+  priv->regcache->raw_supply (gdb_reg, value->value);
   value->free (value);
 }
 
@@ -1186,8 +1188,6 @@ jit_frame_sniffer (const struct frame_unwind *self,
   struct jit_unwind_private *priv_data;
   struct gdb_unwind_callbacks callbacks;
   struct gdb_reader_funcs *funcs;
-  struct address_space *aspace;
-  struct gdbarch *gdbarch;
 
   callbacks.reg_get = jit_unwind_reg_get_impl;
   callbacks.reg_set = jit_unwind_reg_set_impl;
@@ -1200,12 +1200,11 @@ jit_frame_sniffer (const struct frame_unwind *self,
 
   gdb_assert (!*cache);
 
-  aspace = get_frame_address_space (this_frame);
-  gdbarch = get_frame_arch (this_frame);
-
   *cache = XCNEW (struct jit_unwind_private);
   priv_data = (struct jit_unwind_private *) *cache;
-  priv_data->regcache = new regcache (gdbarch, aspace);
+  /* Take a snapshot of current regcache.  */
+  priv_data->regcache = new detached_regcache (get_frame_arch (this_frame),
+					       true);
   priv_data->this_frame = this_frame;
 
   callbacks.priv_data = priv_data;
@@ -1271,19 +1270,13 @@ jit_frame_prev_register (struct frame_info *this_frame, void **cache, int reg)
     return frame_unwind_got_optimized (this_frame, reg);
 
   gdbarch = priv->regcache->arch ();
-  if (reg < gdbarch_num_regs (gdbarch))
-    {
-      gdb_byte *buf = (gdb_byte *) alloca (register_size (gdbarch, reg));
-      enum register_status status;
+  gdb_byte *buf = (gdb_byte *) alloca (register_size (gdbarch, reg));
+  enum register_status status = priv->regcache->cooked_read (reg, buf);
 
-      status = regcache_raw_read (priv->regcache, reg, buf);
-      if (status == REG_VALID)
-	return frame_unwind_got_bytes (this_frame, reg, buf);
-      else
-	return frame_unwind_got_optimized (this_frame, reg);
-    }
+  if (status == REG_VALID)
+    return frame_unwind_got_bytes (this_frame, reg, buf);
   else
-    return gdbarch_pseudo_register_read_value (gdbarch, priv->regcache, reg);
+    return frame_unwind_got_optimized (this_frame, reg);
 }
 
 /* Relay everything back to the unwinder registered by the JIT debug

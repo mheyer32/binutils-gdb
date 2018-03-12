@@ -1,6 +1,6 @@
 /* Target-dependent code for GNU/Linux AArch64.
 
-   Copyright (C) 2009-2017 Free Software Foundation, Inc.
+   Copyright (C) 2009-2018 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of GDB.
@@ -244,7 +244,7 @@ aarch64_linux_core_read_description (struct gdbarch *gdbarch,
   if (target_auxv_search (target, AT_HWCAP, &aarch64_hwcap) != 1)
     return NULL;
 
-  return tdesc_aarch64;
+  return aarch64_read_description ();
 }
 
 /* Implementation of `gdbarch_stap_is_single_operand', as defined in
@@ -1001,6 +1001,15 @@ aarch64_linux_syscall_record (struct regcache *regcache,
   return 0;
 }
 
+/* Implement the "gcc_target_options" gdbarch method.  */
+
+static char *
+aarch64_linux_gcc_target_options (struct gdbarch *gdbarch)
+{
+  /* GCC doesn't know "-m64".  */
+  return NULL;
+}
+
 static void
 aarch64_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
@@ -1225,6 +1234,8 @@ aarch64_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_gdbarch_displaced_step_location (gdbarch, linux_displaced_step_location);
   set_gdbarch_displaced_step_hw_singlestep (gdbarch,
 					    aarch64_displaced_step_hw_singlestep);
+
+  set_gdbarch_gcc_target_options (gdbarch, aarch64_linux_gcc_target_options);
 }
 
 void

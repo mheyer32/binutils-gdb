@@ -1,6 +1,6 @@
 /* Target-dependent code for the Fujitsu FR-V, for GDB, the GNU Debugger.
 
-   Copyright (C) 2002-2017 Free Software Foundation, Inc.
+   Copyright (C) 2002-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -295,16 +295,16 @@ frv_register_type (struct gdbarch *gdbarch, int reg)
 }
 
 static enum register_status
-frv_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
+frv_pseudo_register_read (struct gdbarch *gdbarch, readable_regcache *regcache,
                           int reg, gdb_byte *buffer)
 {
   enum register_status status;
 
   if (reg == iacc0_regnum)
     {
-      status = regcache_raw_read (regcache, iacc0h_regnum, buffer);
+      status = regcache->raw_read (iacc0h_regnum, buffer);
       if (status == REG_VALID)
-	status = regcache_raw_read (regcache, iacc0l_regnum, (bfd_byte *) buffer + 4);
+	status = regcache->raw_read (iacc0l_regnum, (bfd_byte *) buffer + 4);
     }
   else if (accg0_regnum <= reg && reg <= accg7_regnum)
     {
@@ -315,7 +315,7 @@ frv_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
       int byte_num = (reg - accg0_regnum) % 4;
       gdb_byte buf[4];
 
-      status = regcache_raw_read (regcache, raw_regnum, buf);
+      status = regcache->raw_read (raw_regnum, buf);
       if (status == REG_VALID)
 	{
 	  memset (buffer, 0, 4);

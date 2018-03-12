@@ -1,5 +1,5 @@
 /* Helper routines for C++ support in GDB.
-   Copyright (C) 2003-2017 Free Software Foundation, Inc.
+   Copyright (C) 2003-2018 Free Software Foundation, Inc.
 
    Contributed by David Carlton and by Kealia, Inc.
 
@@ -141,7 +141,9 @@ cp_basic_lookup_symbol (const char *name, const struct block *block,
 
       if (global_block != NULL)
 	{
-	  sym.symbol = lookup_symbol_in_block (name, global_block, domain);
+	  sym.symbol = lookup_symbol_in_block (name,
+					       symbol_name_match_type::FULL,
+					       global_block, domain);
 	  sym.block = global_block;
 	}
     }
@@ -338,15 +340,6 @@ cp_lookup_symbol_in_namespace (const char *the_namespace, const char *name,
   return sym;
 }
 
-/* Used for cleanups to reset the "searched" flag in case of an error.  */
-
-static void
-reset_directive_searched (void *data)
-{
-  struct using_direct *direct = (struct using_direct *) data;
-  direct->searched = 0;
-}
-
 /* Search for NAME by applying all import statements belonging to
    BLOCK which are applicable in SCOPE.  If DECLARATION_ONLY the
    search is restricted to using declarations.
@@ -388,7 +381,6 @@ cp_lookup_symbol_via_imports (const char *scope,
   struct block_symbol sym;
   int len;
   int directive_match;
-  struct cleanup *searched_cleanup;
 
   sym.symbol = NULL;
   sym.block = NULL;
@@ -425,9 +417,8 @@ cp_lookup_symbol_via_imports (const char *scope,
 	{
 	  /* Mark this import as searched so that the recursive call
 	     does not search it again.  */
-	  current->searched = 1;
-	  searched_cleanup = make_cleanup (reset_directive_searched,
-					   current);
+	  scoped_restore reset_directive_searched
+	    = make_scoped_restore (&current->searched, 1);
 
 	  /* If there is an import of a single declaration, compare the
 	     imported declaration (after optional renaming by its alias)
@@ -446,9 +437,6 @@ cp_lookup_symbol_via_imports (const char *scope,
 	     search of this import is complete.  */
 	  if (declaration_only || sym.symbol != NULL || current->declaration)
 	    {
-	      current->searched = 0;
-	      discard_cleanups (searched_cleanup);
-
 	      if (sym.symbol != NULL)
 		return sym;
 
@@ -460,10 +448,7 @@ cp_lookup_symbol_via_imports (const char *scope,
 	    if (strcmp (name, *excludep) == 0)
 	      break;
 	  if (*excludep)
-	    {
-	      discard_cleanups (searched_cleanup);
-	      continue;
-	    }
+	    continue;
 
 	  if (current->alias != NULL
 	      && strcmp (name, current->alias) == 0)
@@ -484,8 +469,6 @@ cp_lookup_symbol_via_imports (const char *scope,
 						  name, block,
 						  domain, 1, 0, 0);
 	    }
-	  current->searched = 0;
-	  discard_cleanups (searched_cleanup);
 
 	  if (sym.symbol != NULL)
 	    return sym;
@@ -1068,7 +1051,7 @@ cp_lookup_transparent_type_loop (const char *name,
 
   full_name = (char *) alloca (scope_length + 2 + strlen (name) + 1);
   strncpy (full_name, scope, scope_length);
-  strncpy (full_name + scope_length, "::", 2);
+  memcpy (full_name + scope_length, "::", 2);
   strcpy (full_name + scope_length + 2, name);
 
   return basic_lookup_transparent_type (full_name);

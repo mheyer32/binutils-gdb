@@ -1,6 +1,6 @@
 /* OS ABI variant handling for GDB.
 
-   Copyright (C) 2001-2017 Free Software Foundation, Inc.
+   Copyright (C) 2001-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -63,7 +63,7 @@ static const struct osabi_names gdb_osabi_names[] =
   { "SVR4", NULL },
   { "GNU/Hurd", NULL },
   { "Solaris", NULL },
-  { "GNU/Linux", "linux(-gnu)?" },
+  { "GNU/Linux", "linux(-gnu[^-]*)?" },
   { "FreeBSD", NULL },
   { "NetBSD", NULL },
   { "OpenBSD", NULL },
@@ -592,7 +592,7 @@ generic_elf_osabi_sniffer (bfd *abfd)
 }
 
 static void
-set_osabi (char *args, int from_tty, struct cmd_list_element *c)
+set_osabi (const char *args, int from_tty, struct cmd_list_element *c)
 {
   struct gdbarch_info info;
 

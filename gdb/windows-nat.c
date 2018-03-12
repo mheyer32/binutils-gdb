@@ -1,6 +1,6 @@
 /* Target-vector operations for controlling windows child processes, for GDB.
 
-   Copyright (C) 1995-2017 Free Software Foundation, Inc.
+   Copyright (C) 1995-2018 Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions, A Red Hat Company.
 
@@ -201,7 +201,7 @@ typedef enum
 #define DEBUG_MEM(x)	if (debug_memory)	printf_unfiltered x
 #define DEBUG_EXCEPT(x)	if (debug_exceptions)	printf_unfiltered x
 
-static void windows_interrupt (struct target_ops *self, ptid_t);
+static void windows_interrupt (struct target_ops *self);
 static int windows_thread_alive (struct target_ops *, ptid_t);
 static void windows_kill_inferior (struct target_ops *);
 
@@ -859,7 +859,7 @@ windows_clear_solib (void)
 }
 
 static void
-signal_event_command (char *args, int from_tty)
+signal_event_command (const char *args, int from_tty)
 {
   uintptr_t event_id = 0;
   char *endargs = NULL;
@@ -1020,7 +1020,7 @@ display_selector (HANDLE thread, DWORD sel)
 }
 
 static void
-display_selectors (char * args, int from_tty)
+display_selectors (const char * args, int from_tty)
 {
   if (!current_thread)
     {
@@ -1931,7 +1931,7 @@ windows_attach (struct target_ops *ops, const char *args, int from_tty)
 }
 
 static void
-windows_detach (struct target_ops *ops, const char *args, int from_tty)
+windows_detach (struct target_ops *ops, inferior *inf, int from_tty)
 {
   int detached = 1;
 
@@ -2777,7 +2777,7 @@ windows_mourn_inferior (struct target_ops *ops)
    ^C on the controlling terminal.  */
 
 static void
-windows_interrupt (struct target_ops *self, ptid_t ptid)
+windows_interrupt (struct target_ops *self)
 {
   DEBUG_EVENTS (("gdb: GenerateConsoleCtrlEvent (CTRLC_EVENT, 0)\n"));
   CHECK (GenerateConsoleCtrlEvent (CTRL_C_EVENT, current_event.dwProcessId));

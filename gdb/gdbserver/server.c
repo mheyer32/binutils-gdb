@@ -1,5 +1,5 @@
 /* Main code for remote server for GDB.
-   Copyright (C) 1989-2017 Free Software Foundation, Inc.
+   Copyright (C) 1989-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -39,6 +39,8 @@
 #include "common-inferior.h"
 #include "job-control.h"
 #include "environ.h"
+#include "filenames.h"
+#include "pathstuff.h"
 
 #include "common/selftest.h"
 
@@ -55,6 +57,10 @@
       write_enn (BUF);				\
       break;					\
     }
+
+/* String containing the current directory (what getwd would return).  */
+
+char *current_directory;
 
 /* The environment to pass to the inferior when creating it.  */
 
@@ -108,7 +114,35 @@ static int vCont_supported;
    space randomization feature before starting an inferior.  */
 int disable_randomization = 1;
 
-static char *program_name = NULL;
+static struct {
+  /* Set the PROGRAM_PATH.  Here we adjust the path of the provided
+     binary if needed.  */
+  void set (gdb::unique_xmalloc_ptr<char> &&path)
+  {
+    m_path = std::move (path);
+
+    /* Make sure we're using the absolute path of the inferior when
+       creating it.  */
+    if (!contains_dir_separator (m_path.get ()))
+      {
+	int reg_file_errno;
+
+	/* Check if the file is in our CWD.  If it is, then we prefix
+	   its name with CURRENT_DIRECTORY.  Otherwise, we leave the
+	   name as-is because we'll try searching for it in $PATH.  */
+	if (is_regular_file (m_path.get (), &reg_file_errno))
+	  m_path = gdb_abspath (m_path.get ());
+      }
+  }
+
+  /* Return the PROGRAM_PATH.  */
+  char *get ()
+  { return m_path.get (); }
+
+private:
+  /* The program name, adjusted if needed.  */
+  gdb::unique_xmalloc_ptr<char> m_path;
+} program_path;
 static std::vector<char *> program_args;
 static std::string wrapper_argv;
 
@@ -265,10 +299,10 @@ get_exec_wrapper ()
 char *
 get_exec_file (int err)
 {
-  if (err && program_name == NULL)
+  if (err && program_path.get () == NULL)
     error (_("No executable file specified."));
 
-  return program_name;
+  return program_path.get ();
 }
 
 /* See server.h.  */
@@ -380,50 +414,41 @@ write_qxfer_response (char *buf, const gdb_byte *data, int len, int is_more)
 
 /* Handle btrace enabling in BTS format.  */
 
-static const char *
+static void
 handle_btrace_enable_bts (struct thread_info *thread)
 {
   if (thread->btrace != NULL)
-    return "E.Btrace already enabled.";
+    error (_("Btrace already enabled."));
 
   current_btrace_conf.format = BTRACE_FORMAT_BTS;
   thread->btrace = target_enable_btrace (thread->id, &current_btrace_conf);
-  if (thread->btrace == NULL)
-    return "E.Could not enable btrace.";
-
-  return NULL;
 }
 
 /* Handle btrace enabling in Intel Processor Trace format.  */
 
-static const char *
+static void
 handle_btrace_enable_pt (struct thread_info *thread)
 {
   if (thread->btrace != NULL)
-    return "E.Btrace already enabled.";
+    error (_("Btrace already enabled."));
 
   current_btrace_conf.format = BTRACE_FORMAT_PT;
   thread->btrace = target_enable_btrace (thread->id, &current_btrace_conf);
-  if (thread->btrace == NULL)
-    return "E.Could not enable btrace.";
-
-  return NULL;
 }
 
 /* Handle btrace disabling.  */
 
-static const char *
+static void
 handle_btrace_disable (struct thread_info *thread)
 {
 
   if (thread->btrace == NULL)
-    return "E.Branch tracing not enabled.";
+    error (_("Branch tracing not enabled."));
 
   if (target_disable_btrace (thread->btrace) != 0)
-    return "E.Could not disable branch tracing.";
+    error (_("Could not disable branch tracing."));
 
   thread->btrace = NULL;
-  return NULL;
 }
 
 /* Handle the "Qbtrace" packet.  */
@@ -432,7 +457,6 @@ static int
 handle_btrace_general_set (char *own_buf)
 {
   struct thread_info *thread;
-  const char *err;
   char *op;
 
   if (!startswith (own_buf, "Qbtrace:"))
@@ -454,21 +478,24 @@ handle_btrace_general_set (char *own_buf)
       return -1;
     }
 
-  err = NULL;
+  TRY
+    {
+      if (strcmp (op, "bts") == 0)
+	handle_btrace_enable_bts (thread);
+      else if (strcmp (op, "pt") == 0)
+	handle_btrace_enable_pt (thread);
+      else if (strcmp (op, "off") == 0)
+	handle_btrace_disable (thread);
+      else
+	error (_("Bad Qbtrace operation.  Use bts, pt, or off."));
 
-  if (strcmp (op, "bts") == 0)
-    err = handle_btrace_enable_bts (thread);
-  else if (strcmp (op, "pt") == 0)
-    err = handle_btrace_enable_pt (thread);
-  else if (strcmp (op, "off") == 0)
-    err = handle_btrace_disable (thread);
-  else
-    err = "E.Bad Qbtrace operation. Use bts, pt, or off.";
-
-  if (err != 0)
-    strcpy (own_buf, err);
-  else
-    write_ok (own_buf);
+      write_ok (own_buf);
+    }
+  CATCH (exception, RETURN_MASK_ERROR)
+    {
+      sprintf (own_buf, "E.%s", exception.message);
+    }
+  END_CATCH
 
   return 1;
 }
@@ -623,7 +650,7 @@ handle_general_set (char *own_buf)
 	}
 
       process = current_process ();
-      VEC_truncate (int, process->syscalls_to_catch, 0);
+      process->syscalls_to_catch.clear ();
 
       if (enabled)
 	{
@@ -634,11 +661,11 @@ handle_general_set (char *own_buf)
 	      while (*p != '\0')
 		{
 		  p = decode_address_to_semicolon (&sysno, p);
-		  VEC_safe_push (int, process->syscalls_to_catch, (int) sysno);
+		  process->syscalls_to_catch.push_back (sysno);
 		}
 	    }
 	  else
-	    VEC_safe_push (int, process->syscalls_to_catch, ANY_SYSCALL);
+	    process->syscalls_to_catch.push_back (ANY_SYSCALL);
 	}
 
       write_ok (own_buf);
@@ -820,12 +847,9 @@ handle_general_set (char *own_buf)
 	req = TRIBOOL_TRUE;
       else
 	{
-	  char *mode_copy = xstrdup (mode);
-
 	  /* We don't know what this mode is, so complain to GDB.  */
 	  sprintf (own_buf, "E.Unknown thread-events mode requested: %s\n",
-		   mode_copy);
-	  xfree (mode_copy);
+		   mode);
 	  return;
 	}
 
@@ -1282,8 +1306,8 @@ handle_detach (char *own_buf)
    ARG is the text after "--debug-format=" or "monitor set debug-format".
    IS_MONITOR is non-zero if we're invoked via "monitor set debug-format".
    This triggers calls to monitor_output.
-   The result is NULL if all options were parsed ok, otherwise an error
-   message which the caller must free.
+   The result is an empty string if all options were parsed ok, otherwise an
+   error message which the caller must free.
 
    N.B. These commands affect all debug format settings, they are not
    cumulative.  If a format is not specified, it is turned off.
@@ -1295,13 +1319,9 @@ handle_detach (char *own_buf)
    to gdb's "set debug foo on|off" because we also use this function to
    parse "--debug-format=foo,bar".  */
 
-static char *
+static std::string
 parse_debug_format_options (const char *arg, int is_monitor)
 {
-  VEC (char_ptr) *options;
-  int ix;
-  char *option;
-
   /* First turn all debug format options off.  */
   debug_timestamp = 0;
 
@@ -1309,23 +1329,24 @@ parse_debug_format_options (const char *arg, int is_monitor)
   while (isspace (*arg))
     ++arg;
 
-  options = delim_string_to_char_ptr_vec (arg, ',');
+  std::vector<gdb::unique_xmalloc_ptr<char>> options
+    = delim_string_to_char_ptr_vec (arg, ',');
 
-  for (ix = 0; VEC_iterate (char_ptr, options, ix, option); ++ix)
+  for (const gdb::unique_xmalloc_ptr<char> &option : options)
     {
-      if (strcmp (option, "all") == 0)
+      if (strcmp (option.get (), "all") == 0)
 	{
 	  debug_timestamp = 1;
 	  if (is_monitor)
 	    monitor_output ("All extra debug format options enabled.\n");
 	}
-      else if (strcmp (option, "none") == 0)
+      else if (strcmp (option.get (), "none") == 0)
 	{
 	  debug_timestamp = 0;
 	  if (is_monitor)
 	    monitor_output ("All extra debug format options disabled.\n");
 	}
-      else if (strcmp (option, "timestamp") == 0)
+      else if (strcmp (option.get (), "timestamp") == 0)
 	{
 	  debug_timestamp = 1;
 	  if (is_monitor)
@@ -1337,17 +1358,11 @@ parse_debug_format_options (const char *arg, int is_monitor)
 	  continue;
 	}
       else
-	{
-	  char *msg = xstrprintf ("Unknown debug-format argument: \"%s\"\n",
-				  option);
-
-	  free_char_ptr_vec (options);
-	  return msg;
-	}
+	return string_printf ("Unknown debug-format argument: \"%s\"\n",
+			      option.get ());
     }
 
-  free_char_ptr_vec (options);
-  return NULL;
+  return std::string ();
 }
 
 /* Handle monitor commands not handled by target-specific handlers.  */
@@ -1387,16 +1402,15 @@ handle_monitor_command (char *mon, char *own_buf)
     }
   else if (startswith (mon, "set debug-format "))
     {
-      char *error_msg
+      std::string error_msg
 	= parse_debug_format_options (mon + sizeof ("set debug-format ") - 1,
 				      1);
 
-      if (error_msg != NULL)
+      if (!error_msg.empty ())
 	{
-	  monitor_output (error_msg);
+	  monitor_output (error_msg.c_str ());
 	  monitor_show_help ();
 	  write_enn (own_buf);
-	  xfree (error_msg);
 	}
     }
   else if (strcmp (mon, "help") == 0)
@@ -1650,9 +1664,8 @@ handle_qxfer_statictrace (const char *annex,
    Emit the XML to describe the thread of INF.  */
 
 static void
-handle_qxfer_threads_worker (thread_info *thread, void *arg)
+handle_qxfer_threads_worker (thread_info *thread, struct buffer *buffer)
 {
-  struct buffer *buffer = (struct buffer *) arg;
   ptid_t ptid = ptid_of (thread);
   char ptid_s[100];
   int core = target_core_of_thread (ptid);
@@ -1692,8 +1705,10 @@ handle_qxfer_threads_proper (struct buffer *buffer)
 {
   buffer_grow_str (buffer, "<threads>\n");
 
-  for_each_inferior_with_data (&all_threads, handle_qxfer_threads_worker,
-			       buffer);
+  for_each_thread ([&] (thread_info *thread)
+    {
+      handle_qxfer_threads_worker (thread, buffer);
+    });
 
   buffer_grow_str0 (buffer, "</threads>\n");
 }
@@ -1825,7 +1840,7 @@ handle_qxfer_btrace (const char *annex,
   enum btrace_read_type type;
   int result;
 
-  if (the_target->read_btrace == NULL || writebuf != NULL)
+  if (writebuf != NULL)
     return -2;
 
   if (ptid_equal (general_thread, null_ptid)
@@ -1864,12 +1879,21 @@ handle_qxfer_btrace (const char *annex,
     {
       buffer_free (&cache);
 
-      result = target_read_btrace (thread->btrace, &cache, type);
-      if (result != 0)
+      TRY
 	{
-	  memcpy (own_buf, cache.buffer, cache.used_size);
-	  return -3;
+	  result = target_read_btrace (thread->btrace, &cache, type);
+	  if (result != 0)
+	    memcpy (own_buf, cache.buffer, cache.used_size);
 	}
+      CATCH (exception, RETURN_MASK_ERROR)
+	{
+	  sprintf (own_buf, "E.%s", exception.message);
+	  result = -1;
+	}
+      END_CATCH
+
+      if (result != 0)
+	return -3;
     }
   else if (offset > cache.used_size)
     {
@@ -1896,7 +1920,7 @@ handle_qxfer_btrace_conf (const char *annex,
   struct thread_info *thread;
   int result;
 
-  if (the_target->read_btrace_conf == NULL || writebuf != NULL)
+  if (writebuf != NULL)
     return -2;
 
   if (annex[0] != '\0')
@@ -1926,12 +1950,21 @@ handle_qxfer_btrace_conf (const char *annex,
     {
       buffer_free (&cache);
 
-      result = target_read_btrace_conf (thread->btrace, &cache);
-      if (result != 0)
+      TRY
 	{
-	  memcpy (own_buf, cache.buffer, cache.used_size);
-	  return -3;
+	  result = target_read_btrace_conf (thread->btrace, &cache);
+	  if (result != 0)
+	    memcpy (own_buf, cache.buffer, cache.used_size);
 	}
+      CATCH (exception, RETURN_MASK_ERROR)
+	{
+	  sprintf (own_buf, "E.%s", exception.message);
+	  result = -1;
+	}
+      END_CATCH
+
+      if (result != 0)
+	return -3;
     }
   else if (offset > cache.used_size)
     {
@@ -2111,27 +2144,10 @@ crc32 (CORE_ADDR base, int len, unsigned int crc)
 static void
 supported_btrace_packets (char *buf)
 {
-  int btrace_supported = 0;
-
-  if (target_supports_btrace (BTRACE_FORMAT_BTS))
-    {
-      strcat (buf, ";Qbtrace:bts+");
-      strcat (buf, ";Qbtrace-conf:bts:size+");
-
-      btrace_supported = 1;
-    }
-
-  if (target_supports_btrace (BTRACE_FORMAT_PT))
-    {
-      strcat (buf, ";Qbtrace:pt+");
-      strcat (buf, ";Qbtrace-conf:pt:size+");
-
-      btrace_supported = 1;
-    }
-
-  if (!btrace_supported)
-    return;
-
+  strcat (buf, ";Qbtrace:bts+");
+  strcat (buf, ";Qbtrace-conf:bts:size+");
+  strcat (buf, ";Qbtrace:pt+");
+  strcat (buf, ";Qbtrace-conf:pt:size+");
   strcat (buf, ";Qbtrace:off+");
   strcat (buf, ";qXfer:btrace:read+");
   strcat (buf, ";qXfer:btrace-conf:read+");
@@ -3023,7 +3039,7 @@ handle_v_run (char *own_buf)
     {
       /* GDB didn't specify a program to run.  Use the program from the
 	 last run with the new argument list.  */
-      if (program_name == NULL)
+      if (program_path.get () == NULL)
 	{
 	  write_enn (own_buf);
 	  free_vector_argv (new_argv);
@@ -3031,16 +3047,13 @@ handle_v_run (char *own_buf)
 	}
     }
   else
-    {
-      xfree (program_name);
-      program_name = new_program_name;
-    }
+    program_path.set (gdb::unique_xmalloc_ptr<char> (new_program_name));
 
   /* Free the old argv and install the new one.  */
   free_vector_argv (program_args);
   program_args = new_argv;
 
-  create_inferior (program_name, program_args);
+  create_inferior (program_path.get (), program_args);
 
   if (last_status.kind == TARGET_WAITKIND_STOPPED)
     {
@@ -3216,7 +3229,7 @@ myresume (char *own_buf, int step, int sig)
   resume (resume_info, n);
 }
 
-/* Callback for for_each_inferior.  Make a new stop reply for each
+/* Callback for for_each_thread.  Make a new stop reply for each
    stopped thread.  */
 
 static void
@@ -3281,19 +3294,10 @@ gdb_wants_thread_stopped (thread_info *thread)
 static void
 gdb_wants_all_threads_stopped (void)
 {
-  for_each_inferior (&all_threads, gdb_wants_thread_stopped);
+  for_each_thread (gdb_wants_thread_stopped);
 }
 
-/* Callback for for_each_inferior.  Clear the thread's pending status
-   flag.  */
-
-static void
-clear_pending_status_callback (thread_info *thread)
-{
-  thread->status_pending_p = 0;
-}
-
-/* Callback for for_each_inferior.  If the thread is stopped with an
+/* Callback for for_each_thread.  If the thread is stopped with an
    interesting event, mark it as having a pending event.  */
 
 static void
@@ -3348,14 +3352,14 @@ handle_status (char *own_buf)
 	 reporting now pending.  They'll be reported the next time the
 	 threads are resumed.  Start by marking all interesting events
 	 as pending.  */
-      for_each_inferior (&all_threads, set_pending_status_callback);
+      for_each_thread (set_pending_status_callback);
 
       /* Prefer the last thread that reported an event to GDB (even if
 	 that was a GDB_SIGNAL_TRAP).  */
       if (last_status.kind != TARGET_WAITKIND_IGNORE
 	  && last_status.kind != TARGET_WAITKIND_EXITED
 	  && last_status.kind != TARGET_WAITKIND_SIGNALLED)
-	thread = find_inferior_id (&all_threads, last_ptid);
+	thread = find_thread_ptid (last_ptid);
 
       /* If the last event thread is not found for some reason, look
 	 for some other thread that might have an event to report.  */
@@ -3395,7 +3399,7 @@ static void
 gdbserver_version (void)
 {
   printf ("GNU gdbserver %s%s\n"
-	  "Copyright (C) 2017 Free Software Foundation, Inc.\n"
+	  "Copyright (C) 2018 Free Software Foundation, Inc.\n"
 	  "gdbserver is free software, covered by the "
 	  "GNU General Public License.\n"
 	  "This gdbserver was configured as \"%s\"\n",
@@ -3568,7 +3572,16 @@ captured_main (int argc, char *argv[])
   volatile int attach = 0;
   int was_running;
   bool selftest = false;
+#if GDB_SELF_TEST
   const char *selftest_filter = NULL;
+#endif
+
+  current_directory = getcwd (NULL, 0);
+  if (current_directory == NULL)
+    {
+      error (_("Could not find current working directory: %s"),
+	     safe_strerror (errno));
+    }
 
   while (*next_arg != NULL && **next_arg == '-')
     {
@@ -3619,13 +3632,13 @@ captured_main (int argc, char *argv[])
 	debug_threads = 1;
       else if (startswith (*next_arg, "--debug-format="))
 	{
-	  char *error_msg
+	  std::string error_msg
 	    = parse_debug_format_options ((*next_arg)
 					  + sizeof ("--debug-format=") - 1, 0);
 
-	  if (error_msg != NULL)
+	  if (!error_msg.empty ())
 	    {
-	      fprintf (stderr, "%s", error_msg);
+	      fprintf (stderr, "%s", error_msg.c_str ());
 	      exit (1);
 	    }
 	}
@@ -3692,7 +3705,9 @@ captured_main (int argc, char *argv[])
       else if (startswith (*next_arg, "--selftest="))
 	{
 	  selftest = true;
+#if GDB_SELF_TEST
 	  selftest_filter = *next_arg + strlen ("--selftest=");
+#endif
 	}
       else
 	{
@@ -3720,7 +3735,7 @@ captured_main (int argc, char *argv[])
      opened by remote_prepare.  */
   notice_open_fds ();
 
-  save_original_signals_state ();
+  save_original_signals_state (false);
 
   /* We need to know whether the remote connection is stdio before
      starting the inferior.  Inferiors created in this scenario have
@@ -3770,7 +3785,11 @@ captured_main (int argc, char *argv[])
 
   if (selftest)
     {
+#if GDB_SELF_TEST
       selftests::run_tests (selftest_filter);
+#else
+      printf (_("Selftests are not available in a non-development build.\n"));
+#endif
       throw_quit ("Quit");
     }
 
@@ -3779,13 +3798,13 @@ captured_main (int argc, char *argv[])
       int i, n;
 
       n = argc - (next_arg - argv);
-      program_name = xstrdup (next_arg[0]);
+      program_path.set (gdb::unique_xmalloc_ptr<char> (xstrdup (next_arg[0])));
       for (i = 1; i < n; i++)
 	program_args.push_back (xstrdup (next_arg[i]));
       program_args.push_back (NULL);
 
       /* Wait till we are at first instruction in program.  */
-      create_inferior (program_name, program_args);
+      create_inferior (program_path.get (), program_args);
 
       /* We are now (hopefully) stopped at the first instruction of
 	 the target process.  This assumes that the target process was
@@ -3869,8 +3888,10 @@ captured_main (int argc, char *argv[])
 	     (by the same GDB instance or another) will refresh all its
 	     state from scratch.  */
 	  discard_queued_stop_replies (minus_one_ptid);
-	  for_each_inferior (&all_threads,
-			     clear_pending_status_callback);
+	  for_each_thread ([] (thread_info *thread)
+	    {
+	      thread->status_pending_p = 0;
+	    });
 
 	  if (tracing)
 	    {
@@ -4081,9 +4102,7 @@ process_serial_event (void)
 		  /* GDB is telling us to choose any thread.  Check if
 		     the currently selected thread is still valid. If
 		     it is not, select the first available.  */
-		  struct thread_info *thread =
-		    (struct thread_info *) find_inferior_id (&all_threads,
-							     general_thread);
+		  thread_info *thread = find_thread_ptid (general_thread);
 		  if (thread == NULL)
 		    thread = get_first_thread ();
 		  thread_id = thread->id;
@@ -4302,9 +4321,9 @@ process_serial_event (void)
 	  fprintf (stderr, "GDBserver restarting\n");
 
 	  /* Wait till we are at 1st instruction in prog.  */
-	  if (program_name != NULL)
+	  if (program_path.get () != NULL)
 	    {
-	      create_inferior (program_name, program_args);
+	      create_inferior (program_path.get (), program_args);
 
 	      if (last_status.kind == TARGET_WAITKIND_STOPPED)
 		{

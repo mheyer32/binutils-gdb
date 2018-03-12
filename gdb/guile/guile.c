@@ -1,6 +1,6 @@
 /* General GDB/Guile code.
 
-   Copyright (C) 2014-2017 Free Software Foundation, Inc.
+   Copyright (C) 2014-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -161,7 +161,7 @@ const struct extension_language_ops guile_extension_ops =
 /* Implementation of the gdb "guile-repl" command.  */
 
 static void
-guile_repl_command (char *arg, int from_tty)
+guile_repl_command (const char *arg, int from_tty)
 {
   scoped_restore restore_async = make_scoped_restore (&current_ui->async, 0);
 
@@ -189,7 +189,7 @@ guile_repl_command (char *arg, int from_tty)
    TODO: Add the result to Guile's history?  */
 
 static void
-guile_command (char *arg, int from_tty)
+guile_command (const char *arg, int from_tty)
 {
   scoped_restore restore_async = make_scoped_restore (&current_ui->async, 0);
 
@@ -390,7 +390,7 @@ gdbscm_target_config (void)
    commands. */
 
 static void
-guile_repl_command (char *arg, int from_tty)
+guile_repl_command (const char *arg, int from_tty)
 {
   arg = skip_spaces (arg);
   if (arg && *arg)
@@ -399,7 +399,7 @@ guile_repl_command (char *arg, int from_tty)
 }
 
 static void
-guile_command (char *arg, int from_tty)
+guile_command (const char *arg, int from_tty)
 {
   arg = skip_spaces (arg);
   if (arg && *arg)
@@ -605,7 +605,6 @@ static void
 initialize_scheme_side (void)
 {
   char *boot_scm_path;
-  char *msg;
 
   guile_datadir = concat (gdb_datadir, SLASH_STRING, "guile", (char *) NULL);
   boot_scm_path = concat (guile_datadir, SLASH_STRING, "gdb",

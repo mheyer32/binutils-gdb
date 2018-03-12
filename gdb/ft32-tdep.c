@@ -1,6 +1,6 @@
 /* Target-dependent code for FT32.
 
-   Copyright (C) 2009-2017 Free Software Foundation, Inc.
+   Copyright (C) 2009-2018 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -139,6 +139,25 @@ ft32_store_return_value (struct type *type, struct regcache *regcache,
     }
 }
 
+/* Fetch a single 32-bit instruction from address a. If memory contains
+   a compressed instruction pair, return the expanded instruction.  */
+
+static ULONGEST
+ft32_fetch_instruction (CORE_ADDR a, int *isize,
+		        enum bfd_endian byte_order)
+{
+  unsigned int sc[2];
+  ULONGEST inst;
+
+  CORE_ADDR a4 = a & ~3;
+  inst = read_code_unsigned_integer (a4, 4, byte_order);
+  *isize = ft32_decode_shortcode (a4, inst, sc) ? 2 : 4;
+  if (*isize == 2)
+    return sc[1 & (a >> 1)];
+  else
+    return inst;
+}
+
 /* Decode the instructions within the given address range.  Decide
    when we must have reached the end of the function prologue.  If a
    frame_info pointer is provided, fill in its saved_regs etc.
@@ -153,6 +172,7 @@ ft32_analyze_prologue (CORE_ADDR start_addr, CORE_ADDR end_addr,
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   CORE_ADDR next_addr;
   ULONGEST inst;
+  int isize = 0;
   int regnum, pushreg;
   struct bound_minimal_symbol msymbol;
   const int first_saved_reg = 13;	/* The first saved register.  */
@@ -186,16 +206,15 @@ ft32_analyze_prologue (CORE_ADDR start_addr, CORE_ADDR end_addr,
     return end_addr;
 
   cache->established = 0;
-  for (next_addr = start_addr; next_addr < end_addr;)
+  for (next_addr = start_addr; next_addr < end_addr; next_addr += isize)
     {
-      inst = read_memory_unsigned_integer (next_addr, 4, byte_order);
+      inst = ft32_fetch_instruction (next_addr, &isize, byte_order);
 
       if (FT32_IS_PUSH (inst))
 	{
 	  pushreg = FT32_PUSH_REG (inst);
 	  cache->framesize += 4;
 	  cache->saved_regs[FT32_R0_REGNUM + pushreg] = cache->framesize;
-	  next_addr += 4;
 	}
       else if (FT32_IS_CALL (inst))
 	{
@@ -210,7 +229,6 @@ ft32_analyze_prologue (CORE_ADDR start_addr, CORE_ADDR end_addr,
 		      cache->saved_regs[FT32_R0_REGNUM + pushreg] =
 			cache->framesize;
 		    }
-		  next_addr += 4;
 		}
 	    }
 	  break;
@@ -229,7 +247,7 @@ ft32_analyze_prologue (CORE_ADDR start_addr, CORE_ADDR end_addr,
   /* It is a LINK?  */
   if (next_addr < end_addr)
     {
-      inst = read_memory_unsigned_integer (next_addr, 4, byte_order);
+      inst = ft32_fetch_instruction (next_addr, &isize, byte_order);
       if (FT32_IS_LINK (inst))
 	{
 	  cache->established = 1;
@@ -241,7 +259,7 @@ ft32_analyze_prologue (CORE_ADDR start_addr, CORE_ADDR end_addr,
 	  cache->saved_regs[FT32_PC_REGNUM] = cache->framesize + 4;
 	  cache->saved_regs[FT32_FP_REGNUM] = 0;
 	  cache->framesize += FT32_LINK_SIZE (inst);
-	  next_addr += 4;
+	  next_addr += isize;
 	}
     }
 
@@ -363,26 +381,6 @@ ft32_address_class_name_to_type_flags (struct gdbarch *gdbarch,
     }
   else
     return 0;
-}
-
-
-/* Implement the "read_pc" gdbarch method.  */
-
-static CORE_ADDR
-ft32_read_pc (struct regcache *regcache)
-{
-  ULONGEST pc;
-
-  regcache_cooked_read_unsigned (regcache, FT32_PC_REGNUM, &pc);
-  return pc;
-}
-
-/* Implement the "write_pc" gdbarch method.  */
-
-static void
-ft32_write_pc (struct regcache *regcache, CORE_ADDR val)
-{
-  regcache_cooked_write_unsigned (regcache, FT32_PC_REGNUM, val);
 }
 
 /* Implement the "unwind_sp" gdbarch method.  */
@@ -604,8 +602,6 @@ ft32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 				     func_void_type);
   TYPE_INSTANCE_FLAGS (tdep->pc_type) |= TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1;
 
-  set_gdbarch_read_pc (gdbarch, ft32_read_pc);
-  set_gdbarch_write_pc (gdbarch, ft32_write_pc);
   set_gdbarch_unwind_sp (gdbarch, ft32_unwind_sp);
 
   set_gdbarch_num_regs (gdbarch, FT32_NUM_REGS);

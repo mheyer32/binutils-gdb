@@ -1,5 +1,5 @@
 /* BFD back-end data structures for ELF files.
-   Copyright (C) 1992-2017 Free Software Foundation, Inc.
+   Copyright (C) 1992-2018 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -216,20 +216,22 @@ struct elf_link_hash_entry
   /* Symbol is __start_SECNAME or __stop_SECNAME to mark section
      SECNAME.  */
   unsigned int start_stop : 1;
+  /* Symbol is or was a weak defined symbol from a dynamic object with
+     a strong defined symbol alias.  U.ALIAS points to a list of aliases,
+     the definition having is_weakalias clear.  */
+  unsigned int is_weakalias : 1;
 
   /* String table index in .dynstr if this is a dynamic symbol.  */
   unsigned long dynstr_index;
 
   union
   {
-    /* If this is a weak defined symbol from a dynamic object, this
-       field points to a defined symbol with the same value, if there is
-       one.  Otherwise it is NULL.  */
-    struct elf_link_hash_entry *weakdef;
+    /* Points to a circular list of non-function symbol aliases.  */
+    struct elf_link_hash_entry *alias;
 
     /* Hash value of the name computed using the ELF hash function.
        Used part way through size_dynamic_sections, after we've finished
-       with weakdefs.  */
+       with aliases.  */
     unsigned long elf_hash_value;
   } u;
 
@@ -256,6 +258,16 @@ struct elf_link_hash_entry
     struct elf_link_virtual_table_entry *vtable;
   } u2;
 };
+
+/* Return the strong definition for a weak symbol with aliases.  */
+
+static inline struct elf_link_hash_entry *
+weakdef (struct elf_link_hash_entry *h)
+{
+  while (h->is_weakalias)
+    h = h->u.alias;
+  return h;
+}
 
 /* Will references to this symbol always reference the symbol
    in this object?  */
@@ -336,8 +348,8 @@ struct eh_cie_fde
 	   .eh_frame input section that contains the CIE.  */
       union {
 	struct cie *full_cie;
- 	struct eh_cie_fde *merged_with;
- 	asection *sec;
+	struct eh_cie_fde *merged_with;
+	asection *sec;
       } u;
 
       /* The offset of the personality data from the start of the CIE,
@@ -657,7 +669,7 @@ struct elf_link_hash_table
 #define elf_hash_table_id(table)	((table) -> hash_table_id)
 
 /* Returns TRUE if the hash table is a struct elf_link_hash_table.  */
-#define is_elf_hash_table(htab)					      	\
+#define is_elf_hash_table(htab)						\
   (((struct bfd_link_hash_table *) (htab))->type == bfd_link_elf_hash_table)
 
 /* Used by bfd_sym_from_r_symndx to cache a small number of local
@@ -731,10 +743,11 @@ struct elf_size_info {
 };
 
 #define elf_symbol_from(ABFD,S) \
-	(((S)->the_bfd->xvec->flavour == bfd_target_elf_flavour \
-	  && (S)->the_bfd->tdata.elf_obj_data != 0) \
-	 ? (elf_symbol_type *) (S) \
-	 : 0)
+  (((S)->the_bfd != NULL					\
+    && (S)->the_bfd->xvec->flavour == bfd_target_elf_flavour	\
+    && (S)->the_bfd->tdata.elf_obj_data != 0)			\
+   ? (elf_symbol_type *) (S)					\
+   : 0)
 
 enum elf_reloc_type_class {
   reloc_class_normal,
@@ -859,13 +872,13 @@ struct elf_backend_data
   const void *arch_data;
 
   /* A function to translate an ELF RELA relocation to a BFD arelent
-     structure.  */
-  void (*elf_info_to_howto)
+     structure.  Returns TRUE upon success, FALSE otherwise.  */
+  bfd_boolean (*elf_info_to_howto)
     (bfd *, arelent *, Elf_Internal_Rela *);
 
   /* A function to translate an ELF REL relocation to a BFD arelent
-     structure.  */
-  void (*elf_info_to_howto_rel)
+     structure.  Returns TRUE upon success, FALSE otherwise.  */
+  bfd_boolean (*elf_info_to_howto_rel)
     (bfd *, arelent *, Elf_Internal_Rela *);
 
   /* A function to determine whether a symbol is global when
@@ -1339,7 +1352,7 @@ struct elf_backend_data
     (bfd *);
 
   reloc_howto_type *(*elf_backend_mips_rtype_to_howto)
-    (unsigned int, bfd_boolean);
+    (bfd *, unsigned int, bfd_boolean);
 
   /* The swapping table to use when dealing with ECOFF information.
      Used for the MIPS ELF .mdebug section.  */
@@ -1397,7 +1410,7 @@ struct elf_backend_data
   bfd_boolean (*elf_backend_copy_special_section_fields)
     (const bfd *ibfd, bfd *obfd, const Elf_Internal_Shdr *isection,
      Elf_Internal_Shdr *osection);
-		
+
   /* Used to handle bad SHF_LINK_ORDER input.  */
   void (*link_order_error_handler) (const char *, ...);
 
@@ -1796,8 +1809,8 @@ enum elf_gnu_symbols
 
 typedef struct elf_section_list
 {
-  Elf_Internal_Shdr          hdr;
-  unsigned int               ndx;
+  Elf_Internal_Shdr	     hdr;
+  unsigned int		     ndx;
   struct elf_section_list *  next;
 } elf_section_list;
 
@@ -1895,6 +1908,10 @@ struct elf_obj_tdata
 
   Elf_Internal_Shdr **group_sect_ptr;
   int num_group;
+
+  /* Index into group_sect_ptr, updated by setup_group when finding a
+     section's group.  Used to optimize subsequent group searches.  */
+  unsigned int group_search_offset;
 
   unsigned int symtab_section, dynsymtab_section;
   unsigned int dynversym_section, dynverdef_section, dynverref_section;
@@ -2164,7 +2181,7 @@ extern const struct bfd_elf_special_section *_bfd_elf_get_sec_type_attr
   (bfd *, asection *);
 
 /* If the target doesn't have reloc handling written yet:  */
-extern void _bfd_elf_no_info_to_howto
+extern bfd_boolean _bfd_elf_no_info_to_howto
   (bfd *, arelent *, Elf_Internal_Rela *);
 
 extern bfd_boolean bfd_section_from_shdr
@@ -2253,7 +2270,9 @@ extern bfd_boolean _bfd_elf_validate_reloc
 
 extern bfd_boolean _bfd_elf_link_create_dynamic_sections
   (bfd *, struct bfd_link_info *);
-extern bfd_boolean _bfd_elf_link_omit_section_dynsym
+extern bfd_boolean _bfd_elf_omit_section_dynsym_default
+  (bfd *, struct bfd_link_info *, asection *);
+extern bfd_boolean _bfd_elf_omit_section_dynsym_all
   (bfd *, struct bfd_link_info *, asection *);
 extern bfd_boolean _bfd_elf_create_dynamic_sections
   (bfd *, struct bfd_link_info *);

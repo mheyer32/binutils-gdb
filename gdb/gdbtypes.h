@@ -1,7 +1,7 @@
 
 /* Internal type definitions for GDB.
 
-   Copyright (C) 1992-2017 Free Software Foundation, Inc.
+   Copyright (C) 1992-2018 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support, using pieces from other GDB modules.
 
@@ -47,6 +47,8 @@
 #include "hashtab.h"
 #include "common/offset-type.h"
 #include "common/enum-flags.h"
+#include "common/underlying.h"
+#include "common/print-utils.h"
 
 /* Forward declarations for prototypes.  */
 struct field;
@@ -63,7 +65,13 @@ DEFINE_OFFSET_TYPE (cu_offset, unsigned int);
 
 /* * Offset relative to the start of its .debug_info or .debug_types
    section.  */
-DEFINE_OFFSET_TYPE (sect_offset, unsigned int);
+DEFINE_OFFSET_TYPE (sect_offset, uint64_t);
+
+static inline char *
+sect_offset_str (sect_offset offset)
+{
+  return hex_string (to_underlying (offset));
+}
 
 /* Some macros for char-based bitfields.  */
 
@@ -304,6 +312,14 @@ DEF_ENUM_FLAGS_TYPE (enum type_instance_flag_value, type_instance_flags);
 
 #define TYPE_FLAG_ENUM(t) (TYPE_MAIN_TYPE (t)->flag_flag_enum)
 
+/* * True if this type is a discriminated union type.  Only valid for
+   TYPE_CODE_UNION.  A discriminated union stores a reference to the
+   discriminant field along with the discriminator values in a dynamic
+   property.  */
+
+#define TYPE_FLAG_DISCRIMINATED_UNION(t) \
+  (TYPE_MAIN_TYPE (t)->flag_discriminated_union)
+
 /* * Constant type.  If this is set, the corresponding type has a
    const modifier.  */
 
@@ -373,6 +389,39 @@ DEF_ENUM_FLAGS_TYPE (enum type_instance_flag_value, type_instance_flags);
 #define TYPE_ADDRESS_CLASS_ALL(t) (TYPE_INSTANCE_FLAGS(t) \
 				   & TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL)
 
+/* * Information needed for a discriminated union.  A discriminated
+   union is handled somewhat differently from an ordinary union.
+
+   One field is designated as the discriminant.  Only one other field
+   is active at a time; which one depends on the value of the
+   discriminant and the data in this structure.
+
+   Additionally, it is possible to have a univariant discriminated
+   union.  In this case, the union has just a single field, which is
+   assumed to be the only active variant -- in this case no
+   discriminant is provided.  */
+
+struct discriminant_info
+{
+  /* * The index of the discriminant field.  If -1, then this union
+     must have just a single field.  */
+
+  int discriminant_index;
+
+  /* * The index of the default branch of the union.  If -1, then
+     there is no default branch.  */
+
+  int default_index;
+
+  /* * The discriminant values corresponding to each branch.  This has
+     a number of entries equal to the number of fields in this union.
+     If discriminant_index is not -1, then that entry in this array is
+     not used.  If default_index is not -1, then that entry in this
+     array is not used.  */
+
+  ULONGEST discriminants[1];
+};
+
 enum dynamic_prop_kind
 {
   PROP_UNDEFINED, /* Not defined.  */
@@ -404,6 +453,16 @@ struct dynamic_prop
   union dynamic_prop_data data;
 };
 
+/* Compare two dynamic_prop objects for equality.  dynamic_prop
+   instances are equal iff they have the same type and storage.  */
+extern bool operator== (const dynamic_prop &l, const dynamic_prop &r);
+
+/* Compare two dynamic_prop objects for inequality.  */
+static inline bool operator!= (const dynamic_prop &l, const dynamic_prop &r)
+{
+  return !(l == r);
+}
+
 /* * Define a type's dynamic property node kind.  */
 enum dynamic_prop_node_kind
 {
@@ -418,6 +477,12 @@ enum dynamic_prop_node_kind
   /* A property representing DW_AT_allocated.  The presence of this attribute
      indicated that the object of the type can be associated.  */
   DYN_PROP_ASSOCIATED,
+
+  /* A property providing an array's byte stride.  */
+  DYN_PROP_BYTE_STRIDE,
+
+  /* A property holding information about a discriminated union.  */
+  DYN_PROP_DISCRIMINATED,
 };
 
 /* * List for dynamic type attributes.  */
@@ -558,6 +623,16 @@ struct range_bounds
   int flag_bound_evaluated : 1;
 };
 
+/* Compare two range_bounds objects for equality.  Simply does
+   memberwise comparison.  */
+extern bool operator== (const range_bounds &l, const range_bounds &r);
+
+/* Compare two range_bounds objects for inequality.  */
+static inline bool operator!= (const range_bounds &l, const range_bounds &r)
+{
+  return !(l == r);
+}
+
 union type_specific
 {
   /* * CPLUS_STUFF is for TYPE_CODE_STRUCT.  It is initialized to
@@ -626,6 +701,13 @@ struct main_type
      affects how the enum is printed.  */
 
   unsigned int flag_flag_enum : 1;
+
+  /* * True if this type is a discriminated union type.  Only valid
+     for TYPE_CODE_UNION.  A discriminated union stores a reference to
+     the discriminant field along with the discriminator values in a
+     dynamic property.  */
+
+  unsigned int flag_discriminated_union : 1;
 
   /* * A discriminant telling us which field of the type_specific
      union is being used for this type, if any.  */
@@ -863,7 +945,7 @@ struct fn_field
 
 };
 
-struct typedef_field
+struct decl_field
 {
   /* * Unqualified name to be prefixed by owning class qualified
      name.  */
@@ -978,9 +1060,16 @@ struct cplus_struct_type
     /* * typedefs defined inside this class.  typedef_field points to
        an array of typedef_field_count elements.  */
 
-    struct typedef_field *typedef_field;
+    struct decl_field *typedef_field;
 
     unsigned typedef_field_count;
+
+    /* * The nested types defined by this type.  nested_types points to
+       an array of nested_types_count elements.  */
+
+    struct decl_field *nested_types;
+
+    unsigned nested_types_count;
 
     /* * The template arguments.  This is an array with
        N_TEMPLATE_ARGUMENTS elements.  This is NULL for non-template
@@ -1424,6 +1513,21 @@ extern void set_type_vptr_basetype (struct type *, struct type *);
 #define TYPE_TYPEDEF_FIELD_PRIVATE(thistype, n)        \
   TYPE_TYPEDEF_FIELD (thistype, n).is_private
 
+#define TYPE_NESTED_TYPES_ARRAY(thistype)	\
+  TYPE_CPLUS_SPECIFIC (thistype)->nested_types
+#define TYPE_NESTED_TYPES_FIELD(thistype, n) \
+  TYPE_CPLUS_SPECIFIC (thistype)->nested_types[n]
+#define TYPE_NESTED_TYPES_FIELD_NAME(thistype, n) \
+  TYPE_NESTED_TYPES_FIELD (thistype, n).name
+#define TYPE_NESTED_TYPES_FIELD_TYPE(thistype, n) \
+  TYPE_NESTED_TYPES_FIELD (thistype, n).type
+#define TYPE_NESTED_TYPES_COUNT(thistype) \
+  TYPE_CPLUS_SPECIFIC (thistype)->nested_types_count
+#define TYPE_NESTED_TYPES_FIELD_PROTECTED(thistype, n) \
+  TYPE_NESTED_TYPES_FIELD (thistype, n).is_protected
+#define TYPE_NESTED_TYPES_FIELD_PRIVATE(thistype, n)	\
+  TYPE_NESTED_TYPES_FIELD (thistype, n).is_private
+
 #define TYPE_IS_OPAQUE(thistype) \
   (((TYPE_CODE (thistype) == TYPE_CODE_STRUCT) \
     || (TYPE_CODE (thistype) == TYPE_CODE_UNION)) \
@@ -1769,7 +1873,8 @@ extern struct type *create_static_range_type (struct type *, struct type *,
 
 
 extern struct type *create_array_type_with_stride
-  (struct type *, struct type *, struct type *, unsigned int);
+  (struct type *, struct type *, struct type *,
+   struct dynamic_prop *, unsigned int);
 
 extern struct type *create_range_type (struct type *, struct type *,
 				       const struct dynamic_prop *,
@@ -1815,11 +1920,10 @@ extern struct dynamic_prop *get_dyn_prop
 /* * Given a dynamic property PROP of a given KIND, add this dynamic
    property to the given TYPE.
 
-   This function assumes that TYPE is objfile-owned, and that OBJFILE
-   is the TYPE's objfile.  */
+   This function assumes that TYPE is objfile-owned.  */
 extern void add_dyn_prop
   (enum dynamic_prop_node_kind kind, struct dynamic_prop prop,
-   struct type *type, struct objfile *objfile);
+   struct type *type);
 
 extern void remove_dyn_prop (enum dynamic_prop_node_kind prop_kind,
                              struct type *type);
@@ -1937,6 +2041,8 @@ extern void print_scalar_formatted (const gdb_byte *, struct type *,
 extern int can_dereference (struct type *);
 
 extern int is_integral_type (struct type *);
+
+extern int is_floating_type (struct type *);
 
 extern int is_scalar_type (struct type *type);
 

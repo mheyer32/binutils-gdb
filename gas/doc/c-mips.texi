@@ -1,4 +1,4 @@
-@c Copyright (C) 1991-2017 Free Software Foundation, Inc.
+@c Copyright (C) 1991-2018 Free Software Foundation, Inc.
 @c This is part of the GAS manual.
 @c For copying conditions, see the file as.texinfo.
 @ifset GENERIC
@@ -1106,8 +1106,8 @@ from the XPA Extension from that point on in the assembly.  The
 @kindex @code{.set nomips16e2}
 The directive @code{.set mips16e2} makes the assembler accept instructions
 from the MIPS16e2 Application Specific Extension from that point on in the
-assembly, whenever in MIPS16 mode.  The @code{.set nomips16e2} prevents
-MIPS16e2 instructions from being accepted, in MIPS16 mode.  Neither
+assembly, whenever in MIPS16 mode.  The @code{.set nomips16e2} directive
+prevents MIPS16e2 instructions from being accepted, in MIPS16 mode.  Neither
 directive affects the state of MIPS16 mode being active itself which has
 separate controls.
 

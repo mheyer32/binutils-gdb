@@ -1,5 +1,5 @@
 /* BFD back-end for Intel 960 b.out binaries.
-   Copyright (C) 1990-2017 Free Software Foundation, Inc.
+   Copyright (C) 1990-2018 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -476,7 +476,7 @@ b_out_write_object_contents (bfd *abfd)
 /* Some reloc hackery.  */
 
 #define CALLS	  0x66003800	/* Template for 'calls' instruction	*/
-#define BAL	  0x0b000000	/* Template for 'bal' instruction 	*/
+#define BAL	  0x0b000000	/* Template for 'bal' instruction	*/
 #define BAL_MASK  0x00ffffff
 #define BALX	  0x85f00000	/* Template for 'balx' instruction	*/
 #define BALX_MASK 0x0007ffff
@@ -613,9 +613,9 @@ callj_callback (bfd *abfd,
   else if ((symbol->symbol.flags & BSF_SECTION_SYM) != 0)
     {
       /* A callj against a symbol in the same section is a fully
-         resolved relative call.  We don't need to do anything here.
-         If the symbol is not in the same section, I'm not sure what
-         to do; fortunately, this case will probably never arise.  */
+	 resolved relative call.  We don't need to do anything here.
+	 If the symbol is not in the same section, I'm not sure what
+	 to do; fortunately, this case will probably never arise.  */
       BFD_ASSERT (! shrinking);
       BFD_ASSERT (symbol->symbol.section == input_section);
     }
@@ -1372,27 +1372,27 @@ b_out_bfd_get_relocated_section_contents (bfd *output_bfd,
 
 /* Build the transfer vectors for Big and Little-Endian B.OUT files.  */
 
-#define aout_32_find_line                      _bfd_nosymbols_find_line
+#define aout_32_find_line		       _bfd_nosymbols_find_line
 #define aout_32_get_symbol_version_string      _bfd_nosymbols_get_symbol_version_string
-#define aout_32_bfd_make_debug_symbol          _bfd_nosymbols_bfd_make_debug_symbol
-#define aout_32_close_and_cleanup              aout_32_bfd_free_cached_info
+#define aout_32_bfd_make_debug_symbol	       _bfd_nosymbols_bfd_make_debug_symbol
+#define aout_32_close_and_cleanup	       aout_32_bfd_free_cached_info
 #define b_out_bfd_link_hash_table_create       _bfd_generic_link_hash_table_create
-#define b_out_bfd_link_add_symbols             _bfd_generic_link_add_symbols
-#define b_out_bfd_link_just_syms               _bfd_generic_link_just_syms
+#define b_out_bfd_link_add_symbols	       _bfd_generic_link_add_symbols
+#define b_out_bfd_link_just_syms	       _bfd_generic_link_just_syms
 #define b_out_bfd_copy_link_hash_symbol_type \
   _bfd_generic_copy_link_hash_symbol_type
-#define b_out_bfd_final_link                   _bfd_generic_final_link
-#define b_out_bfd_link_split_section           _bfd_generic_link_split_section
-#define b_out_bfd_gc_sections                  bfd_generic_gc_sections
-#define b_out_bfd_lookup_section_flags         bfd_generic_lookup_section_flags
-#define b_out_bfd_merge_sections               bfd_generic_merge_sections
-#define b_out_bfd_is_group_section             bfd_generic_is_group_section
-#define b_out_bfd_discard_group                bfd_generic_discard_group
-#define b_out_section_already_linked           _bfd_generic_section_already_linked
-#define b_out_bfd_define_common_symbol         bfd_generic_define_common_symbol
-#define b_out_bfd_define_start_stop            bfd_generic_define_start_stop
+#define b_out_bfd_final_link		       _bfd_generic_final_link
+#define b_out_bfd_link_split_section	       _bfd_generic_link_split_section
+#define b_out_bfd_gc_sections		       bfd_generic_gc_sections
+#define b_out_bfd_lookup_section_flags	       bfd_generic_lookup_section_flags
+#define b_out_bfd_merge_sections	       bfd_generic_merge_sections
+#define b_out_bfd_is_group_section	       bfd_generic_is_group_section
+#define b_out_bfd_discard_group		       bfd_generic_discard_group
+#define b_out_section_already_linked	       _bfd_generic_section_already_linked
+#define b_out_bfd_define_common_symbol	       bfd_generic_define_common_symbol
+#define b_out_bfd_define_start_stop	       bfd_generic_define_start_stop
 #define aout_32_get_section_contents_in_window _bfd_generic_get_section_contents_in_window
-#define b_out_bfd_link_check_relocs            _bfd_generic_link_check_relocs
+#define b_out_bfd_link_check_relocs	       _bfd_generic_link_check_relocs
 #define b_out_set_reloc			       _bfd_generic_set_reloc
 
 extern const bfd_target bout_le_vec;
@@ -1417,24 +1417,37 @@ const bfd_target bout_be_vec =
   bfd_getb64, bfd_getb_signed_64, bfd_putb64,
      bfd_getb32, bfd_getb_signed_32, bfd_putb32,
      bfd_getb16, bfd_getb_signed_16, bfd_putb16, /* Headers.  */
- {_bfd_dummy_target, b_out_object_p, /* bfd_check_format.  */
-   bfd_generic_archive_p, _bfd_dummy_target},
- {bfd_false, b_out_mkobject,	/* bfd_set_format.  */
-   _bfd_generic_mkarchive, bfd_false},
- {bfd_false, b_out_write_object_contents, /* bfd_write_contents.  */
-   _bfd_write_archive_contents, bfd_false},
 
-     BFD_JUMP_TABLE_GENERIC (aout_32),
-     BFD_JUMP_TABLE_COPY (_bfd_generic),
-     BFD_JUMP_TABLE_CORE (_bfd_nocore),
-     BFD_JUMP_TABLE_ARCHIVE (_bfd_archive_bsd),
-     BFD_JUMP_TABLE_SYMBOLS (aout_32),
-     BFD_JUMP_TABLE_RELOCS (b_out),
-     BFD_JUMP_TABLE_WRITE (b_out),
-     BFD_JUMP_TABLE_LINK (b_out),
-     BFD_JUMP_TABLE_DYNAMIC (_bfd_nodynamic),
+  {				/* bfd_check_format.  */
+    _bfd_dummy_target,
+    b_out_object_p,
+    bfd_generic_archive_p,
+    _bfd_dummy_target
+  },
+  {				/* bfd_set_format.  */
+    _bfd_bool_bfd_false_error,
+    b_out_mkobject,
+    _bfd_generic_mkarchive,
+    _bfd_bool_bfd_false_error
+  },
+  {				/* bfd_write_contents.  */
+    _bfd_bool_bfd_false_error,
+    b_out_write_object_contents,
+    _bfd_write_archive_contents,
+    _bfd_bool_bfd_false_error
+  },
 
-  & bout_le_vec,
+  BFD_JUMP_TABLE_GENERIC (aout_32),
+  BFD_JUMP_TABLE_COPY (_bfd_generic),
+  BFD_JUMP_TABLE_CORE (_bfd_nocore),
+  BFD_JUMP_TABLE_ARCHIVE (_bfd_archive_bsd),
+  BFD_JUMP_TABLE_SYMBOLS (aout_32),
+  BFD_JUMP_TABLE_RELOCS (b_out),
+  BFD_JUMP_TABLE_WRITE (b_out),
+  BFD_JUMP_TABLE_LINK (b_out),
+  BFD_JUMP_TABLE_DYNAMIC (_bfd_nodynamic),
+
+  &bout_le_vec,
 
   NULL
 };
@@ -1460,24 +1473,36 @@ const bfd_target bout_le_vec =
      bfd_getl32, bfd_getl_signed_32, bfd_putl32,
      bfd_getl16, bfd_getl_signed_16, bfd_putl16, /* Headers.  */
 
-  {_bfd_dummy_target, b_out_object_p, /* bfd_check_format.  */
-     bfd_generic_archive_p, _bfd_dummy_target},
-  {bfd_false, b_out_mkobject,	/* bfd_set_format.  */
-     _bfd_generic_mkarchive, bfd_false},
-  {bfd_false, b_out_write_object_contents, /* bfd_write_contents.  */
-     _bfd_write_archive_contents, bfd_false},
+  {				/* bfd_check_format.  */
+    _bfd_dummy_target,
+    b_out_object_p,
+    bfd_generic_archive_p,
+    _bfd_dummy_target
+  },
+  {				/* bfd_set_format.  */
+    _bfd_bool_bfd_false_error,
+    b_out_mkobject,
+    _bfd_generic_mkarchive,
+    _bfd_bool_bfd_false_error
+  },
+  {				/* bfd_write_contents.  */
+    _bfd_bool_bfd_false_error,
+    b_out_write_object_contents,
+    _bfd_write_archive_contents,
+    _bfd_bool_bfd_false_error
+  },
 
-     BFD_JUMP_TABLE_GENERIC (aout_32),
-     BFD_JUMP_TABLE_COPY (_bfd_generic),
-     BFD_JUMP_TABLE_CORE (_bfd_nocore),
-     BFD_JUMP_TABLE_ARCHIVE (_bfd_archive_bsd),
-     BFD_JUMP_TABLE_SYMBOLS (aout_32),
-     BFD_JUMP_TABLE_RELOCS (b_out),
-     BFD_JUMP_TABLE_WRITE (b_out),
-     BFD_JUMP_TABLE_LINK (b_out),
-     BFD_JUMP_TABLE_DYNAMIC (_bfd_nodynamic),
+  BFD_JUMP_TABLE_GENERIC (aout_32),
+  BFD_JUMP_TABLE_COPY (_bfd_generic),
+  BFD_JUMP_TABLE_CORE (_bfd_nocore),
+  BFD_JUMP_TABLE_ARCHIVE (_bfd_archive_bsd),
+  BFD_JUMP_TABLE_SYMBOLS (aout_32),
+  BFD_JUMP_TABLE_RELOCS (b_out),
+  BFD_JUMP_TABLE_WRITE (b_out),
+  BFD_JUMP_TABLE_LINK (b_out),
+  BFD_JUMP_TABLE_DYNAMIC (_bfd_nodynamic),
 
-  & bout_be_vec,
+  &bout_be_vec,
 
   NULL
 };

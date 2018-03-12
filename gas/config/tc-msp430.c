@@ -1,6 +1,6 @@
 /* tc-msp430.c -- Assembler code for the Texas Instruments MSP430
 
-  Copyright (C) 2002-2017 Free Software Foundation, Inc.
+  Copyright (C) 2002-2018 Free Software Foundation, Inc.
   Contributed by Dmitry Diky <diwil@mail.ru>
 
   This file is part of GAS, the GNU Assembler.
@@ -2601,7 +2601,9 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
       && opcode->insn_opnumb
       && (!*line || *line == '\n'))
     {
-      as_bad (_("instruction %s requires %d operand(s)"),
+      as_bad (ngettext ("instruction %s requires %d operand",
+			"instruction %s requires %d operands",
+			opcode->insn_opnumb),
 	      opcode->name, opcode->insn_opnumb);
       return 0;
     }

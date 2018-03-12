@@ -1,6 +1,6 @@
 /* Header only used inside opcodes library for disassemble.
 
-   Copyright (C) 2017 Free Software Foundation, Inc.
+   Copyright (C) 2017-2018 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -82,7 +82,6 @@ extern int print_insn_or1k		(bfd_vma, disassemble_info *);
 extern int print_insn_pdp11		(bfd_vma, disassemble_info *);
 extern int print_insn_pj		(bfd_vma, disassemble_info *);
 extern int print_insn_pru		(bfd_vma, disassemble_info *);
-extern int print_insn_rs6000		(bfd_vma, disassemble_info *);
 extern int print_insn_s390		(bfd_vma, disassemble_info *);
 extern int print_insn_sh64		(bfd_vma, disassemble_info *);
 extern int print_insn_spu		(bfd_vma, disassemble_info *);
