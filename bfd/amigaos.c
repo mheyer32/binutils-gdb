@@ -833,7 +833,7 @@ parse_archive_units (
 	  break;
 
 	default: /* error */
-		  bfd_msg ("unexpected type %ld(0x%lx) in hunk_ext1 at offset 0x%lx", type, type, bfd_tell (abfd));
+		  bfd_msg ("unexpected type %ld(0x%lx) in hunk_ext1 at offset 0x%lx", type, type, (long unsigned int)bfd_tell (abfd));
 	  return FALSE;
 	}
 
@@ -1468,7 +1468,7 @@ amiga_handle_rest (
 		  break;
 
 		default: /* error */
-		  bfd_msg ("unexpected type %ld(0x%lx) in hunk_ext2 at offset 0x%lx", type, type, bfd_tell (abfd));
+		  bfd_msg ("unexpected type %ld(0x%lx) in hunk_ext2 at offset 0x%lx", type, type, (long unsigned int)bfd_tell (abfd));
 		  bfd_set_error (bfd_error_wrong_format);
 		  return FALSE;
 		  break;
@@ -1487,7 +1487,7 @@ amiga_handle_rest (
 	default: /* error */
 	  bfd_seek (abfd, -4, SEEK_CUR);
 	  bfd_msg ("HUNK_END missing: unexpected hunktype %ld(0x%lx) at offset 0x%lx", hunk_type, hunk_type,
-		   bfd_tell (abfd));
+		   (long unsigned int)bfd_tell (abfd));
 	  switch (hunk_value)
 	    {
 	    default:
@@ -2541,7 +2541,7 @@ static bfd_boolean amiga_write_symbols (
 	      break;
 
 	    default: /* Error, can't represent this */
-	      bfd_msg ("unexpected reloc %d(%s) at offset 0x%lx", r->howto->type, r->howto->name, bfd_tell (abfd));
+	      bfd_msg ("unexpected reloc %d(%s) at offset 0x%lx", r->howto->type, r->howto->name, (long unsigned int)bfd_tell (abfd));
 	      bfd_set_error (bfd_error_nonrepresentable_section);
 	      return FALSE;
 	      break;
@@ -3765,9 +3765,9 @@ amiga_generic_stat_arch_elt (
 /* amiga_print_symbol defined above */
 /* amiga_get_symbol_info defined above */
 #define amiga_bfd_is_local_label_name	bfd_generic_is_local_label_name
-#define amiga_get_lineno		(alent * (*)(bfd *, asymbol *)) bfd_nullvoidptr
+#define amiga_get_lineno		_bfd_nosymbols_get_lineno
 /* amiga_find_nearest_line defined above */
-#define amiga_bfd_make_debug_symbol	(asymbol * (*)(bfd *, PTR, unsigned long)) bfd_nullvoidptr
+#define amiga_bfd_make_debug_symbol	_bfd_nosymbols_bfd_make_debug_symbol
 #define amiga_read_minisymbols		_bfd_generic_read_minisymbols
 #define amiga_minisymbol_to_symbol	_bfd_generic_minisymbol_to_symbol
 
@@ -3801,7 +3801,7 @@ bfd_boolean amiga_final_link PARAMS ((bfd *, struct bfd_link_info *));
 #define amiga_find_line         _bfd_nosymbols_find_line
 #define amiga_find_inliner_info _bfd_nosymbols_find_inliner_info
 
-#define amiga_bfd_is_target_special_symbol         ((bfd_boolean (*) (bfd *, asymbol *)) bfd_false)
+#define amiga_bfd_is_target_special_symbol         _bfd_bool_bfd_asymbol_false
 
 #define amiga_set_reloc				   _bfd_generic_set_reloc
 #define amiga_bfd_reloc_name_lookup          _bfd_norelocs_bfd_reloc_name_lookup
@@ -3848,17 +3848,17 @@ const bfd_target amiga_vec =
   },
   {
     /* bfd_set_format */
-    bfd_false,
+    _bfd_bool_bfd_false_error,
     amiga_mkobject,
     amiga_mkarchive,
-    bfd_false
+    _bfd_bool_bfd_false_error
   },
   {
     /* bfd_write_contents */
-    bfd_false,
+    _bfd_bool_bfd_false_error,
     amiga_write_object_contents,
     amiga_write_archive_contents,
-    bfd_false
+    _bfd_bool_bfd_false_error
   },
   BFD_JUMP_TABLE_GENERIC (amiga),
   BFD_JUMP_TABLE_COPY (amiga),
