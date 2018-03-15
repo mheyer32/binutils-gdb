@@ -65,6 +65,9 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/gas}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/binutils/_build/ld}&quot;"/>
 								</option>
+								<option id="gnu.c.compiler.option.preprocessor.def.symbols.1253679263" superClass="gnu.c.compiler.option.preprocessor.def.symbols" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="NULL=0"/>
+								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.1174267022" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>
 							<tool id="cdt.managedbuild.tool.gnu.cpp.linker.base.733912310" name="GCC C++ Linker" superClass="cdt.managedbuild.tool.gnu.cpp.linker.base">
@@ -137,6 +140,7 @@
 									<listOptionValue builtIn="false" value="HAVE_cc0=1"/>
 									<listOptionValue builtIn="false" value="__ECLIPSE__=1"/>
 									<listOptionValue builtIn="false" value="TARGET_AMIGA=1"/>
+									<listOptionValue builtIn="false" value="NULL=0"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.1150724656" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>
@@ -172,6 +176,7 @@
 									<listOptionValue builtIn="false" value="HAVE_cc0=1"/>
 									<listOptionValue builtIn="false" value="__ECLIPSE__=1"/>
 									<listOptionValue builtIn="false" value="TARGET_AMIGA=1"/>
+									<listOptionValue builtIn="false" value="NULL=0"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.1133865092" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>
