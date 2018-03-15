@@ -200,7 +200,7 @@ static void insert_long_jumps(bfd *abfd, bfd *input_bfd, asection *input_section
 
 		  // reset rawsize
 		  unsigned cursize = s->rawsize;
-		  s->rawsize = (unsigned)s->userdata;
+		  s->rawsize = (bfd_size_type)s->userdata;
 
 
 		  amiga_reloc_type *src;
@@ -313,11 +313,11 @@ static void insert_long_jumps(bfd *abfd, bfd *input_bfd, asection *input_section
 	  rel_jumps_count = 0;
 
 	  /* adjust memory for first section. */
-	  if ((unsigned)input_section->userdata < input_section->rawsize)
+	  if ((bfd_size_type)input_section->userdata < input_section->rawsize)
 	    {
 	      PTR odata = data;
 	      data = bfd_alloc(abfd, input_section->rawsize);
-	      memcpy(data, odata, (unsigned)input_section->userdata);
+	      memcpy(data, odata, (bfd_size_type)input_section->userdata);
 	    }
 
 	  /**
@@ -382,8 +382,8 @@ static void insert_long_jumps(bfd *abfd, bfd *input_bfd, asection *input_section
 	      fflush(stdout);
 
 	      // 1. append a long jump
-	      signed endpos = (unsigned)input_section->userdata;
-	      input_section->userdata = (void *)((unsigned)input_section->userdata + 6);
+	      signed endpos = (bfd_size_type)input_section->userdata;
+	      input_section->userdata = (void *)((bfd_size_type)input_section->userdata + 6);
 	      data[endpos] = 0x4e;
 	      data[endpos + 1] = 0xf9;
 	      data[endpos + 2] = 0;
@@ -781,7 +781,7 @@ amiga_perform_reloc (
     case H_PC16:
       if (r->address == 0x80000000)
 	return bfd_reloc_ok;
-      /* no break */
+      /* fall through */
     case H_PC8: /* pcrel */
     case H_PC32:
       if (bfd_is_abs_section(target_section)) /* Ref to absolute hunk */
@@ -973,6 +973,7 @@ aout_perform_reloc (
      case H_PC16:
       if (r->address == 0x80000000)
 	return bfd_reloc_ok;
+      // fall through
     case H_PC8: /* pcrel */
     case H_PC32:
       if (bfd_is_abs_section(target_section)) /* Ref to absolute hunk */

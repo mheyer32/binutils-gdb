@@ -197,10 +197,10 @@ static sec_ptr amiga_get_section_by_hunk_number PARAMS ((bfd *, long));
 static bfd_boolean amiga_add_reloc PARAMS ((bfd *, sec_ptr, bfd_size_type,
 	amiga_symbol_type *, reloc_howto_type *, long));
 static sec_ptr amiga_make_unique_section PARAMS ((bfd *, const char *));
-static bfd_boolean parse_archive_units PARAMS ((bfd *, int *, unsigned long,
+static bfd_boolean parse_archive_units PARAMS ((bfd *, int *, file_ptr,
  	bfd_boolean, struct arch_syms **, symindex *));
 static bfd_boolean amiga_digest_file PARAMS ((bfd *));
-static bfd_boolean amiga_read_unit PARAMS ((bfd *, unsigned long));
+static bfd_boolean amiga_read_unit PARAMS ((bfd *, file_ptr));
 static bfd_boolean amiga_read_load PARAMS ((bfd *));
 static bfd_boolean amiga_handle_cdb_hunk PARAMS ((bfd *, unsigned long,
 	unsigned long, unsigned long, unsigned long));
@@ -592,7 +592,7 @@ static bfd_boolean
 parse_archive_units (
      bfd *abfd,
      int *n_units,
-     unsigned long filesize,
+     file_ptr filesize,
      bfd_boolean one,			/* parse only the first unit? */
      struct arch_syms **syms,
      symindex *symcount)
@@ -622,7 +622,7 @@ parse_archive_units (
 	return TRUE;
       }
 	  stab_pos = stabstr_pos = 0;
-	  /* no break */
+	  /* fall through */
     case HUNK_NAME:
 	  if (!get_long (abfd, &len))
 	    return FALSE;
@@ -817,7 +817,7 @@ parse_archive_units (
 
 	case EXT_ABSCOMMON:
 		  defsym_pos = bfd_tell (abfd) - 4;
-		
+		  // fall through
 	case EXT_RELCOMMON:
 	case EXT_DEXT32COMMON:
 	case EXT_DEXT16COMMON:
@@ -918,7 +918,7 @@ static bfd_boolean amiga_digest_file (
 static bfd_boolean
 amiga_read_unit (
      bfd *abfd,
-     unsigned long size)
+     file_ptr size)
 {
   unsigned long hunk_number=0,hunk_type,tmp;
 
@@ -1402,7 +1402,7 @@ amiga_handle_rest (
 	      break;
 	    }
 	  /* We add these, by falling through... */
-
+	  /* fall through */
 	case HUNK_EXT:
 	  /* We leave these alone, until they are requested by the user */
 	  asect->hunk_ext_pos = bfd_tell (abfd);
@@ -2555,6 +2555,7 @@ static bfd_boolean amiga_write_symbols (
 	    {
 	    default:
 	      bfd_msg ("Warning: bad reloc %s for common symbol %s", r->howto->name, sym_p->name);
+	      // fall through
 	    case H_ABS32:
 	      type=EXT_ABSCOMMON;
 	      break;
