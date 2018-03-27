@@ -280,7 +280,7 @@ static void insert_long_jumps(bfd *abfd, bfd *input_bfd, asection *input_section
 		      for (lo = xs->map_head.link_order; lo; lo = lo->next)
 			{
 			  if (lo->type == bfd_section_reloc_link_order && lo->u.reloc.p->u.section == s->output_section
-			      && lo->u.reloc.p->addend >= s->rawsize + s->output_offset)
+			      && lo->u.reloc.p->addend >= s->size + s->output_offset)
 			    lo->u.reloc.p->addend += delta;
 			}
 		   }
