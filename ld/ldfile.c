@@ -70,23 +70,15 @@ static search_arch_type **search_arch_tail_ptr = &search_arch_head;
 
 /* Flavour support.  */
 
-static int flavors_cmp PARAMS ((const void *f1, const void *f2));
 
 static int n_flavors, flavors_len;
 static char **flavors;
 
-static int
-flavors_cmp (f1, f2)
-     const void *f1, *f2;
-{
-  return strcmp (*(char **)f1, *(char **)f2);
-}
-
 void
 ldfile_sort_flavors (void)
 {
-  if (n_flavors > 1)
-    qsort ((void *) flavors, n_flavors, sizeof (char **), flavors_cmp);
+//  if (n_flavors > 1)
+//    qsort ((void *) flavors, n_flavors, sizeof (char **), flavors_cmp);
 }
 
 void
