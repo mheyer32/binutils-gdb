@@ -172,7 +172,7 @@ static void insert_long_jumps(bfd *abfd, bfd *input_bfd, asection *input_section
 	      if (strcmp(s->name, ".text"))
 		continue;
 
-	      s->userdata = (void *)s->rawsize;
+	      s->compressed_size = s->rawsize;
 	    }
 
 	  /**
@@ -200,7 +200,7 @@ static void insert_long_jumps(bfd *abfd, bfd *input_bfd, asection *input_section
 
 		  // reset rawsize
 		  unsigned cursize = s->rawsize;
-		  s->rawsize = (bfd_size_type)s->userdata;
+		  s->rawsize = s->compressed_size;
 
 
 		  amiga_reloc_type *src;
@@ -313,15 +313,15 @@ static void insert_long_jumps(bfd *abfd, bfd *input_bfd, asection *input_section
 	  rel_jumps_count = 0;
 
 	  /* adjust memory for first section. */
-	  if ((bfd_size_type)input_section->userdata < input_section->rawsize)
+	  if (input_section->compressed_size < input_section->rawsize)
 	    {
 	      PTR odata = data;
 	      data = bfd_alloc(abfd, input_section->rawsize);
-	      memcpy(data, odata, (bfd_size_type)input_section->userdata);
+	      memcpy(data, odata, input_section->compressed_size);
 	    }
 
 	  /**
-	   * Now all sections have its final offset and size plus the old size in userdata.
+	   * Now all sections have its final offset and size plus the old size in compressed_size.
 	   */
 	}
 
@@ -382,8 +382,8 @@ static void insert_long_jumps(bfd *abfd, bfd *input_bfd, asection *input_section
 	      fflush(stdout);
 
 	      // 1. append a long jump
-	      signed endpos = (bfd_size_type)input_section->userdata;
-	      input_section->userdata = (void *)((bfd_size_type)input_section->userdata + 6);
+	      signed endpos = input_section->compressed_size;
+	      input_section->compressed_size += 6;
 	      data[endpos] = 0x4e;
 	      data[endpos + 1] = 0xf9;
 	      data[endpos + 2] = 0;
@@ -549,28 +549,28 @@ get_relocated_section_contents (
 			(link_info, bfd_asymbol_name (*(*parent)->sym_ptr_ptr),
 			 input_bfd, input_section, (*parent)->address,
 			 TRUE));
-		    goto error_return;
+//		    goto error_return;
 		  break;
 		case bfd_reloc_dangerous:
 		  BFD_ASSERT (error_message != (char *) NULL);
 		  ((*link_info->callbacks->reloc_dangerous)
 			(link_info, error_message, input_bfd, input_section,
 			 (*parent)->address));
-		    goto error_return;
+//		    goto error_return;
 		  break;
 		case bfd_reloc_overflow:
 		  ((*link_info->callbacks->reloc_overflow)
 			(link_info, 0, bfd_asymbol_name (*(*parent)->sym_ptr_ptr),
 			 (*parent)->howto->name, (*parent)->addend,
 			 input_bfd, input_section, (*parent)->address));
-		    goto error_return;
+//		    goto error_return;
 		  break;
 		case bfd_reloc_outofrange:
 		default:
 		  DPRINT(10,("get_rel_sec_cont fails, perform reloc "
 			     "returned $%x\n",r));
 		  fprintf(stderr, "%s: %s reloc for %s is out of range: %08x\n", abfd->filename, (*(*parent)->sym_ptr_ptr)->section->name, bfd_asymbol_name (*(*parent)->sym_ptr_ptr), relocation);
-		  abort ();
+//		  abort ();
 		  break;
 		}
 
