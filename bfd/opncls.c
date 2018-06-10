@@ -128,7 +128,7 @@ _bfd_delete_bfd (bfd *abfd)
 
   if (abfd->filename)
     free ((char *) abfd->filename);
-  free (abfd->arelt_data);
+//  free (abfd->arelt_data);
   free (abfd);
 }
 
