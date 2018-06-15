@@ -1285,10 +1285,40 @@ amiga_handle_cdb_hunk (
 	    {
 	      amiga_data_type *amiga_data=AMIGA_DATA(abfd);
 	      /* FIXME: we should add the symbols in the debug hunk to symtab... */
+	      /* SBF: no, we should not. */
 	      amiga_data->symtab_size = GL (&buf[4]);
 	      amiga_data->stringtab_size = GL (&buf[8]);
 	      adata(abfd).sym_filepos = bfd_tell (abfd);
 	      adata(abfd).str_filepos = adata(abfd).sym_filepos + amiga_data->symtab_size;
+
+	      /* SBF: the next sections are needed by gdb. */
+	      /* Also make .stab section */
+	      current_section = amiga_make_unique_section (abfd, ".stab");
+	      if (!current_section)
+	    	  return FALSE;
+
+	      current_section->filepos = adata(abfd).sym_filepos;
+	      current_section->size = amiga_data->symtab_size;
+	      current_section->target_index = hunk_number;
+	      bfd_set_section_flags (abfd, current_section, SEC_ALLOC | SEC_DEBUGGING | SEC_HAS_CONTENTS);
+
+	      amiga_per_section(current_section)->disk_size = amiga_data->symtab_size; /* size on disk */
+	      amiga_per_section(current_section)->attribute = 0;
+
+	      /* Also make .stabstr section */
+	      current_section = amiga_make_unique_section (abfd, ".stabstr");
+	      if (!current_section)
+	    	  return FALSE;
+
+	      current_section->filepos = adata(abfd).str_filepos;
+	      current_section->size = amiga_data->stringtab_size;
+	      current_section->target_index = hunk_number + 1;
+	      bfd_set_section_flags (abfd, current_section, SEC_ALLOC | SEC_DEBUGGING | SEC_HAS_CONTENTS);
+
+	      amiga_per_section(current_section)->disk_size = amiga_data->stringtab_size; /* size on disk */
+	      amiga_per_section(current_section)->attribute = 0;
+
+
 	    }
 	  len -= sizeof(buf);
 	}
