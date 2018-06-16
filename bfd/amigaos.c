@@ -2795,10 +2795,21 @@ amiga_slurp_symbol_table (
   if (amiga_data->symbols)
     return TRUE; /* already read */
 
-  if (!bfd_get_symcount (abfd))
-    return TRUE;
+  unsigned totalsymcount = bfd_get_symcount(abfd);
+  for (section=abfd->sections; section!=NULL; section=section->next)
+    {
+	  if (0 == strcmp (section->name, ".stab"))
+	    {
+	      amiga_per_section_type *astab = amiga_per_section(section);
+	      totalsymcount += astab->disk_size / 12;
+	      break;
+	    }
+    }
+  if (!totalsymcount)
+	return TRUE;
 
-  asp = (amiga_symbol_type *) bfd_zalloc (abfd, sizeof(amiga_symbol_type) * bfd_get_symcount(abfd));
+
+  asp = (amiga_symbol_type *) bfd_zalloc (abfd, sizeof(amiga_symbol_type) * totalsymcount);
   if ((amiga_data->symbols = asp) == NULL)
     return FALSE;
 
