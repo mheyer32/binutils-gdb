@@ -604,7 +604,7 @@ parse_archive_units (
   char * last_name = 0;
   bfd_vma stab_pos = 0;
   bfd_vma stabstr_pos = 0;
-  unsigned stab_size, stabstr_size;
+  unsigned stab_size = 0, stabstr_size = 0;
 
   *n_units = 0;
   while (get_long (abfd, &hunk_type))
