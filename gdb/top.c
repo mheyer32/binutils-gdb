@@ -573,7 +573,12 @@ execute_command (const char *p, int from_tty)
       /* If trace-commands is set then this will print this command.  */
       print_command_trace (p);
 
+#ifdef __CYGWIN__
+      c = lookup_cmd (&cmd, cmdlist, "", 1, 1);
+#else
       c = lookup_cmd (&cmd, cmdlist, "", 0, 1);
+#endif
+if (c) {
       p = cmd;
 
       scoped_restore save_repeat_args
@@ -641,7 +646,7 @@ execute_command (const char *p, int from_tty)
 		  repeat_arguments);
 	}
     }
-
+}
   check_frame_language_change ();
 
   discard_cleanups (cleanup_if_error);
