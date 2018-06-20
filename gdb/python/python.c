@@ -385,12 +385,12 @@ gdbpy_eval_from_control_command (const struct extension_language_defn *extlang,
 {
   int ret;
 
-  if (cmd->body_count != 1)
+  if (cmd->body_list_1 != nullptr)
     error (_("Invalid \"python\" block structure."));
 
   gdbpy_enter enter_py (get_current_arch (), current_language);
 
-  std::string script = compute_python_string (cmd->body_list[0]);
+  std::string script = compute_python_string (cmd->body_list_0.get ());
   ret = PyRun_SimpleString (script.c_str ());
   if (ret)
     error (_("Error while executing Python code."));
@@ -413,7 +413,7 @@ python_command (const char *arg, int from_tty)
     }
   else
     {
-      command_line_up l = get_command_line (python_control, "");
+      counted_command_line l = get_command_line (python_control, "");
 
       execute_control_command_untraced (l.get ());
     }
@@ -467,6 +467,7 @@ gdbpy_parameter_value (enum var_types type, void *var)
 	Py_RETURN_NONE;
       /* Fall through.  */
     case var_zinteger:
+    case var_zuinteger_unlimited:
       return PyLong_FromLong (* (int *) var);
 
     case var_uinteger:
@@ -475,6 +476,12 @@ gdbpy_parameter_value (enum var_types type, void *var)
 
 	if (val == UINT_MAX)
 	  Py_RETURN_NONE;
+	return PyLong_FromUnsignedLong (val);
+      }
+
+    case var_zuinteger:
+      {
+	unsigned int val = * (unsigned int *) var;
 	return PyLong_FromUnsignedLong (val);
       }
     }
@@ -581,6 +588,20 @@ execute_gdb_command (PyObject *self, PyObject *args, PyObject *kw)
     {
       struct interp *interp;
 
+      std::string arg_copy = arg;
+      bool first = true;
+      char *save_ptr = nullptr;
+      auto reader
+	= [&] ()
+	  {
+	    const char *result = strtok_r (first ? &arg_copy[0] : nullptr,
+					   "\n", &save_ptr);
+	    first = false;
+	    return result;
+	  };
+
+      counted_command_line lines = read_command_lines_1 (reader, 1, nullptr);
+
       scoped_restore save_async = make_scoped_restore (&current_ui->async, 0);
 
       scoped_restore save_uiout = make_scoped_restore (&current_uiout);
@@ -588,13 +609,14 @@ execute_gdb_command (PyObject *self, PyObject *args, PyObject *kw)
       /* Use the console interpreter uiout to have the same print format
 	for console or MI.  */
       interp = interp_lookup (current_ui, "console");
-      current_uiout = interp_ui_out (interp);
+      current_uiout = interp->interp_ui_out ();
 
       scoped_restore preventer = prevent_dont_repeat ();
       if (to_string)
-	to_string_res = execute_command_to_string (arg, from_tty);
+	to_string_res = execute_control_commands_to_string (lines.get (),
+							    from_tty);
       else
-	execute_command (arg, from_tty);
+	execute_control_commands (lines.get (), from_tty);
     }
   CATCH (except, RETURN_MASK_ALL)
     {
@@ -876,10 +898,7 @@ gdbpy_decode_line (PyObject *self, PyObject *args)
 	}
     }
   else
-    {
-      result.reset (Py_None);
-      Py_INCREF (Py_None);
-    }
+    result = gdbpy_ref<>::new_reference (Py_None);
 
   gdbpy_ref<> return_result (PyTuple_New (2));
   if (return_result == NULL)
@@ -892,10 +911,7 @@ gdbpy_decode_line (PyObject *self, PyObject *args)
 	return NULL;
     }
   else
-    {
-      unparsed.reset (Py_None);
-      Py_INCREF (Py_None);
-    }
+    unparsed = gdbpy_ref<>::new_reference (Py_None);
 
   PyTuple_SetItem (return_result.get (), 0, unparsed.release ());
   PyTuple_SetItem (return_result.get (), 1, result.release ());
@@ -1582,7 +1598,7 @@ python_interactive_command (const char *arg, int from_tty)
     error (_("Python scripting is not supported in this copy of GDB."));
   else
     {
-      command_line_up l = get_command_line (python_control, "");
+      counted_command_line l = get_command_line (python_control, "");
 
       execute_control_command_untraced (l.get ());
     }
@@ -1651,6 +1667,17 @@ finalize_python (void *ignore)
   restore_active_ext_lang (previous_active);
 }
 
+#ifdef IS_PY3K
+/* This is called via the PyImport_AppendInittab mechanism called
+   during initialization, to make the built-in _gdb module known to
+   Python.  */
+PyMODINIT_FUNC
+init__gdb_module (void)
+{
+  return PyModule_Create (&python_GdbModuleDef);
+}
+#endif
+
 static bool
 do_start_initialization ()
 {
@@ -1691,6 +1718,9 @@ do_start_initialization ()
      remain alive for the duration of the program's execution, so
      it is not freed after this call.  */
   Py_SetProgramName (progname_copy);
+
+  /* Define _gdb as a built-in module.  */
+  PyImport_AppendInittab ("_gdb", init__gdb_module);
 #else
   Py_SetProgramName (progname.release ());
 #endif
@@ -1700,9 +1730,7 @@ do_start_initialization ()
   PyEval_InitThreads ();
 
 #ifdef IS_PY3K
-  gdb_module = PyModule_Create (&python_GdbModuleDef);
-  /* Add _gdb module to the list of known built-in modules.  */
-  _PyImport_FixupBuiltin (gdb_module, "_gdb");
+  gdb_module = PyImport_ImportModule ("_gdb");
 #else
   gdb_module = Py_InitModule ("_gdb", python_GdbMethods);
 #endif
@@ -2115,6 +2143,14 @@ Return a tuple containing all inferiors." },
     "invalidate_cached_frames () -> None.\n\
 Invalidate any cached frame objects in gdb.\n\
 Intended for internal use only." },
+
+  { "convenience_variable", gdbpy_convenience_variable, METH_VARARGS,
+    "convenience_variable (NAME) -> value.\n\
+Return the value of the convenience variable $NAME,\n\
+or None if not set." },
+  { "set_convenience_variable", gdbpy_set_convenience_variable, METH_VARARGS,
+    "convenience_variable (NAME, VALUE) -> None.\n\
+Set the value of the convenience variable $NAME." },
 
   {NULL, NULL, 0, NULL}
 };

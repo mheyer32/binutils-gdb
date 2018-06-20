@@ -896,8 +896,7 @@ coff_symtab_read (minimal_symbol_reader &reader,
 	case C_LINE:
 	case C_ALIAS:
 	case C_HIDDEN:
-	  complaint (&symfile_complaints,
-		     _("Bad n_sclass for symbol %s"),
+	  complaint (_("Bad n_sclass for symbol %s"),
 		     cs->c_name);
 	  break;
 
@@ -928,6 +927,7 @@ coff_symtab_read (minimal_symbol_reader &reader,
 	     backtraces, so filter them out (from phdm@macqel.be).  */
 	  if (within_function)
 	    break;
+	  /* Fall through.  */
 	case C_STAT:
 	case C_THUMBLABEL:
 	case C_THUMBSTAT:
@@ -964,7 +964,8 @@ coff_symtab_read (minimal_symbol_reader &reader,
 	    /* At least on a 3b1, gcc generates swbeg and string labels
 	       that look like this.  Ignore them.  */
 	    break;
-	  /* Fall in for static symbols that don't start with '.'  */
+	  /* For static symbols that don't start with '.'...  */
+	  /* Fall through.  */
 	case C_THUMBEXT:
 	case C_THUMBEXTFUNC:
 	case C_EXT:
@@ -1064,8 +1065,7 @@ coff_symtab_read (minimal_symbol_reader &reader,
 	      /* main_aux.x_sym.x_misc.x_lnsz.x_lnno
 	         contains line number of '{' }.  */
 	      if (cs->c_naux != 1)
-		complaint (&symfile_complaints,
-			   _("`.bf' symbol %d has no aux entry"),
+		complaint (_("`.bf' symbol %d has no aux entry"),
 			   cs->c_symnum);
 	      fcn_first_line = main_aux.x_sym.x_misc.x_lnsz.x_lnno;
 	      fcn_first_line_addr = cs->c_value;
@@ -1091,8 +1091,7 @@ coff_symtab_read (minimal_symbol_reader &reader,
 
 	      if (context_stack_depth <= 0)
 		{	/* We attempted to pop an empty context stack.  */
-		  complaint (&symfile_complaints,
-			     _("`.ef' symbol without matching `.bf' "
+		  complaint (_("`.ef' symbol without matching `.bf' "
 			       "symbol ignored starting at symnum %d"),
 			     cs->c_symnum);
 		  within_function = 0;
@@ -1103,8 +1102,7 @@ coff_symtab_read (minimal_symbol_reader &reader,
 	      /* Stack must be empty now.  */
 	      if (context_stack_depth > 0 || newobj == NULL)
 		{
-		  complaint (&symfile_complaints,
-			     _("Unmatched .ef symbol(s) ignored "
+		  complaint (_("Unmatched .ef symbol(s) ignored "
 			       "starting at symnum %d"),
 			     cs->c_symnum);
 		  within_function = 0;
@@ -1112,8 +1110,7 @@ coff_symtab_read (minimal_symbol_reader &reader,
 		}
 	      if (cs->c_naux != 1)
 		{
-		  complaint (&symfile_complaints,
-			     _("`.ef' symbol %d has no aux entry"),
+		  complaint (_("`.ef' symbol %d has no aux entry"),
 			     cs->c_symnum);
 		  fcn_last_line = 0x7FFFFFFF;
 		}
@@ -1158,8 +1155,7 @@ coff_symtab_read (minimal_symbol_reader &reader,
 	    {
 	      if (context_stack_depth <= 0)
 		{	/* We attempted to pop an empty context stack.  */
-		  complaint (&symfile_complaints,
-			     _("`.eb' symbol without matching `.bb' "
+		  complaint (_("`.eb' symbol without matching `.bb' "
 			       "symbol ignored starting at symnum %d"),
 			     cs->c_symnum);
 		  break;
@@ -1168,8 +1164,7 @@ coff_symtab_read (minimal_symbol_reader &reader,
 	      newobj = pop_context ();
 	      if (depth-- != newobj->depth)
 		{
-		  complaint (&symfile_complaints,
-			     _("Mismatched .eb symbol ignored "
+		  complaint (_("Mismatched .eb symbol ignored "
 			       "starting at symnum %d"),
 			     symnum);
 		  break;
@@ -1478,8 +1473,7 @@ enter_linenos (long file_offset, int first_line,
     return;
   if (file_offset < linetab_offset)
     {
-      complaint (&symfile_complaints,
-		 _("Line number pointer %ld lower than start of line numbers"),
+      complaint (_("Line number pointer %ld lower than start of line numbers"),
 		 file_offset);
       if (file_offset > linetab_size)	/* Too big to be an offset?  */
 	return;
@@ -1787,11 +1781,11 @@ process_coff_symbol (struct coff_symbol *cs,
 	  /* Some compilers try to be helpful by inventing "fake"
 	     names for anonymous enums, structures, and unions, like
 	     "~0fake" or ".0fake".  Thanks, but no thanks...  */
-	  if (TYPE_TAG_NAME (SYMBOL_TYPE (sym)) == 0)
+	  if (TYPE_NAME (SYMBOL_TYPE (sym)) == 0)
 	    if (SYMBOL_LINKAGE_NAME (sym) != NULL
 		&& *SYMBOL_LINKAGE_NAME (sym) != '~'
 		&& *SYMBOL_LINKAGE_NAME (sym) != '.')
-	      TYPE_TAG_NAME (SYMBOL_TYPE (sym)) =
+	      TYPE_NAME (SYMBOL_TYPE (sym)) =
 		concat (SYMBOL_LINKAGE_NAME (sym), (char *)NULL);
 
 	  add_symbol_to_list (sym, &file_symbols);
@@ -1875,8 +1869,7 @@ decode_type (struct coff_symbol *cs, unsigned int c_type,
 	}
       else
 	{
-	  complaint (&symfile_complaints,
-		     _("Symbol table entry for %s has bad tagndx value"),
+	  complaint (_("Symbol table entry for %s has bad tagndx value"),
 		     cs->c_name);
 	  /* And fall through to decode_base_type...  */
 	}
@@ -1957,10 +1950,6 @@ decode_base_type (struct coff_symbol *cs,
 	  type = coff_alloc_type (cs->c_symnum);
 	  TYPE_CODE (type) = TYPE_CODE_STRUCT;
 	  TYPE_NAME (type) = NULL;
-	  /* This used to set the tag to "<opaque>".  But I think
-	     setting it to NULL is right, and the printing code can
-	     print it as "struct {...}".  */
-	  TYPE_TAG_NAME (type) = NULL;
 	  INIT_CPLUS_SPECIFIC (type);
 	  TYPE_LENGTH (type) = 0;
 	  TYPE_FIELDS (type) = 0;
@@ -1981,10 +1970,6 @@ decode_base_type (struct coff_symbol *cs,
 	  /* Anonymous union type.  */
 	  type = coff_alloc_type (cs->c_symnum);
 	  TYPE_NAME (type) = NULL;
-	  /* This used to set the tag to "<opaque>".  But I think
-	     setting it to NULL is right, and the printing code can
-	     print it as "union {...}".  */
-	  TYPE_TAG_NAME (type) = NULL;
 	  INIT_CPLUS_SPECIFIC (type);
 	  TYPE_LENGTH (type) = 0;
 	  TYPE_FIELDS (type) = 0;
@@ -2007,10 +1992,6 @@ decode_base_type (struct coff_symbol *cs,
 	  type = coff_alloc_type (cs->c_symnum);
 	  TYPE_CODE (type) = TYPE_CODE_ENUM;
 	  TYPE_NAME (type) = NULL;
-	  /* This used to set the tag to "<opaque>".  But I think
-	     setting it to NULL is right, and the printing code can
-	     print it as "enum {...}".  */
-	  TYPE_TAG_NAME (type) = NULL;
 	  TYPE_LENGTH (type) = 0;
 	  TYPE_FIELDS (type) = 0;
 	  TYPE_NFIELDS (type) = 0;
@@ -2045,8 +2026,7 @@ decode_base_type (struct coff_symbol *cs,
       else
 	return objfile_type (objfile)->builtin_unsigned_long;
     }
-  complaint (&symfile_complaints, 
-	     _("Unexpected type for symbol %s"), cs->c_name);
+  complaint (_("Unexpected type for symbol %s"), cs->c_name);
   return objfile_type (objfile)->builtin_void;
 }
 

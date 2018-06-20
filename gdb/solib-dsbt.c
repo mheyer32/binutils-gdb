@@ -224,10 +224,10 @@ dsbt_print_loadmap (struct int_elf32_dsbt_loadmap *map)
 /* Decode int_elf32_dsbt_loadmap from BUF.  */
 
 static struct int_elf32_dsbt_loadmap *
-decode_loadmap (gdb_byte *buf)
+decode_loadmap (const gdb_byte *buf)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
-  struct ext_elf32_dsbt_loadmap *ext_ldmbuf;
+  const struct ext_elf32_dsbt_loadmap *ext_ldmbuf;
   struct int_elf32_dsbt_loadmap *int_ldmbuf;
 
   int version, seg, nsegs;
@@ -278,7 +278,6 @@ decode_loadmap (gdb_byte *buf)
 				    byte_order);
     }
 
-  xfree (ext_ldmbuf);
   return int_ldmbuf;
 }
 
@@ -292,26 +291,26 @@ static struct dsbt_info *get_dsbt_info (void);
 static void
 dsbt_get_initial_loadmaps (void)
 {
-  gdb_byte *buf;
   struct dsbt_info *info = get_dsbt_info ();
+  gdb::optional<gdb::byte_vector> buf
+    = target_read_alloc (current_top_target (), TARGET_OBJECT_FDPIC, "exec");
 
-  if (0 >= target_read_alloc (&current_target, TARGET_OBJECT_FDPIC,
-			      "exec", &buf))
+  if (!buf || buf->empty ())
     {
       info->exec_loadmap = NULL;
       error (_("Error reading DSBT exec loadmap"));
     }
-  info->exec_loadmap = decode_loadmap (buf);
+  info->exec_loadmap = decode_loadmap (buf->data ());
   if (solib_dsbt_debug)
     dsbt_print_loadmap (info->exec_loadmap);
 
-  if (0 >= target_read_alloc (&current_target, TARGET_OBJECT_FDPIC,
-			      "interp", &buf))
+  buf = target_read_alloc (current_top_target (), TARGET_OBJECT_FDPIC, "exec");
+  if (!buf || buf->empty ())
     {
       info->interp_loadmap = NULL;
       error (_("Error reading DSBT interp loadmap"));
     }
-  info->interp_loadmap = decode_loadmap (buf);
+  info->interp_loadmap = decode_loadmap (buf->data ());
   if (solib_dsbt_debug)
     dsbt_print_loadmap (info->interp_loadmap);
 }
@@ -696,7 +695,7 @@ dsbt_current_sos (void)
       if (dsbt_index != 0)
 	{
 	  int errcode;
-	  char *name_buf;
+	  gdb::unique_xmalloc_ptr<char> name_buf;
 	  struct int_elf32_dsbt_loadmap *loadmap;
 	  struct so_list *sop;
 	  CORE_ADDR addr;
@@ -727,11 +726,10 @@ dsbt_current_sos (void)
 	    {
 	      if (solib_dsbt_debug)
 		fprintf_unfiltered (gdb_stdlog, "current_sos: name = %s\n",
-				    name_buf);
+				    name_buf.get ());
 
-	      strncpy (sop->so_name, name_buf, SO_NAME_MAX_PATH_SIZE - 1);
+	      strncpy (sop->so_name, name_buf.get (), SO_NAME_MAX_PATH_SIZE - 1);
 	      sop->so_name[SO_NAME_MAX_PATH_SIZE - 1] = '\0';
-	      xfree (name_buf);
 	      strcpy (sop->so_original_name, sop->so_name);
 	    }
 

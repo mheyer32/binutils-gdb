@@ -95,7 +95,7 @@ extern const char vtbl_ptr_name[] = "__vtbl_ptr_type";
 int
 cp_is_vtbl_ptr_type (struct type *type)
 {
-  const char *type_name = type_name_no_tag (type);
+  const char *type_name = TYPE_NAME (type);
 
   return (type_name != NULL && !strcmp (type_name, vtbl_ptr_name));
 }
@@ -243,7 +243,7 @@ cp_print_value_fields (struct type *type, struct type *real_type,
 		  fprintf_filtered (stream, "\n");
 		  print_spaces_filtered (2 + 2 * recurse, stream);
 		  fputs_filtered ("members of ", stream);
-		  fputs_filtered (type_name_no_tag (type), stream);
+		  fputs_filtered (TYPE_NAME (type), stream);
 		  fputs_filtered (": ", stream);
 		}
 	    }
@@ -633,7 +633,8 @@ cp_print_static_field (struct type *type,
       return;
     }
 
-  if (TYPE_CODE (type) == TYPE_CODE_STRUCT)
+  struct type *real_type = check_typedef (type);
+  if (TYPE_CODE (real_type) == TYPE_CODE_STRUCT)
     {
       CORE_ADDR *first_dont_print;
       CORE_ADDR addr;
@@ -658,7 +659,6 @@ cp_print_static_field (struct type *type,
       addr = value_address (val);
       obstack_grow (&dont_print_statmem_obstack, (char *) &addr,
 		    sizeof (CORE_ADDR));
-      type = check_typedef (type);
       cp_print_value_fields (type, value_enclosing_type (val),
 			     value_embedded_offset (val), addr,
 			     stream, recurse, val,
@@ -666,7 +666,7 @@ cp_print_static_field (struct type *type,
       return;
     }
 
-  if (TYPE_CODE (type) == TYPE_CODE_ARRAY)
+  if (TYPE_CODE (real_type) == TYPE_CODE_ARRAY)
     {
       struct type **first_dont_print;
       int i;
@@ -787,7 +787,7 @@ cp_print_class_member (const gdb_byte *valaddr, struct type *type,
       const char *name;
 
       fputs_filtered (prefix, stream);
-      name = type_name_no_tag (self_type);
+      name = TYPE_NAME (self_type);
       if (name)
 	fputs_filtered (name, stream);
       else

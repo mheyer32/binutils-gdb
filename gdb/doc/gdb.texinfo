@@ -2708,9 +2708,12 @@ To find out what inferiors exist at any moment, use @w{@code{info
 inferiors}}:
 
 @table @code
-@kindex info inferiors
+@kindex info inferiors [ @var{id}@dots{} ]
 @item info inferiors
 Print a list of all inferiors currently being managed by @value{GDBN}.
+By default all inferiors are printed, but the argument @var{id}@dots{}
+-- a space separated list of inferior numbers -- can be used to limit
+the display to just the requested inferiors.
 
 @value{GDBN} displays for each inferior (in this order):
 
@@ -6316,6 +6319,7 @@ a command prompt so that you can issue other commands while your program runs.
 If the target doesn't support async mode, @value{GDBN} issues an error
 message if you attempt to use the background execution commands.
 
+@cindex @code{&}, background execution of commands
 To specify background execution, add a @code{&} to the command.  For example,
 the background form of the @code{continue} command is @code{continue&}, or
 just @code{c&}.  The execution commands that accept background execution
@@ -6952,9 +6956,72 @@ and to read-write memory.  Beware that the accessed memory corresponds
 to the live target and not necessarily to the current replay
 position.
 
+@item set record btrace cpu @var{identifier}
+Set the processor to be used for enabling workarounds for processor
+errata when decoding the trace.
+
+Processor errata are defects in processor operation, caused by its
+design or manufacture.  They can cause a trace not to match the
+specification.  This, in turn, may cause trace decode to fail.
+@value{GDBN} can detect erroneous trace packets and correct them, thus
+avoiding the decoding failures.  These corrections are known as
+@dfn{errata workarounds}, and are enabled based on the processor on
+which the trace was recorded.
+
+By default, @value{GDBN} attempts to detect the processor
+automatically, and apply the necessary workarounds for it.  However,
+you may need to specify the processor if @value{GDBN} does not yet
+support it.  This command allows you to do that, and also allows to
+disable the workarounds.
+
+The argument @var{identifier} identifies the @sc{cpu} and is of the
+form: @code{@var{vendor}:@var{procesor identifier}}.  In addition,
+there are two special identifiers, @code{none} and @code{auto}
+(default).
+
+The following vendor identifiers and corresponding processor
+identifiers are currently supported:
+
+@multitable @columnfractions .1 .9
+
+@item @code{intel}
+@tab @var{family}/@var{model}[/@var{stepping}]
+
+@end multitable
+
+On GNU/Linux systems, the processor @var{family}, @var{model}, and
+@var{stepping} can be obtained from @code{/proc/cpuinfo}.
+
+If @var{identifier} is @code{auto}, enable errata workarounds for the
+processor on which the trace was recorded.  If @var{identifier} is
+@code{none}, errata workarounds are disabled.
+
+For example, when using an old @value{GDBN} on a new system, decode
+may fail because @value{GDBN} does not support the new processor.  It
+often suffices to specify an older processor that @value{GDBN}
+supports.
+
+@smallexample
+(gdb) info record
+Active record target: record-btrace
+Recording format: Intel Processor Trace.
+Buffer size: 16kB.
+Failed to configure the Intel Processor Trace decoder: unknown cpu.
+(gdb) set record btrace cpu intel:6/158
+(gdb) info record
+Active record target: record-btrace
+Recording format: Intel Processor Trace.
+Buffer size: 16kB.
+Recorded 84872 instructions in 3189 functions (0 gaps) for thread 1 (...).
+@end smallexample
+
 @kindex show record btrace
 @item show record btrace replay-memory-access
 Show the current setting of @code{replay-memory-access}.
+
+@item show record btrace cpu
+Show the processor to be used for enabling trace decode errata
+workarounds.
 
 @kindex set record btrace bts
 @item set record btrace bts buffer-size @var{size}
@@ -7307,44 +7374,48 @@ frame (frame zero), followed by its caller (frame one), and on up the
 stack.
 
 @anchor{backtrace-command}
-@table @code
 @kindex backtrace
 @kindex bt @r{(@code{backtrace})}
-@item backtrace
-@itemx bt
-Print a backtrace of the entire stack: one line per frame for all
-frames in the stack.
+To print a backtrace of the entire stack, use the @code{backtrace}
+command, or its alias @code{bt}.  This command will print one line per
+frame for frames in the stack.  By default, all stack frames are
+printed.  You can stop the backtrace at any time by typing the system
+interrupt character, normally @kbd{Ctrl-c}.
 
-You can stop the backtrace at any time by typing the system interrupt
-character, normally @kbd{Ctrl-c}.
+@table @code
+@item backtrace [@var{args}@dots{}]
+@itemx bt [@var{args}@dots{}]
+Print the backtrace of the entire stack.  The optional @var{args} can
+be one of the following:
 
-@item backtrace @var{n}
-@itemx bt @var{n}
-Similar, but print only the innermost @var{n} frames.
+@table @code
+@item @var{n}
+@itemx @var{n}
+Print only the innermost @var{n} frames, where @var{n} is a positive
+number.
 
-@item backtrace -@var{n}
-@itemx bt -@var{n}
-Similar, but print only the outermost @var{n} frames.
+@item -@var{n}
+@itemx -@var{n}
+Print only the outermost @var{n} frames, where @var{n} is a positive
+number.
 
-@item backtrace full
-@itemx bt full
-@itemx bt full @var{n}
-@itemx bt full -@var{n}
-Print the values of the local variables also.  As described above,
-@var{n} specifies the number of frames to print.
+@item full
+Print the values of the local variables also.  This can be combined
+with a number to limit the number of frames shown.
 
-@item backtrace no-filters
-@itemx bt no-filters
-@itemx bt no-filters @var{n}
-@itemx bt no-filters -@var{n}
-@itemx bt no-filters full
-@itemx bt no-filters full @var{n}
-@itemx bt no-filters full -@var{n}
+@item no-filters
 Do not run Python frame filters on this backtrace.  @xref{Frame
 Filter API}, for more information.  Additionally use @ref{disable
 frame-filter all} to turn off all frame filters.  This is only
 relevant when @value{GDBN} has been configured with @code{Python}
 support.
+
+@item hide
+A Python frame filter might decide to ``elide'' some frames.  Normally
+such elided frames are still printed, but they are indented relative
+to the filtered frames that cause them to be elided.  The @code{hide}
+option causes elided frames to not be printed at all.
+@end table
 @end table
 
 @kindex where
@@ -16268,6 +16339,7 @@ to be difficult.
 * Ada Tasks and Core Files::    Tasking Support when Debugging Core Files
 * Ravenscar Profile::           Tasking Support when using the Ravenscar
                                    Profile
+* Ada Settings::                New settable GDB parameters for Ada.
 * Ada Glitches::                Known peculiarities of Ada mode.
 @end menu
 
@@ -16923,6 +16995,37 @@ using the Ravenscar Profile.
 
 @end table
 
+@node Ada Settings
+@subsubsection Ada Settings
+@cindex Ada settings
+
+@table @code
+@kindex set varsize-limit
+@item set varsize-limit @var{size}
+Prevent @value{GDBN} from attempting to evaluate objects whose size
+is above the given limit (@var{size}) when those sizes are computed
+from run-time quantities.  This is typically the case when the object
+has a variable size, such as an array whose bounds are not known at
+compile time for example.  Setting @var{size} to @code{unlimited}
+removes the size limitation.  By default, the limit is about 65KB.
+
+The purpose of having such a limit is to prevent @value{GDBN} from
+trying to grab enormous chunks of virtual memory when asked to evaluate
+a quantity whose bounds have been corrupted or have not yet been fully
+initialized.  The limit applies to the results of some subexpressions
+as well as to complete expressions.  For example, an expression denoting
+a simple integer component, such as @code{x.y.z}, may fail if the size of
+@code{x.y} is variable and exceeds @code{size}.  On the other hand,
+@value{GDBN} is sometimes clever; the expression @code{A(i)}, where
+@code{A} is an array variable with non-constant size, will generally
+succeed regardless of the bounds on @code{A}, as long as the component
+size is less than @var{size}.
+
+@kindex show varsize-limit
+@item show varsize-limit
+Show the limit on types whose size is determined by run-time quantities.
+@end table
+
 @node Ada Glitches
 @subsubsection Known Peculiarities of Ada Mode
 @cindex Ada, problems
@@ -17486,7 +17589,7 @@ name is @code{value}.
 
 This command differs from @code{ptype} in two ways: first, like
 @code{whatis}, it does not print a detailed description; second, it
-lists all source files where a type is defined.
+lists all source files and line numbers where a type is defined.
 
 @kindex info type-printers
 @item info type-printers
@@ -17564,24 +17667,29 @@ have already been read, and files whose symbols will be read when needed.
 @kindex info functions
 @item info functions
 Print the names and data types of all defined functions.
+Similarly to @samp{info types}, this command groups its output by source
+files and annotates each function definition with its source line
+number.
 
 @item info functions @var{regexp}
-Print the names and data types of all defined functions
-whose names contain a match for regular expression @var{regexp}.
-Thus, @samp{info fun step} finds all functions whose names
-include @code{step}; @samp{info fun ^step} finds those whose names
-start with @code{step}.  If a function name contains characters
-that conflict with the regular expression language (e.g.@:
+Like @samp{info functions}, but only print the names and data types of
+functions whose names contain a match for regular expression
+@var{regexp}.  Thus, @samp{info fun step} finds all functions whose
+names include @code{step}; @samp{info fun ^step} finds those whose names
+start with @code{step}.  If a function name contains characters that
+conflict with the regular expression language (e.g.@:
 @samp{operator*()}), they may be quoted with a backslash.
 
 @kindex info variables
 @item info variables
 Print the names and data types of all variables that are defined
 outside of functions (i.e.@: excluding local variables).
+The printed variables are grouped by source files and annotated with
+their respective source line numbers.
 
 @item info variables @var{regexp}
-Print the names and data types of all variables (except for local
-variables) whose names contain a match for regular expression
+Like @kbd{info variables}, but only print the names and data types of
+non-local variables whose names contain a match for regular expression
 @var{regexp}.
 
 @kindex info classes
@@ -20200,6 +20308,15 @@ executable.
 Display @value{GDBN}'s current idea of the target byte order.
 
 @end table
+
+If the @code{set endian auto} mode is in effect and no executable has
+been selected, then the endianness used is the last one chosen either
+by one of the @code{set endian big} and @code{set endian little}
+commands or by inferring from the last executable used.  If no
+endianness has been previously chosen, then the default for this mode
+is inferred from the target @value{GDBN} has been built for, and is
+@code{little} if the name of the target CPU has an @code{el} suffix
+and @code{big} otherwise.
 
 Note that these commands merely adjust interpretation of symbolic
 data on the host, and that they have absolutely no effect on the
@@ -23770,11 +23887,13 @@ Print ten commands just after the commands last printed.
 Certain commands to @value{GDBN} may produce large amounts of
 information output to the screen.  To help you read all of it,
 @value{GDBN} pauses and asks you for input at the end of each page of
-output.  Type @key{RET} when you want to continue the output, or @kbd{q}
-to discard the remaining output.  Also, the screen width setting
-determines when to wrap lines of output.  Depending on what is being
-printed, @value{GDBN} tries to break the line at a readable place,
-rather than simply letting it overflow onto the following line.
+output.  Type @key{RET} when you want to see one more page of output,
+@kbd{q} to discard the remaining output, or @kbd{c} to continue
+without paging for the rest of the current command.  Also, the screen
+width setting determines when to wrap lines of output.  Depending on
+what is being printed, @value{GDBN} tries to break the line at a
+readable place, rather than simply letting it overflow onto the
+following line.
 
 Normally @value{GDBN} knows the size of the screen from the terminal
 driver software.  For example, on Unix @value{GDBN} uses the termcap data base
@@ -35429,6 +35548,16 @@ modify XML target descriptions.
 Check that the target descriptions dynamically created by @value{GDBN}
 equal the descriptions created from XML files found in @var{dir}.
 
+@anchor{maint check libthread-db}
+@kindex maint check libthread-db
+@item maint check libthread-db
+Run integrity checks on the current inferior's thread debugging
+library.  This exercises all @code{libthread_db} functionality used by
+@value{GDBN} on GNU/Linux systems, and by extension also exercises the
+@code{proc_service} functions provided by @value{GDBN} that
+@code{libthread_db} uses.  Note that parts of the test may be skipped
+on some platforms when debugging core files.
+
 @kindex maint print dummy-frames
 @item maint print dummy-frames
 Prints the contents of @value{GDBN}'s internal dummy-frame stack.
@@ -35735,6 +35864,17 @@ number of primary symbol tables
 number of blocks in the blockvector
 @end enumerate
 @end table
+
+@kindex maint set check-libthread-db
+@kindex maint show check-libthread-db
+@item maint set check-libthread-db [on|off]
+@itemx maint show check-libthread-db
+Control whether @value{GDBN} should run integrity checks on inferior
+specific thread debugging libraries as they are loaded.  The default
+is not to perform such checks.  If any check fails @value{GDBN} will
+unload the library and continue searching for a suitable candidate as
+described in @ref{set libthread-db-search-path}.  For more information
+about the tests, see @ref{maint check libthread-db}.
 
 @kindex maint space
 @cindex memory used by commands
@@ -42029,6 +42169,10 @@ targets.  It should contain registers @samp{x0} through @samp{x30},
 The @samp{org.gnu.gdb.aarch64.fpu} feature is optional.  If present,
 it should contain registers @samp{v0} through @samp{v31}, @samp{fpsr},
 and @samp{fpcr}.
+
+The @samp{org.gnu.gdb.aarch64.sve} feature is optional.  If present,
+it should contain registers @samp{z0} through @samp{z31}, @samp{p0}
+through @samp{p15}, @samp{ffr} and @samp{vg}.
 
 @node ARC Features
 @subsection ARC Features

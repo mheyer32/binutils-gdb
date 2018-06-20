@@ -45,6 +45,7 @@
 #include "cli/cli-utils.h"
 
 #include <ctype.h>
+#include <algorithm>
 
 struct objc_object {
   CORE_ADDR isa;
@@ -123,8 +124,7 @@ lookup_objc_class (struct gdbarch *gdbarch, const char *classname)
     function = find_function_in_inferior("objc_lookup_class", NULL);
   else
     {
-      complaint (&symfile_complaints,
-		 _("no way to lookup Objective-C classes"));
+      complaint (_("no way to lookup Objective-C classes"));
       return 0;
     }
 
@@ -153,8 +153,7 @@ lookup_child_selector (struct gdbarch *gdbarch, const char *selname)
     function = find_function_in_inferior("sel_get_any_uid", NULL);
   else
     {
-      complaint (&symfile_complaints,
-		 _("no way to lookup Objective-C selectors"));
+      complaint (_("no way to lookup Objective-C selectors"));
       return 0;
     }
 
@@ -389,6 +388,7 @@ extern const struct language_defn objc_language_defn = {
   default_read_var_value,	/* la_read_var_value */
   objc_skip_trampoline, 	/* Language specific skip_trampoline */
   "self",		        /* name_of_this */
+  false,			/* la_store_sym_names_in_linkage_form_p */
   basic_lookup_symbol_nonlocal,	/* lookup_symbol_nonlocal */
   basic_lookup_transparent_type,/* lookup_transparent_type */
   objc_demangle,		/* Language specific symbol demangler */
@@ -624,8 +624,7 @@ info_selectors_command (const char *regexp, int from_tty)
 	  name = (char *) strchr (name+2, ' ');
 	  if (name == NULL)
 	    {
-	      complaint (&symfile_complaints, 
-			 _("Bad method name '%s'"), 
+	      complaint (_("Bad method name '%s'"),
 			 MSYMBOL_NATURAL_NAME (msymbol));
 	      continue;
 	    }
@@ -973,7 +972,7 @@ parse_method (char *method, char *type, char **theclass,
 static void
 find_methods (char type, const char *theclass, const char *category, 
 	      const char *selector,
-	      VEC (const_char_ptr) **symbol_names)
+	      std::vector<const char *> *symbol_names)
 {
   struct objfile *objfile = NULL;
 
@@ -1049,7 +1048,7 @@ find_methods (char type, const char *theclass, const char *category,
 	      ((nselector == NULL) || (strcmp (selector, nselector) != 0)))
 	    continue;
 
-	  VEC_safe_push (const_char_ptr, *symbol_names, symname);
+	  symbol_names->push_back (symname);
 	}
 
       if (objc_csym == NULL)
@@ -1067,33 +1066,14 @@ find_methods (char type, const char *theclass, const char *category,
 /* Uniquify a VEC of strings.  */
 
 static void
-uniquify_strings (VEC (const_char_ptr) **strings)
+uniquify_strings (std::vector<const char *> *strings)
 {
-  int ix;
-  const char *elem, *last = NULL;
-  int out;
-
-  /* If the vector is empty, there's nothing to do.  This explicit
-     check is needed to avoid invoking qsort with NULL. */
-  if (VEC_empty (const_char_ptr, *strings))
+  if (strings->empty ())
     return;
 
-  qsort (VEC_address (const_char_ptr, *strings),
-	 VEC_length (const_char_ptr, *strings),
-	 sizeof (const_char_ptr),
-	 compare_strings);
-  out = 0;
-  for (ix = 0; VEC_iterate (const_char_ptr, *strings, ix, elem); ++ix)
-    {
-      if (last == NULL || strcmp (last, elem) != 0)
-	{
-	  /* Keep ELEM.  */
-	  VEC_replace (const_char_ptr, *strings, out, elem);
-	  ++out;
-	}
-      last = elem;
-    }
-  VEC_truncate (const_char_ptr, *strings, out);
+  std::sort (strings->begin (), strings->end (), compare_cstrings);
+  strings->erase (std::unique (strings->begin (), strings->end (), streq),
+		  strings->end ());
 }
 
 /* 
@@ -1127,7 +1107,7 @@ uniquify_strings (VEC (const_char_ptr) **strings)
  */
 
 const char *
-find_imps (const char *method, VEC (const_char_ptr) **symbol_names)
+find_imps (const char *method, std::vector<const char *> *symbol_names)
 {
   char type = '\0';
   char *theclass = NULL;
@@ -1160,22 +1140,20 @@ find_imps (const char *method, VEC (const_char_ptr) **symbol_names)
 
   /* If we hit the "selector" case, and we found some methods, then
      add the selector itself as a symbol, if it exists.  */
-  if (selector_case && !VEC_empty (const_char_ptr, *symbol_names))
+  if (selector_case && !symbol_names->empty ())
     {
       struct symbol *sym = lookup_symbol (selector, NULL, VAR_DOMAIN,
 					  0).symbol;
 
       if (sym != NULL) 
-	VEC_safe_push (const_char_ptr, *symbol_names,
-		       SYMBOL_NATURAL_NAME (sym));
+	symbol_names->push_back (SYMBOL_NATURAL_NAME (sym));
       else
 	{
 	  struct bound_minimal_symbol msym
 	    = lookup_minimal_symbol (selector, 0, 0);
 
 	  if (msym.minsym != NULL) 
-	    VEC_safe_push (const_char_ptr, *symbol_names,
-			   MSYMBOL_NATURAL_NAME (msym.minsym));
+	    symbol_names->push_back (MSYMBOL_NATURAL_NAME (msym.minsym));
 	}
     }
 

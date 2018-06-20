@@ -496,6 +496,9 @@ bfd_link_hash_lookup (struct bfd_link_hash_table *table,
 {
   struct bfd_link_hash_entry *ret;
 
+  if (table == NULL || string == NULL)
+    return NULL;
+
   ret = ((struct bfd_link_hash_entry *)
 	 bfd_hash_lookup (&table->table, string, create, copy));
 
@@ -942,6 +945,9 @@ _bfd_generic_link_add_archive_symbols
 	      continue;
 	    }
 
+	  if (arsym->name == NULL)
+	    goto error_return;
+				  
 	  h = bfd_link_hash_lookup (info->hash, arsym->name,
 				    FALSE, FALSE, TRUE);
 
@@ -3125,6 +3131,32 @@ bfd_generic_define_common_symbol (bfd *output_bfd,
   section->flags |= SEC_ALLOC;
   section->flags &= ~SEC_IS_COMMON;
   return TRUE;
+}
+
+/*
+FUNCTION
+	_bfd_generic_link_hide_symbol
+
+SYNOPSIS
+	void _bfd_generic_link_hide_symbol
+	  (bfd *output_bfd, struct bfd_link_info *info,
+	   struct bfd_link_hash_entry *h);
+
+DESCRIPTION
+	Hide symbol @var{h}.
+	This is an internal function.  It should not be called from
+	outside the BFD library.
+
+.#define bfd_link_hide_symbol(output_bfd, info, h) \
+.	BFD_SEND (output_bfd, _bfd_link_hide_symbol, (output_bfd, info, h))
+.
+*/
+
+void
+_bfd_generic_link_hide_symbol (bfd *output_bfd ATTRIBUTE_UNUSED,
+			       struct bfd_link_info *info ATTRIBUTE_UNUSED,
+			       struct bfd_link_hash_entry *h ATTRIBUTE_UNUSED)
+{
 }
 
 /*

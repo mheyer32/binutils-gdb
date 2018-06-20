@@ -89,12 +89,18 @@ extern int strcmp_iw (const char *string1, const char *string2);
 
 extern int strcmp_iw_ordered (const char *, const char *);
 
-extern int streq (const char *, const char *);
+/* Return true if the strings are equal.  */
+
+extern bool streq (const char *, const char *);
+
+/* A variant of streq that is suitable for use as an htab
+   callback.  */
+
+extern int streq_hash (const void *, const void *);
 
 extern int subset_compare (const char *, const char *);
 
 int compare_positive_ints (const void *ap, const void *bp);
-int compare_strings (const void *ap, const void *bp);
 
 /* Compare C strings for std::sort.  */
 
@@ -242,14 +248,7 @@ private:
 
 /* Cleanup utilities.  */
 
-struct section_addr_info;
-extern struct cleanup *make_cleanup_free_section_addr_info
-                       (struct section_addr_info *);
-
 /* For make_cleanup_close see common/filestuff.h.  */
-
-struct target_ops;
-extern struct cleanup *make_cleanup_unpush_target (struct target_ops *ops);
 
 extern struct cleanup *make_cleanup_value_free_to_mark (struct value *);
 
@@ -419,7 +418,10 @@ extern void fputstr_unfiltered (const char *str, int quotr,
 extern void fputstrn_filtered (const char *str, int n, int quotr,
 			       struct ui_file * stream);
 
+typedef int (*do_fputc_ftype) (int c, ui_file *stream);
+
 extern void fputstrn_unfiltered (const char *str, int n, int quotr,
+				 do_fputc_ftype do_fputc,
 				 struct ui_file * stream);
 
 /* Return nonzero if filtered printing is initialized.  */
@@ -491,38 +493,6 @@ extern pid_t wait_to_die_with_timeout (pid_t pid, int *status, int timeout);
 #endif
 
 extern int myread (int, char *, int);
-
-/* Ensure that V is aligned to an N byte boundary (B's assumed to be a
-   power of 2).  Round up/down when necessary.  Examples of correct
-   use include:
-
-   addr = align_up (addr, 8); -- VALUE needs 8 byte alignment
-   write_memory (addr, value, len);
-   addr += len;
-
-   and:
-
-   sp = align_down (sp - len, 16); -- Keep SP 16 byte aligned
-   write_memory (sp, value, len);
-
-   Note that uses such as:
-
-   write_memory (addr, value, len);
-   addr += align_up (len, 8);
-
-   and:
-
-   sp -= align_up (len, 8);
-   write_memory (sp, value, len);
-
-   are typically not correct as they don't ensure that the address (SP
-   or ADDR) is correctly aligned (relying on previous alignment to
-   keep things right).  This is also why the methods are called
-   "align_..." instead of "round_..." as the latter reads better with
-   this incorrect coding style.  */
-
-extern ULONGEST align_up (ULONGEST v, int n);
-extern ULONGEST align_down (ULONGEST v, int n);
 
 /* Resource limits used by getrlimit and setrlimit.  */
 

@@ -164,21 +164,20 @@ static const char vb_name[] = "_vb$";
 static void
 invalid_cpp_abbrev_complaint (const char *arg1)
 {
-  complaint (&symfile_complaints, _("invalid C++ abbreviation `%s'"), arg1);
+  complaint (_("invalid C++ abbreviation `%s'"), arg1);
 }
 
 static void
 reg_value_complaint (int regnum, int num_regs, const char *sym)
 {
-  complaint (&symfile_complaints,
-	     _("bad register number %d (max %d) in symbol %s"),
+  complaint (_("bad register number %d (max %d) in symbol %s"),
              regnum, num_regs - 1, sym);
 }
 
 static void
 stabs_general_complaint (const char *arg1)
 {
-  complaint (&symfile_complaints, "%s", arg1);
+  complaint ("%s", arg1);
 }
 
 /* Make a list of forward references which haven't been defined.  */
@@ -249,8 +248,7 @@ dbx_lookup_type (int typenums[2], struct objfile *objfile)
 
   if (filenum < 0 || filenum >= n_this_object_header_files)
     {
-      complaint (&symfile_complaints,
-		 _("Invalid symbol data: type number "
+      complaint (_("Invalid symbol data: type number "
 		   "(%d,%d) out of range at symtab pos %d."),
 		 filenum, index, symnum);
       goto error_return;
@@ -673,7 +671,7 @@ define_symbol (CORE_ADDR valu, const char *string, int desc, int type,
       p = strchr (p, ':');
       if (p == NULL)
 	{
-	  complaint (&symfile_complaints, 
+	  complaint (
 		     _("Bad stabs string '%s'"), string);
 	  return NULL;
 	}
@@ -723,10 +721,10 @@ define_symbol (CORE_ADDR valu, const char *string, int desc, int type,
 	  /* SunPRO (3.0 at least) static variable encoding.  */
 	  if (gdbarch_static_transform_name_p (gdbarch))
 	    goto normal;
-	  /* ... fall through ...  */
+	  /* fall through */
 
 	default:
-	  complaint (&symfile_complaints, _("Unknown C++ symbol name `%s'"),
+	  complaint (_("Unknown C++ symbol name `%s'"),
 		     string);
 	  goto normal;		/* Do *something* with it.  */
 	}
@@ -1100,6 +1098,7 @@ define_symbol (CORE_ADDR valu, const char *string, int desc, int type,
 	    }
 	  break;
 	}
+      /* Fall through.  */
 
     case 'P':
       /* acc seems to use P to declare the prototypes of functions that
@@ -1246,7 +1245,7 @@ define_symbol (CORE_ADDR valu, const char *string, int desc, int type,
 	    for (j = TYPE_N_BASECLASSES (SYMBOL_TYPE (sym)) - 1; j >= 0; j--)
 	      if (TYPE_BASECLASS_NAME (SYMBOL_TYPE (sym), j) == 0)
 		TYPE_BASECLASS_NAME (SYMBOL_TYPE (sym), j) =
-		  type_name_no_tag (TYPE_BASECLASS (SYMBOL_TYPE (sym), j));
+		  TYPE_NAME (TYPE_BASECLASS (SYMBOL_TYPE (sym), j));
 	  }
 
       if (TYPE_NAME (SYMBOL_TYPE (sym)) == NULL)
@@ -1344,8 +1343,8 @@ define_symbol (CORE_ADDR valu, const char *string, int desc, int type,
       SYMBOL_ACLASS_INDEX (sym) = LOC_TYPEDEF;
       SYMBOL_VALUE (sym) = valu;
       SYMBOL_DOMAIN (sym) = STRUCT_DOMAIN;
-      if (TYPE_TAG_NAME (SYMBOL_TYPE (sym)) == 0)
-	TYPE_TAG_NAME (SYMBOL_TYPE (sym))
+      if (TYPE_NAME (SYMBOL_TYPE (sym)) == 0)
+	TYPE_NAME (SYMBOL_TYPE (sym))
 	  = obconcat (&objfile->objfile_obstack,
 		      SYMBOL_LINKAGE_NAME (sym),
 		      (char *) NULL);
@@ -1489,8 +1488,7 @@ define_symbol (CORE_ADDR valu, const char *string, int desc, int type,
 static struct type *
 error_type (const char **pp, struct objfile *objfile)
 {
-  complaint (&symfile_complaints,
-	     _("couldn't parse type; debugger out of date?"));
+  complaint (_("couldn't parse type; debugger out of date?"));
   while (1)
     {
       /* Skip to end of symbol.  */
@@ -1610,8 +1608,7 @@ again:
 	      {
 		/* Complain and keep going, so compilers can invent new
 		   cross-reference types.  */
-		complaint (&symfile_complaints,
-			   _("Unrecognized cross-reference type `%c'"),
+		complaint (_("Unrecognized cross-reference type `%c'"),
 			   (*pp)[0]);
 		code = TYPE_CODE_STRUCT;
 		break;
@@ -1702,7 +1699,7 @@ again:
 	   type.  */
 	type = dbx_alloc_type (typenums, objfile);
 	TYPE_CODE (type) = code;
-	TYPE_TAG_NAME (type) = type_name;
+	TYPE_NAME (type) = type_name;
 	INIT_CPLUS_SPECIFIC (type);
 	TYPE_STUB (type) = 1;
 
@@ -1767,7 +1764,6 @@ again:
                copies of a type otherwise.  */
 	    replace_type (type, xtype);
 	    TYPE_NAME (type) = NULL;
-	    TYPE_TAG_NAME (type) = NULL;
 	  }
 	else
 	  {
@@ -1841,8 +1837,7 @@ again:
           ++*pp;
         else
           {
-	    complaint (&symfile_complaints,
-		       _("Prototyped function type didn't "
+	    complaint (_("Prototyped function type didn't "
 			 "end arguments with `#':\n%s"),
 		       type_start);
           }
@@ -1954,8 +1949,7 @@ again:
 	  (*pp)++;
 	  return_type = read_type (pp, objfile);
 	  if (*(*pp)++ != ';')
-	    complaint (&symfile_complaints,
-		       _("invalid (minimal) member type "
+	    complaint (_("invalid (minimal) member type "
 			 "data format at symtab pos %d."),
 		       symnum);
 	  type = allocate_stub_method (return_type);
@@ -2087,7 +2081,7 @@ rs6000_builtin_type (int typenum, struct objfile *objfile)
 
   if (typenum >= 0 || typenum < -NUMBER_RECOGNIZED)
     {
-      complaint (&symfile_complaints, _("Unknown builtin type %d"), typenum);
+      complaint (_("Unknown builtin type %d"), typenum);
       return objfile_type (objfile)->builtin_error;
     }
 
@@ -2253,8 +2247,7 @@ stabs_method_name_from_physname (const char *physname)
 
   if (method_name == NULL)
     {
-      complaint (&symfile_complaints,
-		 _("Method has bad physname %s\n"), physname);
+      complaint (_("Method has bad physname %s\n"), physname);
       return NULL;
     }
 
@@ -2445,8 +2438,7 @@ read_member_functions (struct field_info *fip, const char **pp,
 	    case '.':
 	      break;
 	    default:
-	      complaint (&symfile_complaints,
-			 _("const/volatile indicator missing, got '%c'"),
+	      complaint (_("const/volatile indicator missing, got '%c'"),
 			 **pp);
 	      break;
 	    }
@@ -2529,10 +2521,10 @@ read_member_functions (struct field_info *fip, const char **pp,
 
 	    default:
 	      /* error */
-	      complaint (&symfile_complaints,
-			 _("member function type missing, got '%c'"),
+	      complaint (_("member function type missing, got '%c'"),
 			 (*pp)[-1]);
-	      /* Fall through into normal member function.  */
+	      /* Normal member function.  */
+	      /* Fall through.  */
 
 	    case '.':
 	      /* normal member function.  */
@@ -2731,11 +2723,8 @@ read_member_functions (struct field_info *fip, const char **pp,
 	      xfree (main_fn_name);
 	    }
 
-	  new_fnlist->fn_fieldlist.fn_fields = (struct fn_field *)
-	    obstack_alloc (&objfile->objfile_obstack,
-			   sizeof (struct fn_field) * length);
-	  memset (new_fnlist->fn_fieldlist.fn_fields, 0,
-		  sizeof (struct fn_field) * length);
+	  new_fnlist->fn_fieldlist.fn_fields
+	    = OBSTACK_CALLOC (&objfile->objfile_obstack, length, fn_field);
 	  for (i = length; (i--, sublist); sublist = sublist->next)
 	    {
 	      new_fnlist->fn_fieldlist.fn_fields[i] = sublist->fn_field;
@@ -2793,7 +2782,7 @@ read_cpp_abbrev (struct field_info *fip, const char **pp, struct type *type,
       switch (cpp_abbrev)
 	{
 	case 'f':		/* $vf -- a virtual function table pointer */
-	  name = type_name_no_tag (context);
+	  name = TYPE_NAME (context);
 	  if (name == NULL)
 	    {
 	      name = "";
@@ -2803,11 +2792,10 @@ read_cpp_abbrev (struct field_info *fip, const char **pp, struct type *type,
 	  break;
 
 	case 'b':		/* $vb -- a virtual bsomethingorother */
-	  name = type_name_no_tag (context);
+	  name = TYPE_NAME (context);
 	  if (name == NULL)
 	    {
-	      complaint (&symfile_complaints,
-			 _("C++ abbreviated type name "
+	      complaint (_("C++ abbreviated type name "
 			   "unknown at symtab pos %d"),
 			 symnum);
 	      name = "FOO";
@@ -3168,8 +3156,7 @@ read_baseclasses (struct field_info *fip, const char **pp, struct type *type,
 	default:
 	  /* Unknown character.  Complain and treat it as non-virtual.  */
 	  {
-	    complaint (&symfile_complaints,
-		       _("Unknown virtual character `%c' for baseclass"),
+	    complaint (_("Unknown virtual character `%c' for baseclass"),
 		       **pp);
 	  }
 	}
@@ -3186,8 +3173,7 @@ read_baseclasses (struct field_info *fip, const char **pp, struct type *type,
 	  /* Bad visibility format.  Complain and treat it as
 	     public.  */
 	  {
-	    complaint (&symfile_complaints,
-		       _("Unknown visibility `%c' for baseclass"),
+	    complaint (_("Unknown visibility `%c' for baseclass"),
 		       newobj->visibility);
 	    newobj->visibility = VISIBILITY_PUBLIC;
 	  }
@@ -3210,7 +3196,7 @@ read_baseclasses (struct field_info *fip, const char **pp, struct type *type,
          field's name.  */
 
       newobj->field.type = read_type (pp, objfile);
-      newobj->field.name = type_name_no_tag (newobj->field.type);
+      newobj->field.name = TYPE_NAME (newobj->field.type);
 
       /* Skip trailing ';' and bump count of number of fields seen.  */
       if (**pp == ';')
@@ -3295,8 +3281,7 @@ read_tilde_fields (struct field_info *fip, const char **pp, struct type *type,
 		    }
 		}
 	      /* Virtual function table field not found.  */
-	      complaint (&symfile_complaints,
-			 _("virtual function table pointer "
+	      complaint (_("virtual function table pointer "
 			   "not found when defining class `%s'"),
 			 TYPE_NAME (type));
 	      return 0;
@@ -3408,8 +3393,7 @@ attach_fields_to_type (struct field_info *fip, struct type *type,
 	default:
 	  /* Unknown visibility.  Complain and treat it as public.  */
 	  {
-	    complaint (&symfile_complaints,
-		       _("Unknown visibility `%c' for field"),
+	    complaint (_("Unknown visibility `%c' for field"),
 		       fip->list->visibility);
 	  }
 	  break;
@@ -3428,9 +3412,9 @@ complain_about_struct_wipeout (struct type *type)
   const char *name = "";
   const char *kind = "";
 
-  if (TYPE_TAG_NAME (type))
+  if (TYPE_NAME (type))
     {
-      name = TYPE_TAG_NAME (type);
+      name = TYPE_NAME (type);
       switch (TYPE_CODE (type))
         {
         case TYPE_CODE_STRUCT: kind = "struct "; break;
@@ -3439,19 +3423,13 @@ complain_about_struct_wipeout (struct type *type)
         default: kind = "";
         }
     }
-  else if (TYPE_NAME (type))
-    {
-      name = TYPE_NAME (type);
-      kind = "";
-    }
   else
     {
       name = "<unknown>";
       kind = "";
     }
 
-  complaint (&symfile_complaints,
-	     _("struct/union type gets multiply defined: %s%s"), kind, name);
+  complaint (_("struct/union type gets multiply defined: %s%s"), kind, name);
 }
 
 /* Set the length for all variants of a same main_type, which are
@@ -4252,8 +4230,7 @@ handle_true_range:
       /* Does this actually ever happen?  Is that why we are worrying
          about dealing with it rather than just calling error_type?  */
 
-      complaint (&symfile_complaints,
-		 _("base type %d of range type is not defined"), rangenums[1]);
+      complaint (_("base type %d of range type is not defined"), rangenums[1]);
 
       index_type = objfile_type (objfile)->builtin_int;
     }
@@ -4294,7 +4271,7 @@ read_args (const char **pp, int end, struct objfile *objfile, int *nargsp,
 	 have been present ";-16,(0,43)" reference instead.  This way the
 	 excessive ";" marker prematurely stops the parameters parsing.  */
 
-      complaint (&symfile_complaints, _("Invalid (empty) method arguments"));
+      complaint (_("Invalid (empty) method arguments"));
       *varargsp = 0;
     }
   else if (TYPE_CODE (types[n - 1]) != TYPE_CODE_VOID)
@@ -4336,8 +4313,7 @@ common_block_start (const char *name, struct objfile *objfile)
 {
   if (common_block_name != NULL)
     {
-      complaint (&symfile_complaints,
-		 _("Invalid symbol data: common block within common block"));
+      complaint (_("Invalid symbol data: common block within common block"));
     }
   common_block = local_symbols;
   common_block_i = local_symbols ? local_symbols->nsyms : 0;
@@ -4363,7 +4339,7 @@ common_block_end (struct objfile *objfile)
 
   if (common_block_name == NULL)
     {
-      complaint (&symfile_complaints, _("ECOMM symbol unmatched by BCOMM"));
+      complaint (_("ECOMM symbol unmatched by BCOMM"));
       return;
     }
 
@@ -4476,7 +4452,7 @@ add_undefined_type_1 (struct type *type)
 static void
 add_undefined_type (struct type *type, int typenums[2])
 {
-  if (TYPE_TAG_NAME (type) == NULL)
+  if (TYPE_NAME (type) == NULL)
     add_undefined_type_noname (type, typenums);
   else
     add_undefined_type_1 (type);
@@ -4561,11 +4537,11 @@ cleanup_undefined_types_1 (void)
 		struct pending *ppt;
 		int i;
 		/* Name of the type, without "struct" or "union".  */
-		const char *type_name = TYPE_TAG_NAME (*type);
+		const char *type_name = TYPE_NAME (*type);
 
 		if (type_name == NULL)
 		  {
-		    complaint (&symfile_complaints, _("need a type name"));
+		    complaint (_("need a type name"));
 		    break;
 		  }
 		for (ppt = file_symbols; ppt; ppt = ppt->next)
@@ -4591,8 +4567,7 @@ cleanup_undefined_types_1 (void)
 
 	default:
 	  {
-	    complaint (&symfile_complaints,
-		       _("forward-referenced types left unresolved, "
+	    complaint (_("forward-referenced types left unresolved, "
                        "type code %d."),
 		       TYPE_CODE (*type));
 	  }
@@ -4743,8 +4718,7 @@ scan_file_globals (struct objfile *objfile)
 	  if (SYMBOL_CLASS (prev) == LOC_STATIC)
 	    SYMBOL_ACLASS_INDEX (prev) = LOC_UNRESOLVED;
 	  else
-	    complaint (&symfile_complaints,
-		       _("%s: common block `%s' from "
+	    complaint (_("%s: common block `%s' from "
 			 "global_sym_chain unresolved"),
 		       objfile_name (objfile), SYMBOL_PRINT_NAME (prev));
 	}

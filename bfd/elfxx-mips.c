@@ -2903,12 +2903,6 @@ mips_elf_output_extsym (struct mips_elf_link_hash_entry *h, void *data)
 	      h->esym.asym.value =
 		mips_elf_hash_table (einfo->info)->procedure_count;
 	    }
-	  else if (strcmp (name, "_gp_disp") == 0 && ! NEWABI_P (einfo->abfd))
-	    {
-	      h->esym.asym.sc = scAbs;
-	      h->esym.asym.st = stLabel;
-	      h->esym.asym.value = elf_gp (einfo->abfd);
-	    }
 	  else
 	    h->esym.asym.sc = scUndefined;
 	}
@@ -3819,6 +3813,7 @@ count_section_dynsyms (bfd *output_bfd, struct bfd_link_info *info)
       for (p = output_bfd->sections; p ; p = p->next)
 	if ((p->flags & SEC_EXCLUDE) == 0
 	    && (p->flags & SEC_ALLOC) != 0
+	    && elf_hash_table (info)->dynamic_relocs
 	    && !(*bed->elf_backend_omit_section_dynsym) (output_bfd, info, p))
 	  ++count;
     }
@@ -10976,12 +10971,6 @@ _bfd_mips_elf_finish_dynamic_symbol (bfd *output_bfd,
       sym->st_info = ELF_ST_INFO (STB_GLOBAL, STT_SECTION);
       sym->st_value = 1;
     }
-  else if (strcmp (name, "_gp_disp") == 0 && ! NEWABI_P (output_bfd))
-    {
-      sym->st_shndx = SHN_ABS;
-      sym->st_info = ELF_ST_INFO (STB_GLOBAL, STT_SECTION);
-      sym->st_value = elf_gp (output_bfd);
-    }
   else if (SGI_COMPAT (output_bfd))
     {
       if (strcmp (name, mips_elf_dynsym_rtproc_names[0]) == 0
@@ -15653,6 +15642,10 @@ print_mips_ases (FILE *file, unsigned int mask)
     fputs ("\n\tXPA ASE", file);
   if (mask & AFL_ASE_MIPS16E2)
     fputs ("\n\tMIPS16e2 ASE", file);
+  if (mask & AFL_ASE_CRC)
+    fputs ("\n\tCRC ASE", file);
+  if (mask & AFL_ASE_GINV)
+    fputs ("\n\tGINV ASE", file);
   if (mask == 0)
     fprintf (file, "\n\t%s", _("None"));
   else if ((mask & ~AFL_ASE_MASK) != 0)

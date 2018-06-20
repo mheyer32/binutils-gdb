@@ -298,6 +298,7 @@ bfd_elf_get_str_section (bfd *abfd, unsigned int shindex)
       /* Allocate and clear an extra byte at the end, to prevent crashes
 	 in case the string table is not terminated.  */
       if (shstrtabsize + 1 <= 1
+	  || shstrtabsize > bfd_get_file_size (abfd)
 	  || bfd_seek (abfd, offset, SEEK_SET) != 0
 	  || (shstrtab = (bfd_byte *) bfd_alloc (abfd, shstrtabsize + 1)) == NULL)
 	shstrtab = NULL;
@@ -627,7 +628,8 @@ setup_group (bfd *abfd, Elf_Internal_Shdr *hdr, asection *newsect)
 	      bfd_alloc2 (abfd, num_group, sizeof (Elf_Internal_Shdr *));
 	  if (elf_tdata (abfd)->group_sect_ptr == NULL)
 	    return FALSE;
-	  memset (elf_tdata (abfd)->group_sect_ptr, 0, num_group * sizeof (Elf_Internal_Shdr *));
+	  memset (elf_tdata (abfd)->group_sect_ptr, 0,
+		  num_group * sizeof (Elf_Internal_Shdr *));
 	  num_group = 0;
 
 	  for (i = 0; i < shnum; i++)
@@ -708,13 +710,24 @@ setup_group (bfd *abfd, Elf_Internal_Shdr *hdr, asection *newsect)
 			      |= SEC_LINK_ONCE | SEC_LINK_DUPLICATES_DISCARD;
 			  break;
 			}
-		      if (idx >= shnum)
+		      if (idx < shnum)
+			{
+			  dest->shdr = elf_elfsections (abfd)[idx];
+			  /* PR binutils/23199: All sections in a
+			     section group should be marked with
+			     SHF_GROUP.  But some tools generate
+			     broken objects without SHF_GROUP.  Fix
+			     them up here.  */
+			  dest->shdr->sh_flags |= SHF_GROUP;
+			}
+		      if (idx >= shnum
+			  || dest->shdr->sh_type == SHT_GROUP)
 			{
 			  _bfd_error_handler
-			    (_("%pB: invalid SHT_GROUP entry"), abfd);
-			  idx = 0;
+			    (_("%pB: invalid entry in SHT_GROUP section [%u]"),
+			       abfd, i);
+			  dest->shdr = NULL;
 			}
-		      dest->shdr = elf_elfsections (abfd)[idx];
 		    }
 		}
 	    }
@@ -780,7 +793,8 @@ setup_group (bfd *abfd, Elf_Internal_Shdr *hdr, asection *newsect)
 		idx = (Elf_Internal_Group *) shdr->contents;
 		n_elt = shdr->sh_size / 4;
 		while (--n_elt != 0)
-		  if ((s = (++idx)->shdr->bfd_section) != NULL
+		  if ((++idx)->shdr != NULL
+		      && (s = idx->shdr->bfd_section) != NULL
 		      && elf_next_in_group (s) != NULL)
 		    break;
 		if (n_elt != 0)
@@ -1851,7 +1865,10 @@ _bfd_elf_get_symbol_version_string (bfd *abfd, asymbol *symbol,
 
       if (vernum == 0)
 	version_string = "";
-      else if (vernum == 1)
+      else if (vernum == 1
+	       && (vernum > elf_tdata (abfd)->cverdefs
+		   || (elf_tdata (abfd)->verdef[0].vd_flags
+		       == VER_FLG_BASE)))
 	version_string = "Base";
       else if (vernum <= elf_tdata (abfd)->cverdefs)
 	version_string =
@@ -4022,15 +4039,22 @@ ignore_section_sym (bfd *abfd, asymbol *sym)
 {
   elf_symbol_type *type_ptr;
 
+  if (sym == NULL)
+    return FALSE;
+
   if ((sym->flags & BSF_SECTION_SYM) == 0)
     return FALSE;
+
+  if (sym->section == NULL)
+    return TRUE;
 
   type_ptr = elf_symbol_from (abfd, sym);
   return ((type_ptr != NULL
 	   && type_ptr->internal_elf_sym.st_shndx != 0
 	   && bfd_is_abs_section (sym->section))
 	  || !(sym->section->owner == abfd
-	       || (sym->section->output_section->owner == abfd
+	       || (sym->section->output_section != NULL
+		   && sym->section->output_section->owner == abfd
 		   && sym->section->output_offset == 0)
 	       || bfd_is_abs_section (sym->section)));
 }
@@ -6633,7 +6657,7 @@ rewrite_elf_program_header (bfd *ibfd, bfd *obfd)
 	   : segment->p_vaddr != section->vma)				\
        || (strcmp (bfd_get_section_name (ibfd, section), ".dynamic")	\
 	   == 0))							\
-   && !section->segment_mark)
+   && (segment->p_type != PT_LOAD || !section->segment_mark))
 
 /* If the output section of a section in the input segment is NULL,
    it is removed from the corresponding output segment.   */
@@ -6761,13 +6785,11 @@ rewrite_elf_program_header (bfd *ibfd, bfd *obfd)
       asection **sections;
       asection *output_section;
       unsigned int isec;
-      bfd_vma matching_lma;
-      bfd_vma suggested_lma;
+      asection *matching_lma;
+      asection *suggested_lma;
       unsigned int j;
       bfd_size_type amt;
       asection *first_section;
-      bfd_boolean first_matching_lma;
-      bfd_boolean first_suggested_lma;
 
       if (segment->p_type == PT_NULL)
 	continue;
@@ -6894,10 +6916,8 @@ rewrite_elf_program_header (bfd *ibfd, bfd *obfd)
 	 we have completely filled the segment, and there is nothing
 	 more to do.  */
       isec = 0;
-      matching_lma = 0;
-      suggested_lma = 0;
-      first_matching_lma = TRUE;
-      first_suggested_lma = TRUE;
+      matching_lma = NULL;
+      suggested_lma = NULL;
 
       for (section = first_section, j = 0;
 	   section != NULL;
@@ -6918,14 +6938,14 @@ rewrite_elf_program_header (bfd *ibfd, bfd *obfd)
 		  && !bed->want_p_paddr_set_to_zero
 		  && isec == 0
 		  && output_section->lma != 0
-		  && output_section->vma == (segment->p_vaddr
-					     + (map->includes_filehdr
-						? iehdr->e_ehsize
-						: 0)
-					     + (map->includes_phdrs
-						? (iehdr->e_phnum
-						   * iehdr->e_phentsize)
-						: 0)))
+		  && (align_power (segment->p_vaddr
+				   + (map->includes_filehdr
+				      ? iehdr->e_ehsize : 0)
+				   + (map->includes_phdrs
+				      ? iehdr->e_phnum * iehdr->e_phentsize
+				      : 0),
+				   output_section->alignment_power)
+		      == output_section->vma))
 		map->p_paddr = segment->p_vaddr;
 
 	      /* Match up the physical address of the segment with the
@@ -6935,22 +6955,17 @@ rewrite_elf_program_header (bfd *ibfd, bfd *obfd)
 		  || (bed->want_p_paddr_set_to_zero
 		      && IS_CONTAINED_BY_VMA (output_section, segment)))
 		{
-		  if (first_matching_lma || output_section->lma < matching_lma)
-		    {
-		      matching_lma = output_section->lma;
-		      first_matching_lma = FALSE;
-		    }
+		  if (matching_lma == NULL
+		      || output_section->lma < matching_lma->lma)
+		    matching_lma = output_section;
 
 		  /* We assume that if the section fits within the segment
 		     then it does not overlap any other section within that
 		     segment.  */
 		  map->sections[isec++] = output_section;
 		}
-	      else if (first_suggested_lma)
-		{
-		  suggested_lma = output_section->lma;
-		  first_suggested_lma = FALSE;
-		}
+	      else if (suggested_lma == NULL)
+		suggested_lma = output_section;
 
 	      if (j == section_count)
 		break;
@@ -6973,63 +6988,54 @@ rewrite_elf_program_header (bfd *ibfd, bfd *obfd)
 
 	  if (p_paddr_valid
 	      && !bed->want_p_paddr_set_to_zero
-	      && matching_lma != map->p_paddr
+	      && matching_lma->lma != map->p_paddr
 	      && !map->includes_filehdr
 	      && !map->includes_phdrs)
 	    /* There is some padding before the first section in the
 	       segment.  So, we must account for that in the output
 	       segment's vma.  */
-	    map->p_vaddr_offset = matching_lma - map->p_paddr;
+	    map->p_vaddr_offset = matching_lma->lma - map->p_paddr;
 
 	  free (sections);
 	  continue;
 	}
       else
 	{
-	  if (!first_matching_lma)
-	    {
-	      /* At least one section fits inside the current segment.
-		 Keep it, but modify its physical address to match the
-		 LMA of the first section that fitted.  */
-	      map->p_paddr = matching_lma;
-	    }
-	  else
-	    {
-	      /* None of the sections fitted inside the current segment.
-		 Change the current segment's physical address to match
-		 the LMA of the first section.  */
-	      map->p_paddr = suggested_lma;
-	    }
+	  /* Change the current segment's physical address to match
+	     the LMA of the first section that fitted, or if no
+	     section fitted, the first section.  */
+	  if (matching_lma == NULL)
+	    matching_lma = suggested_lma;
+
+	  map->p_paddr = matching_lma->lma;
 
 	  /* Offset the segment physical address from the lma
 	     to allow for space taken up by elf headers.  */
-	  if (map->includes_filehdr)
-	    {
-	      if (map->p_paddr >= iehdr->e_ehsize)
-		map->p_paddr -= iehdr->e_ehsize;
-	      else
-		{
-		  map->includes_filehdr = FALSE;
-		  map->includes_phdrs = FALSE;
-		}
-	    }
-
 	  if (map->includes_phdrs)
 	    {
-	      if (map->p_paddr >= iehdr->e_phnum * iehdr->e_phentsize)
-		{
-		  map->p_paddr -= iehdr->e_phnum * iehdr->e_phentsize;
+	      map->p_paddr -= iehdr->e_phnum * iehdr->e_phentsize;
 
-		  /* iehdr->e_phnum is just an estimate of the number
-		     of program headers that we will need.  Make a note
-		     here of the number we used and the segment we chose
-		     to hold these headers, so that we can adjust the
-		     offset when we know the correct value.  */
-		  phdr_adjust_num = iehdr->e_phnum;
-		  phdr_adjust_seg = map;
-		}
-	      else
-		map->includes_phdrs = FALSE;
+	      /* iehdr->e_phnum is just an estimate of the number
+		 of program headers that we will need.  Make a note
+		 here of the number we used and the segment we chose
+		 to hold these headers, so that we can adjust the
+		 offset when we know the correct value.  */
+	      phdr_adjust_num = iehdr->e_phnum;
+	      phdr_adjust_seg = map;
+	    }
+
+	  if (map->includes_filehdr)
+	    {
+	      bfd_vma align = (bfd_vma) 1 << matching_lma->alignment_power;
+	      map->p_paddr -= iehdr->e_ehsize;
+	      /* We've subtracted off the size of headers from the
+		 first section lma, but there may have been some
+		 alignment padding before that section too.  Try to
+		 account for that by adjusting the segment lma down to
+		 the same alignment.  */
+	      if (segment->p_align != 0 && segment->p_align < align)
+		align = segment->p_align;
+	      map->p_paddr &= -align;
 	    }
 	}
 
@@ -7044,8 +7050,7 @@ rewrite_elf_program_header (bfd *ibfd, bfd *obfd)
       do
 	{
 	  map->count = 0;
-	  suggested_lma = 0;
-	  first_suggested_lma = TRUE;
+	  suggested_lma = NULL;
 
 	  /* Fill the current segment with sections that fit.  */
 	  for (j = 0; j < section_count; j++)
@@ -7067,12 +7072,14 @@ rewrite_elf_program_header (bfd *ibfd, bfd *obfd)
 		      /* If the first section in a segment does not start at
 			 the beginning of the segment, then something is
 			 wrong.  */
-		      if (output_section->lma
-			  != (map->p_paddr
-			      + (map->includes_filehdr ? iehdr->e_ehsize : 0)
-			      + (map->includes_phdrs
-				 ? iehdr->e_phnum * iehdr->e_phentsize
-				 : 0)))
+		      if (align_power (map->p_paddr
+				       + (map->includes_filehdr
+					  ? iehdr->e_ehsize : 0)
+				       + (map->includes_phdrs
+					  ? iehdr->e_phnum * iehdr->e_phentsize
+					  : 0),
+				       output_section->alignment_power)
+			  != output_section->lma)
 			abort ();
 		    }
 		  else
@@ -7090,11 +7097,8 @@ rewrite_elf_program_header (bfd *ibfd, bfd *obfd)
 			  || (prev_sec->lma + prev_sec->size
 			      > output_section->lma))
 			{
-			  if (first_suggested_lma)
-			    {
-			      suggested_lma = output_section->lma;
-			      first_suggested_lma = FALSE;
-			    }
+			  if (suggested_lma == NULL)
+			    suggested_lma = output_section;
 
 			  continue;
 			}
@@ -7103,13 +7107,11 @@ rewrite_elf_program_header (bfd *ibfd, bfd *obfd)
 		  map->sections[map->count++] = output_section;
 		  ++isec;
 		  sections[j] = NULL;
-		  section->segment_mark = TRUE;
+		  if (segment->p_type == PT_LOAD)
+		    section->segment_mark = TRUE;
 		}
-	      else if (first_suggested_lma)
-		{
-		  suggested_lma = output_section->lma;
-		  first_suggested_lma = FALSE;
-		}
+	      else if (suggested_lma == NULL)
+		suggested_lma = output_section;
 	    }
 
 	  BFD_ASSERT (map->count > 0);
@@ -7139,7 +7141,7 @@ rewrite_elf_program_header (bfd *ibfd, bfd *obfd)
 	      map->p_type = segment->p_type;
 	      map->p_flags = segment->p_flags;
 	      map->p_flags_valid = 1;
-	      map->p_paddr = suggested_lma;
+	      map->p_paddr = suggested_lma->lma;
 	      map->p_paddr_valid = p_paddr_valid;
 	      map->includes_filehdr = 0;
 	      map->includes_phdrs = 0;
@@ -7165,6 +7167,15 @@ rewrite_elf_program_header (bfd *ibfd, bfd *obfd)
       if (count > phdr_adjust_num)
 	phdr_adjust_seg->p_paddr
 	  -= (count - phdr_adjust_num) * iehdr->e_phentsize;
+
+      for (map = map_first; map != NULL; map = map->next)
+	if (map->p_type == PT_PHDR)
+	  {
+	    bfd_vma adjust
+	      = phdr_adjust_seg->includes_filehdr ? iehdr->e_ehsize : 0;
+	    map->p_paddr = phdr_adjust_seg->p_paddr + adjust;
+	    break;
+	  }
     }
 
 #undef SEGMENT_END
@@ -10501,6 +10512,23 @@ elfcore_write_note (bfd *abfd,
   return buf;
 }
 
+/* gcc-8 warns (*) on all the strncpy calls in this function about
+   possible string truncation.  The "truncation" is not a bug.  We
+   have an external representation of structs with fields that are not
+   necessarily NULL terminated and corresponding internal
+   representation fields that are one larger so that they can always
+   be NULL terminated.
+   gcc versions between 4.2 and 4.6 do not allow pragma control of
+   diagnostics inside functions, giving a hard error if you try to use
+   the finer control available with later versions.
+   gcc prior to 4.2 warns about diagnostic push and pop.
+   gcc-5, gcc-6 and gcc-7 warn that -Wstringop-truncation is unknown,
+   unless you also add #pragma GCC diagnostic ignored "-Wpragma".
+   (*) Depending on your system header files!  */
+#if GCC_VERSION >= 8000
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wstringop-truncation"
+#endif
 char *
 elfcore_write_prpsinfo (bfd  *abfd,
 			char *buf,
@@ -10520,16 +10548,16 @@ elfcore_write_prpsinfo (bfd  *abfd,
     }
 
 #if defined (HAVE_PRPSINFO_T) || defined (HAVE_PSINFO_T)
-#if defined (HAVE_PRPSINFO32_T) || defined (HAVE_PSINFO32_T)
+# if defined (HAVE_PRPSINFO32_T) || defined (HAVE_PSINFO32_T)
   if (bed->s->elfclass == ELFCLASS32)
     {
-#if defined (HAVE_PSINFO32_T)
+#  if defined (HAVE_PSINFO32_T)
       psinfo32_t data;
       int note_type = NT_PSINFO;
-#else
+#  else
       prpsinfo32_t data;
       int note_type = NT_PRPSINFO;
-#endif
+#  endif
 
       memset (&data, 0, sizeof (data));
       strncpy (data.pr_fname, fname, sizeof (data.pr_fname));
@@ -10538,15 +10566,15 @@ elfcore_write_prpsinfo (bfd  *abfd,
 				 "CORE", note_type, &data, sizeof (data));
     }
   else
-#endif
+# endif
     {
-#if defined (HAVE_PSINFO_T)
+# if defined (HAVE_PSINFO_T)
       psinfo_t data;
       int note_type = NT_PSINFO;
-#else
+# else
       prpsinfo_t data;
       int note_type = NT_PRPSINFO;
-#endif
+# endif
 
       memset (&data, 0, sizeof (data));
       strncpy (data.pr_fname, fname, sizeof (data.pr_fname));
@@ -10559,6 +10587,9 @@ elfcore_write_prpsinfo (bfd  *abfd,
   free (buf);
   return NULL;
 }
+#if GCC_VERSION >= 8000
+# pragma GCC diagnostic pop
+#endif
 
 char *
 elfcore_write_linux_prpsinfo32

@@ -43,14 +43,23 @@
 #include "amd64-darwin-tdep.h"
 #endif
 
+struct i386_darwin_nat_target final : public x86_nat_target<darwin_nat_target>
+{
+  /* Add our register access methods.  */
+  void fetch_registers (struct regcache *, int) override;
+  void store_registers (struct regcache *, int) override;
+};
+
+static struct i386_darwin_nat_target darwin_target;
+
 /* Read register values from the inferior process.
    If REGNO is -1, do this for all registers.
    Otherwise, REGNO specifies which register (so we can save time).  */
-static void
-i386_darwin_fetch_inferior_registers (struct target_ops *ops,
-				      struct regcache *regcache, int regno)
+
+void
+i386_darwin_nat_target::fetch_registers (struct regcache *regcache, int regno)
 {
-  thread_t current_thread = ptid_get_tid (regcache_get_ptid (regcache));
+  thread_t current_thread = ptid_get_tid (regcache->ptid ());
   int fetched = 0;
   struct gdbarch *gdbarch = regcache->arch ();
 
@@ -123,9 +132,8 @@ i386_darwin_fetch_inferior_registers (struct target_ops *ops,
 	      MACH_CHECK_ERROR (ret);
 	    }
 	  for (i = 0; i < I386_NUM_GREGS; i++)
-	    regcache_raw_supply
-	      (regcache, i,
-	       (char *)&gp_regs + i386_darwin_thread_state_reg_offset[i]);
+	    regcache->raw_supply
+	      (i, (char *) &gp_regs + i386_darwin_thread_state_reg_offset[i]);
 
           fetched++;
         }
@@ -155,7 +163,7 @@ i386_darwin_fetch_inferior_registers (struct target_ops *ops,
   if (! fetched)
     {
       warning (_("unknown register %d"), regno);
-      regcache_raw_supply (regcache, regno, NULL);
+      regcache->raw_supply (regno, NULL);
     }
 }
 
@@ -163,11 +171,11 @@ i386_darwin_fetch_inferior_registers (struct target_ops *ops,
    If REGNO is -1, do this for all registers.
    Otherwise, REGNO specifies which register (so we can save time).  */
 
-static void
-i386_darwin_store_inferior_registers (struct target_ops *ops,
-				      struct regcache *regcache, int regno)
+void
+i386_darwin_nat_target::store_registers (struct regcache *regcache,
+					 int regno)
 {
-  thread_t current_thread = ptid_get_tid (regcache_get_ptid (regcache));
+  thread_t current_thread = ptid_get_tid (regcache->ptid ());
   struct gdbarch *gdbarch = regcache->arch ();
 
 #ifdef BFD64
@@ -236,9 +244,8 @@ i386_darwin_store_inferior_registers (struct target_ops *ops,
 
 	  for (i = 0; i < I386_NUM_GREGS; i++)
 	    if (regno == -1 || regno == i)
-	      regcache_raw_collect
-		(regcache, i,
-		 (char *)&gp_regs + i386_darwin_thread_state_reg_offset[i]);
+	      regcache->raw_collect
+		(i, (char *) &gp_regs + i386_darwin_thread_state_reg_offset[i]);
 
           ret = thread_set_state (current_thread, x86_THREAD_STATE32,
                                   (thread_state_t) &gp_regs,
@@ -628,7 +635,7 @@ darwin_set_sstep (thread_t thread, int enable)
 }
 
 void
-darwin_complete_target (struct target_ops *target)
+_initialize_i386_darwin_nat (void)
 {
 #ifdef BFD64
   amd64_native_gregset64_reg_offset = amd64_darwin_thread_state_reg_offset;
@@ -636,8 +643,6 @@ darwin_complete_target (struct target_ops *target)
   amd64_native_gregset32_reg_offset = i386_darwin_thread_state_reg_offset;
   amd64_native_gregset32_num_regs = i386_darwin_thread_state_num_regs;
 #endif
-
-  x86_use_watchpoints (target);
 
   x86_dr_low.set_control = i386_darwin_dr_set_control;
   x86_dr_low.set_addr = i386_darwin_dr_set_addr;
@@ -652,6 +657,5 @@ darwin_complete_target (struct target_ops *target)
   x86_set_debug_register_length (4);
 #endif
 
-  target->to_fetch_registers = i386_darwin_fetch_inferior_registers;
-  target->to_store_registers = i386_darwin_store_inferior_registers;
+  add_inf_child_target (&darwin_target);
 }

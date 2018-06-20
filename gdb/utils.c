@@ -141,36 +141,6 @@ show_pagination_enabled (struct ui_file *file, int from_tty,
    because while they use the "cleanup API" they are not part of the
    "cleanup API".  */
 
-static void
-do_free_section_addr_info (void *arg)
-{
-  free_section_addr_info ((struct section_addr_info *) arg);
-}
-
-struct cleanup *
-make_cleanup_free_section_addr_info (struct section_addr_info *addrs)
-{
-  return make_cleanup (do_free_section_addr_info, addrs);
-}
-
-/* Helper for make_cleanup_unpush_target.  */
-
-static void
-do_unpush_target (void *arg)
-{
-  struct target_ops *ops = (struct target_ops *) arg;
-
-  unpush_target (ops);
-}
-
-/* Return a new cleanup that unpushes OPS.  */
-
-struct cleanup *
-make_cleanup_unpush_target (struct target_ops *ops)
-{
-  return make_cleanup (do_unpush_target, ops);
-}
-
 /* Helper for make_cleanup_value_free_to_mark.  */
 
 static void
@@ -305,6 +275,7 @@ can_dump_core (enum resource_limit_kind limit_kind)
     case LIMIT_CUR:
       if (rlim.rlim_cur == 0)
 	return 0;
+      /* Fall through.  */
 
     case LIMIT_MAX:
       if (rlim.rlim_max == 0)
@@ -1200,9 +1171,7 @@ parse_escape (struct gdbarch *gdbarch, const char **string_ptr)
    character. */
 
 static void
-printchar (int c, void (*do_fputs) (const char *, struct ui_file *),
-	   void (*do_fprintf) (struct ui_file *, const char *, ...)
-	   ATTRIBUTE_FPTR_PRINTF_2, struct ui_file *stream, int quoter)
+printchar (int c, do_fputc_ftype do_fputc, ui_file *stream, int quoter)
 {
   c &= 0xFF;			/* Avoid sign bit follies */
 
@@ -1210,39 +1179,45 @@ printchar (int c, void (*do_fputs) (const char *, struct ui_file *),
       (c >= 0x7F && c < 0xA0) ||	/* DEL, High controls */
       (sevenbit_strings && c >= 0x80))
     {				/* high order bit set */
+      do_fputc ('\\', stream);
+
       switch (c)
 	{
 	case '\n':
-	  do_fputs ("\\n", stream);
+	  do_fputc ('n', stream);
 	  break;
 	case '\b':
-	  do_fputs ("\\b", stream);
+	  do_fputc ('b', stream);
 	  break;
 	case '\t':
-	  do_fputs ("\\t", stream);
+	  do_fputc ('t', stream);
 	  break;
 	case '\f':
-	  do_fputs ("\\f", stream);
+	  do_fputc ('f', stream);
 	  break;
 	case '\r':
-	  do_fputs ("\\r", stream);
+	  do_fputc ('r', stream);
 	  break;
 	case '\033':
-	  do_fputs ("\\e", stream);
+	  do_fputc ('e', stream);
 	  break;
 	case '\007':
-	  do_fputs ("\\a", stream);
+	  do_fputc ('a', stream);
 	  break;
 	default:
-	  do_fprintf (stream, "\\%.3o", (unsigned int) c);
-	  break;
+	  {
+	    do_fputc ('0' + ((c >> 6) & 0x7), stream);
+	    do_fputc ('0' + ((c >> 3) & 0x7), stream);
+	    do_fputc ('0' + ((c >> 0) & 0x7), stream);
+	    break;
+	  }
 	}
     }
   else
     {
       if (quoter != 0 && (c == '\\' || c == quoter))
-	do_fputs ("\\", stream);
-      do_fprintf (stream, "%c", c);
+	do_fputc ('\\', stream);
+      do_fputc (c, stream);
     }
 }
 
@@ -1255,34 +1230,30 @@ void
 fputstr_filtered (const char *str, int quoter, struct ui_file *stream)
 {
   while (*str)
-    printchar (*str++, fputs_filtered, fprintf_filtered, stream, quoter);
+    printchar (*str++, fputc_filtered, stream, quoter);
 }
 
 void
 fputstr_unfiltered (const char *str, int quoter, struct ui_file *stream)
 {
   while (*str)
-    printchar (*str++, fputs_unfiltered, fprintf_unfiltered, stream, quoter);
+    printchar (*str++, fputc_unfiltered, stream, quoter);
 }
 
 void
 fputstrn_filtered (const char *str, int n, int quoter,
 		   struct ui_file *stream)
 {
-  int i;
-
-  for (i = 0; i < n; i++)
-    printchar (str[i], fputs_filtered, fprintf_filtered, stream, quoter);
+  for (int i = 0; i < n; i++)
+    printchar (str[i], fputc_filtered, stream, quoter);
 }
 
 void
 fputstrn_unfiltered (const char *str, int n, int quoter,
-		     struct ui_file *stream)
+		     do_fputc_ftype do_fputc, struct ui_file *stream)
 {
-  int i;
-
-  for (i = 0; i < n; i++)
-    printchar (str[i], fputs_unfiltered, fprintf_unfiltered, stream, quoter);
+  for (int i = 0; i < n; i++)
+    printchar (str[i], do_fputc, stream, quoter);
 }
 
 
@@ -1311,6 +1282,10 @@ show_chars_per_line (struct ui_file *file, int from_tty,
 
 /* Current count of lines printed on this page, chars on this line.  */
 static unsigned int lines_printed, chars_printed;
+
+/* True if pagination is disabled for just one command.  */
+
+static bool pagination_disabled_for_command;
 
 /* Buffer and start column of buffered text, for doing smarter word-
    wrapping.  When someone calls wrap_here(), we start buffering output
@@ -1491,19 +1466,19 @@ set_screen_width_and_height (int width, int height)
 static void
 prompt_for_continue (void)
 {
-  char *ignore;
   char cont_prompt[120];
-  struct cleanup *old_chain = make_cleanup (null_cleanup, NULL);
   /* Used to add duration we waited for user to respond to
      prompt_for_continue_wait_time.  */
   using namespace std::chrono;
   steady_clock::time_point prompt_started = steady_clock::now ();
+  bool disable_pagination = pagination_disabled_for_command;
 
   if (annotation_level > 1)
     printf_unfiltered (("\n\032\032pre-prompt-for-continue\n"));
 
   strcpy (cont_prompt,
-	  "---Type <return> to continue, or q <return> to quit---");
+	  "--Type <RET> for more, q to quit, "
+	  "c to continue without paging--");
   if (annotation_level > 1)
     strcat (cont_prompt, "\n\032\032prompt-for-continue\n");
 
@@ -1516,8 +1491,7 @@ prompt_for_continue (void)
 
   /* Call gdb_readline_wrapper, not readline, in order to keep an
      event loop running.  */
-  ignore = gdb_readline_wrapper (cont_prompt);
-  make_cleanup (xfree, ignore);
+  gdb::unique_xmalloc_ptr<char> ignore (gdb_readline_wrapper (cont_prompt));
 
   /* Add time spend in this routine to prompt_for_continue_wait_time.  */
   prompt_for_continue_wait_time += steady_clock::now () - prompt_started;
@@ -1527,22 +1501,23 @@ prompt_for_continue (void)
 
   if (ignore != NULL)
     {
-      char *p = ignore;
+      char *p = ignore.get ();
 
       while (*p == ' ' || *p == '\t')
 	++p;
       if (p[0] == 'q')
 	/* Do not call quit here; there is no possibility of SIGINT.  */
 	throw_quit ("Quit");
+      if (p[0] == 'c')
+	disable_pagination = true;
     }
 
   /* Now we have to do this again, so that GDB will know that it doesn't
      need to save the ---Type <return>--- line at the top of the screen.  */
   reinitialize_more_filter ();
+  pagination_disabled_for_command = disable_pagination;
 
   dont_repeat ();		/* Forget prev cmd -- CR won't repeat it.  */
-
-  do_cleanups (old_chain);
 }
 
 /* Initialize timer to keep track of how long we waited for the user.  */
@@ -1570,6 +1545,7 @@ reinitialize_more_filter (void)
 {
   lines_printed = 0;
   chars_printed = 0;
+  pagination_disabled_for_command = false;
 }
 
 /* Indicate that if the next sequence of characters overflows the line,
@@ -1714,10 +1690,11 @@ fputs_maybe_filtered (const char *linebuffer, struct ui_file *stream,
   /* Don't do any filtering if it is disabled.  */
   if (stream != gdb_stdout
       || !pagination_enabled
+      || pagination_disabled_for_command
       || batch_flag
       || (lines_per_page == UINT_MAX && chars_per_line == UINT_MAX)
       || top_level_interpreter () == NULL
-      || interp_ui_out (top_level_interpreter ())->is_mi_like_p ())
+      || top_level_interpreter ()->interp_ui_out ()->is_mi_like_p ())
     {
       fputs_unfiltered (linebuffer, stream);
       return;
@@ -1730,8 +1707,11 @@ fputs_maybe_filtered (const char *linebuffer, struct ui_file *stream,
   lineptr = linebuffer;
   while (*lineptr)
     {
-      /* Possible new page.  */
-      if (filter && (lines_printed >= lines_per_page - 1))
+      /* Possible new page.  Note that PAGINATION_DISABLED_FOR_COMMAND
+	 might be set during this loop, so we must continue to check
+	 it here.  */
+      if (filter && (lines_printed >= lines_per_page - 1)
+	  && !pagination_disabled_for_command)
 	prompt_for_continue ();
 
       while (*lineptr && *lineptr != '\n')
@@ -1771,8 +1751,11 @@ fputs_maybe_filtered (const char *linebuffer, struct ui_file *stream,
 	      if (wrap_column)
 		fputc_unfiltered ('\n', stream);
 
-	      /* Possible new page.  */
-	      if (lines_printed >= lines_per_page - 1)
+	      /* Possible new page.  Note that
+		 PAGINATION_DISABLED_FOR_COMMAND might be set during
+		 this loop, so we must continue to check it here.  */
+	      if (lines_printed >= lines_per_page - 1
+		  && !pagination_disabled_for_command)
 		prompt_for_continue ();
 
 	      /* Now output indentation and wrapped string.  */
@@ -2636,13 +2619,22 @@ strcmp_iw_ordered (const char *string1, const char *string2)
     }
 }
 
-/* A simple comparison function with opposite semantics to strcmp.  */
+/* See utils.h.  */
 
-int
+bool
 streq (const char *lhs, const char *rhs)
 {
   return !strcmp (lhs, rhs);
 }
+
+/* See utils.h.  */
+
+int
+streq_hash (const void *lhs, const void *rhs)
+{
+  return streq ((const char *) lhs, (const char *) rhs);
+}
+
 
 
 /*
@@ -2730,14 +2722,19 @@ When set, debugging messages will be marked with seconds and microseconds."),
 CORE_ADDR
 address_significant (gdbarch *gdbarch, CORE_ADDR addr)
 {
-  /* Truncate address to the significant bits of a target address,
-     avoiding shifts larger or equal than the width of a CORE_ADDR.
-     The local variable ADDR_BIT stops the compiler reporting a shift
-     overflow when it won't occur.  */
+  /* Clear insignificant bits of a target address and sign extend resulting
+     address, avoiding shifts larger or equal than the width of a CORE_ADDR.
+     The local variable ADDR_BIT stops the compiler reporting a shift overflow
+     when it won't occur.  Skip updating of target address if current target
+     has not set gdbarch significant_addr_bit.  */
   int addr_bit = gdbarch_significant_addr_bit (gdbarch);
 
-  if (addr_bit < (sizeof (CORE_ADDR) * HOST_CHAR_BIT))
-    addr &= ((CORE_ADDR) 1 << addr_bit) - 1;
+  if (addr_bit && (addr_bit < (sizeof (CORE_ADDR) * HOST_CHAR_BIT)))
+    {
+      CORE_ADDR sign = (CORE_ADDR) 1 << (addr_bit - 1);
+      addr &= ((CORE_ADDR) 1 << addr_bit) - 1;
+      addr = (addr ^ sign) - sign;
+    }
 
   return addr;
 }
@@ -2875,22 +2872,6 @@ gdb_realpath_tests ()
 
 #endif /* GDB_SELF_TEST */
 
-ULONGEST
-align_up (ULONGEST v, int n)
-{
-  /* Check that N is really a power of two.  */
-  gdb_assert (n && (n & (n-1)) == 0);
-  return (v + n - 1) & -n;
-}
-
-ULONGEST
-align_down (ULONGEST v, int n)
-{
-  /* Check that N is really a power of two.  */
-  gdb_assert (n && (n & (n-1)) == 0);
-  return (v & -n);
-}
-
 /* Allocation function for the libiberty hash table which uses an
    obstack.  The obstack is passed as DATA.  */
 
@@ -2961,17 +2942,6 @@ compare_positive_ints (const void *ap, const void *bp)
   /* Because we know we're comparing two ints which are positive,
      there's no danger of overflow here.  */
   return * (int *) ap - * (int *) bp;
-}
-
-/* String compare function for qsort.  */
-
-int
-compare_strings (const void *arg1, const void *arg2)
-{
-  const char **s1 = (const char **) arg1;
-  const char **s2 = (const char **) arg2;
-
-  return strcmp (*s1, *s2);
 }
 
 #define AMBIGUOUS_MESS1	".\nMatching formats:"

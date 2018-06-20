@@ -262,4 +262,13 @@ extern int default_print_insn (bfd_vma memaddr, disassemble_info *info);
 extern CORE_ADDR gdbarch_skip_prologue_noexcept (gdbarch *gdbarch,
 						 CORE_ADDR pc) noexcept;
 
+/* Default implementation of gdbarch_in_indirect_branch_thunk that returns
+   false.  */
+extern bool default_in_indirect_branch_thunk (gdbarch *gdbarch,
+					      CORE_ADDR pc);
+
+/* Default implementation of gdbarch type_align method.  */
+extern ULONGEST default_type_align (struct gdbarch *gdbarch,
+				    struct type *type);
+
 #endif

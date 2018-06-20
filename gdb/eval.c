@@ -179,14 +179,14 @@ evaluate_subexpression_type (struct expression *exp, int subexp)
    set to any referenced values.  *VALP will never be a lazy value.
    This is the value which we store in struct breakpoint.
 
-   If VAL_CHAIN is non-NULL, *VAL_CHAIN will be released from the
-   value chain.  The caller must free the values individually.  If
-   VAL_CHAIN is NULL, all generated values will be left on the value
-   chain.  */
+   If VAL_CHAIN is non-NULL, the values put into *VAL_CHAIN will be
+   released from the value chain.  If VAL_CHAIN is NULL, all generated
+   values will be left on the value chain.  */
 
 void
 fetch_subexp_value (struct expression *exp, int *pc, struct value **valp,
-		    struct value **resultp, struct value **val_chain,
+		    struct value **resultp,
+		    std::vector<value_ref_ptr> *val_chain,
 		    int preserve_errors)
 {
   struct value *mark, *new_mark, *result;
@@ -195,7 +195,7 @@ fetch_subexp_value (struct expression *exp, int *pc, struct value **valp,
   if (resultp)
     *resultp = NULL;
   if (val_chain)
-    *val_chain = NULL;
+    val_chain->clear ();
 
   /* Evaluate the expression.  */
   mark = value_mark ();
@@ -215,6 +215,7 @@ fetch_subexp_value (struct expression *exp, int *pc, struct value **valp,
 	case MEMORY_ERROR:
 	  if (!preserve_errors)
 	    break;
+	  /* Fall through.  */
 	default:
 	  throw_exception (ex);
 	  break;
@@ -253,8 +254,7 @@ fetch_subexp_value (struct expression *exp, int *pc, struct value **valp,
     {
       /* Return the chain of intermediate values.  We use this to
 	 decide which addresses to watch.  */
-      *val_chain = new_mark;
-      value_release_to_mark (mark);
+      *val_chain = value_release_to_mark (mark);
     }
 }
 
@@ -735,17 +735,13 @@ value *
 evaluate_var_msym_value (enum noside noside,
 			 struct objfile *objfile, minimal_symbol *msymbol)
 {
-  if (noside == EVAL_AVOID_SIDE_EFFECTS)
-    {
-      type *the_type = find_minsym_type_and_address (msymbol, objfile, NULL);
-      return value_zero (the_type, not_lval);
-    }
+  CORE_ADDR address;
+  type *the_type = find_minsym_type_and_address (msymbol, objfile, &address);
+
+  if (noside == EVAL_AVOID_SIDE_EFFECTS && !TYPE_GNU_IFUNC (the_type))
+    return value_zero (the_type, not_lval);
   else
-    {
-      CORE_ADDR address;
-      type *the_type = find_minsym_type_and_address (msymbol, objfile, &address);
-      return value_at_lazy (the_type, address);
-    }
+    return value_at_lazy (the_type, address);
 }
 
 /* Helper for returning a value when handling EVAL_SKIP.  */
@@ -798,6 +794,15 @@ eval_call (expression *exp, enum noside noside,
       else if (TYPE_CODE (ftype) == TYPE_CODE_FUNC
 	       || TYPE_CODE (ftype) == TYPE_CODE_METHOD)
 	{
+	  if (TYPE_GNU_IFUNC (ftype))
+	    {
+	      CORE_ADDR address = value_address (argvec[0]);
+	      type *resolved_type = find_gnu_ifunc_target_type (address);
+
+	      if (resolved_type != NULL)
+		ftype = resolved_type;
+	    }
+
 	  type *return_type = TYPE_TARGET_TYPE (ftype);
 
 	  if (return_type == NULL)
@@ -985,13 +990,13 @@ evaluate_funcall (type *expect_type, expression *exp, int *pos,
       function_name = NULL;
       if (TYPE_CODE (type) == TYPE_CODE_NAMESPACE)
 	{
-	  function = cp_lookup_symbol_namespace (TYPE_TAG_NAME (type),
+	  function = cp_lookup_symbol_namespace (TYPE_NAME (type),
 						 name,
 						 get_selected_block (0),
 						 VAR_DOMAIN).symbol;
 	  if (function == NULL)
 	    error (_("No symbol \"%s\" in namespace \"%s\"."),
-		   name, TYPE_TAG_NAME (type));
+		   name, TYPE_NAME (type));
 
 	  tem = 1;
 	  /* arg2 is left as NULL on purpose.  */
@@ -1039,13 +1044,13 @@ evaluate_funcall (type *expect_type, expression *exp, int *pos,
 	{
 	  if (op == OP_VAR_MSYM_VALUE)
 	    {
-	      symbol *sym = exp->elts[*pos + 2].symbol;
-	      var_func_name = SYMBOL_PRINT_NAME (sym);
+	      minimal_symbol *msym = exp->elts[*pos + 2].msymbol;
+	      var_func_name = MSYMBOL_PRINT_NAME (msym);
 	    }
 	  else if (op == OP_VAR_VALUE)
 	    {
-	      minimal_symbol *msym = exp->elts[*pos + 2].msymbol;
-	      var_func_name = MSYMBOL_PRINT_NAME (msym);
+	      symbol *sym = exp->elts[*pos + 2].symbol;
+	      var_func_name = SYMBOL_PRINT_NAME (sym);
 	    }
 
 	  argvec[0] = evaluate_subexp_with_coercion (exp, pos, noside);
@@ -1743,7 +1748,7 @@ evaluate_subexp_standard (struct type *expect_type,
 	    /* The address might point to a function descriptor;
 	       resolve it to the actual code address instead.  */
 	    addr = gdbarch_convert_from_func_ptr_addr (exp->gdbarch, addr,
-						       &current_target);
+						       current_top_target ());
 
 	    /* Is it a high_level symbol?  */
 	    sym = find_pc_function (addr);
@@ -2662,6 +2667,19 @@ evaluate_subexp_standard (struct type *expect_type,
 	  return eval_skip_value (exp);
 	}
       return evaluate_subexp_for_sizeof (exp, pos, noside);
+
+    case UNOP_ALIGNOF:
+      {
+	struct type *type
+	  = value_type (evaluate_subexp (NULL_TYPE, exp, pos,
+					 EVAL_AVOID_SIDE_EFFECTS));
+	/* FIXME: This should be size_t.  */
+	struct type *size_type = builtin_type (exp->gdbarch)->builtin_int;
+	ULONGEST align = type_align (type);
+	if (align == 0)
+	  error (_("could not determine alignment of type"));
+	return value_from_longest (size_type, align);
+      }
 
     case UNOP_CAST:
       (*pos) += 2;

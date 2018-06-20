@@ -557,7 +557,7 @@ class dwarf_evaluate_loc_desc : public dwarf_expr_context
   /* Helper function for dwarf2_evaluate_loc_desc.  Computes the CFA for
      the frame in BATON.  */
 
-  CORE_ADDR get_frame_cfa () OVERRIDE
+  CORE_ADDR get_frame_cfa () override
   {
     return dwarf2_frame_cfa (frame);
   }
@@ -565,14 +565,14 @@ class dwarf_evaluate_loc_desc : public dwarf_expr_context
   /* Helper function for dwarf2_evaluate_loc_desc.  Computes the PC for
      the frame in BATON.  */
 
-  CORE_ADDR get_frame_pc () OVERRIDE
+  CORE_ADDR get_frame_pc () override
   {
     return get_frame_address_in_block (frame);
   }
 
   /* Using the objfile specified in BATON, find the address for the
      current thread's thread-local storage with offset OFFSET.  */
-  CORE_ADDR get_tls_address (CORE_ADDR offset) OVERRIDE
+  CORE_ADDR get_tls_address (CORE_ADDR offset) override
   {
     struct objfile *objfile = dwarf2_per_cu_objfile (per_cu);
 
@@ -582,12 +582,12 @@ class dwarf_evaluate_loc_desc : public dwarf_expr_context
   /* Helper interface of per_cu_dwarf_call for
      dwarf2_evaluate_loc_desc.  */
 
-  void dwarf_call (cu_offset die_offset) OVERRIDE
+  void dwarf_call (cu_offset die_offset) override
   {
     per_cu_dwarf_call (this, die_offset, per_cu);
   }
 
-  struct type *get_base_type (cu_offset die_offset, int size) OVERRIDE
+  struct type *get_base_type (cu_offset die_offset, int size) override
   {
     struct type *result = dwarf2_get_die_type (die_offset, per_cu);
     if (result == NULL)
@@ -600,7 +600,7 @@ class dwarf_evaluate_loc_desc : public dwarf_expr_context
   /* Callback function for dwarf2_evaluate_loc_desc.
      Fetch the address indexed by DW_OP_GNU_addr_index.  */
 
-  CORE_ADDR get_addr_index (unsigned int index) OVERRIDE
+  CORE_ADDR get_addr_index (unsigned int index) override
   {
     return dwarf2_read_addr_index (per_cu, index);
   }
@@ -608,7 +608,7 @@ class dwarf_evaluate_loc_desc : public dwarf_expr_context
   /* Callback function for get_object_address. Return the address of the VLA
      object.  */
 
-  CORE_ADDR get_object_address () OVERRIDE
+  CORE_ADDR get_object_address () override
   {
     if (obj_address == 0)
       error (_("Location address is not set."));
@@ -625,7 +625,7 @@ class dwarf_evaluate_loc_desc : public dwarf_expr_context
 
   void push_dwarf_reg_entry_value (enum call_site_parameter_kind kind,
 				   union call_site_parameter_u kind_u,
-				   int deref_size) OVERRIDE
+				   int deref_size) override
   {
     struct frame_info *caller_frame;
     struct dwarf2_per_cu_data *caller_per_cu;
@@ -666,7 +666,7 @@ class dwarf_evaluate_loc_desc : public dwarf_expr_context
   /* Using the frame specified in BATON, find the location expression
      describing the frame base.  Return a pointer to it in START and
      its length in LENGTH.  */
-  void get_frame_base (const gdb_byte **start, size_t * length) OVERRIDE
+  void get_frame_base (const gdb_byte **start, size_t * length) override
   {
     /* FIXME: cagney/2003-03-26: This code should be using
        get_frame_base_address(), and then implement a dwarf2 specific
@@ -694,14 +694,14 @@ class dwarf_evaluate_loc_desc : public dwarf_expr_context
 
   /* Read memory at ADDR (length LEN) into BUF.  */
 
-  void read_mem (gdb_byte *buf, CORE_ADDR addr, size_t len) OVERRIDE
+  void read_mem (gdb_byte *buf, CORE_ADDR addr, size_t len) override
   {
     read_memory (addr, buf, len);
   }
 
   /* Using the frame specified in BATON, return the value of register
      REGNUM, treated as a pointer.  */
-  CORE_ADDR read_addr_from_reg (int dwarf_regnum) OVERRIDE
+  CORE_ADDR read_addr_from_reg (int dwarf_regnum) override
   {
     struct gdbarch *gdbarch = get_frame_arch (frame);
     int regnum = dwarf_reg_to_regnum_or_error (gdbarch, dwarf_regnum);
@@ -711,7 +711,7 @@ class dwarf_evaluate_loc_desc : public dwarf_expr_context
 
   /* Implement "get_reg_value" callback.  */
 
-  struct value *get_reg_value (struct type *type, int dwarf_regnum) OVERRIDE
+  struct value *get_reg_value (struct type *type, int dwarf_regnum) override
   {
     struct gdbarch *gdbarch = get_frame_arch (frame);
     int regnum = dwarf_reg_to_regnum_or_error (gdbarch, dwarf_regnum);
@@ -1376,7 +1376,7 @@ entry_data_value_free_closure (struct value *v)
 {
   struct value *target_val = (struct value *) value_computed_closure (v);
 
-  value_free (target_val);
+  value_decref (target_val);
 }
 
 /* Vector for methods for an entry value reference where the referenced value
@@ -1434,7 +1434,7 @@ value_of_dwarf_reg_entry (struct type *type, struct frame_info *frame,
 					       target_type, caller_frame,
 					       caller_per_cu);
 
-  release_value (target_val);
+  release_value (target_val).release ();
   val = allocate_computed_value (type, &entry_data_value_funcs,
 				 target_val /* closure */);
 
@@ -2299,7 +2299,7 @@ free_pieced_value_closure (struct value *v)
     {
       for (dwarf_expr_piece &p : c->pieces)
 	if (p.location == DWARF_VALUE_STACK)
-	  value_free (p.v.value);
+	  value_decref (p.v.value);
 
       delete c;
     }
@@ -2482,9 +2482,8 @@ dwarf2_evaluate_loc_desc_full (struct type *type, struct frame_info *frame,
 	    /* Preserve VALUE because we are going to free values back
 	       to the mark, but we still need the value contents
 	       below.  */
-	    value_incref (value);
+	    value_ref_ptr value_holder = value_ref_ptr::new_reference (value);
 	    free_values.free_to_mark ();
-	    gdb_value_up value_holder (value);
 
 	    retval = allocate_value (subobj_type);
 
@@ -2736,7 +2735,7 @@ class symbol_needs_eval_context : public dwarf_expr_context
   struct dwarf2_per_cu_data *per_cu;
 
   /* Reads from registers do require a frame.  */
-  CORE_ADDR read_addr_from_reg (int regnum) OVERRIDE
+  CORE_ADDR read_addr_from_reg (int regnum) override
   {
     needs = SYMBOL_NEEDS_FRAME;
     return 1;
@@ -2745,20 +2744,20 @@ class symbol_needs_eval_context : public dwarf_expr_context
   /* "get_reg_value" callback: Reads from registers do require a
      frame.  */
 
-  struct value *get_reg_value (struct type *type, int regnum) OVERRIDE
+  struct value *get_reg_value (struct type *type, int regnum) override
   {
     needs = SYMBOL_NEEDS_FRAME;
     return value_zero (type, not_lval);
   }
 
   /* Reads from memory do not require a frame.  */
-  void read_mem (gdb_byte *buf, CORE_ADDR addr, size_t len) OVERRIDE
+  void read_mem (gdb_byte *buf, CORE_ADDR addr, size_t len) override
   {
     memset (buf, 0, len);
   }
 
   /* Frame-relative accesses do require a frame.  */
-  void get_frame_base (const gdb_byte **start, size_t *length) OVERRIDE
+  void get_frame_base (const gdb_byte **start, size_t *length) override
   {
     static gdb_byte lit0 = DW_OP_lit0;
 
@@ -2769,20 +2768,20 @@ class symbol_needs_eval_context : public dwarf_expr_context
   }
 
   /* CFA accesses require a frame.  */
-  CORE_ADDR get_frame_cfa () OVERRIDE
+  CORE_ADDR get_frame_cfa () override
   {
     needs = SYMBOL_NEEDS_FRAME;
     return 1;
   }
 
-  CORE_ADDR get_frame_pc () OVERRIDE
+  CORE_ADDR get_frame_pc () override
   {
     needs = SYMBOL_NEEDS_FRAME;
     return 1;
   }
 
   /* Thread-local accesses require registers, but not a frame.  */
-  CORE_ADDR get_tls_address (CORE_ADDR offset) OVERRIDE
+  CORE_ADDR get_tls_address (CORE_ADDR offset) override
   {
     if (needs <= SYMBOL_NEEDS_REGISTERS)
       needs = SYMBOL_NEEDS_REGISTERS;
@@ -2792,7 +2791,7 @@ class symbol_needs_eval_context : public dwarf_expr_context
   /* Helper interface of per_cu_dwarf_call for
      dwarf2_loc_desc_get_symbol_read_needs.  */
 
-  void dwarf_call (cu_offset die_offset) OVERRIDE
+  void dwarf_call (cu_offset die_offset) override
   {
     per_cu_dwarf_call (this, die_offset, per_cu);
   }
@@ -2802,7 +2801,7 @@ class symbol_needs_eval_context : public dwarf_expr_context
 
   void push_dwarf_reg_entry_value (enum call_site_parameter_kind kind,
 				   union call_site_parameter_u kind_u,
-				   int deref_size) OVERRIDE
+				   int deref_size) override
   {
     needs = SYMBOL_NEEDS_FRAME;
 
@@ -2812,7 +2811,7 @@ class symbol_needs_eval_context : public dwarf_expr_context
 
   /* DW_OP_GNU_addr_index doesn't require a frame.  */
 
-   CORE_ADDR get_addr_index (unsigned int index) OVERRIDE
+   CORE_ADDR get_addr_index (unsigned int index) override
    {
      /* Nothing to do.  */
      return 1;
@@ -2820,7 +2819,7 @@ class symbol_needs_eval_context : public dwarf_expr_context
 
    /* DW_OP_push_object_address has a frame already passed through.  */
 
-   CORE_ADDR get_object_address () OVERRIDE
+   CORE_ADDR get_object_address () override
    {
      /* Nothing to do.  */
      return 1;
@@ -2866,7 +2865,7 @@ dwarf2_loc_desc_get_symbol_read_needs (const gdb_byte *data, size_t size,
 /* A helper function that throws an unimplemented error mentioning a
    given DWARF operator.  */
 
-static void
+static void ATTRIBUTE_NORETURN
 unimplemented (unsigned int op)
 {
   const char *name = get_DW_OP_name (op);
@@ -2893,8 +2892,7 @@ dwarf_reg_to_regnum (struct gdbarch *arch, int dwarf_reg)
 
   if (reg == -1)
     {
-      complaint (&symfile_complaints,
-		 _("bad DWARF register number %d"), dwarf_reg);
+      complaint (_("bad DWARF register number %d"), dwarf_reg);
     }
   return reg;
 }

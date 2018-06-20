@@ -26,7 +26,7 @@
 #include "gdbcmd.h"
 #include "gdbthread.h"
 #include "ui-out.h"
-#include "observer.h"
+#include "observable.h"
 #include "gdbcore.h"
 #include "symfile.h"
 #include "environ.h"
@@ -45,9 +45,8 @@ DEFINE_REGISTRY (inferior, REGISTRY_ACCESS_FIELD)
 struct inferior *inferior_list = NULL;
 static int highest_inferior_num;
 
-/* Print notices on inferior events (attach, detach, etc.), set with
-   `set print inferior-events'.  */
-static int print_inferior_events = 0;
+/* See inferior.h.  */
+int print_inferior_events = 1;
 
 /* The Current Inferior.  This is a strong reference.  I.e., whenever
    an inferior is the current inferior, its refcount is
@@ -109,7 +108,7 @@ add_inferior_silent (int pid)
       last->next = inf;
     }
 
-  observer_notify_inferior_added (inf);
+  gdb::observers::inferior_added.notify (inf);
 
   if (pid != 0)
     inferior_appeared (inf, pid);
@@ -123,7 +122,9 @@ add_inferior (int pid)
   struct inferior *inf = add_inferior_silent (pid);
 
   if (print_inferior_events)
-    printf_unfiltered (_("[New inferior %d]\n"), pid);
+    printf_unfiltered (_("[New inferior %d (%s)]\n"),
+		       inf->num,
+		       target_pid_to_str (pid_to_ptid (pid)));
 
   return inf;
 }
@@ -176,7 +177,7 @@ delete_inferior (struct inferior *todel)
   else
     inferior_list = inf->next;
 
-  observer_notify_inferior_removed (inf);
+  gdb::observers::inferior_removed.notify (inf);
 
   /* If this program space is rendered useless, remove it. */
   if (program_space_empty_p (inf->pspace))
@@ -206,7 +207,7 @@ exit_inferior_1 (struct inferior *inftoex, int silent)
 
   iterate_over_threads (delete_thread_of_inferior, &arg);
 
-  observer_notify_inferior_exit (inf);
+  gdb::observers::inferior_exit.notify (inf);
 
   inf->pid = 0;
   inf->fake_pid_p = 0;
@@ -234,9 +235,6 @@ exit_inferior (int pid)
   struct inferior *inf = find_inferior_pid (pid);
 
   exit_inferior_1 (inf, 0);
-
-  if (print_inferior_events)
-    printf_unfiltered (_("[Inferior %d exited]\n"), pid);
 }
 
 void
@@ -266,7 +264,9 @@ detach_inferior (inferior *inf)
   exit_inferior_1 (inf, 0);
 
   if (print_inferior_events)
-    printf_unfiltered (_("[Inferior %d detached]\n"), pid);
+    printf_unfiltered (_("[Inferior %d (%s) detached]\n"),
+		       inf->num,
+		       target_pid_to_str (pid_to_ptid (pid)));
 }
 
 /* See inferior.h.  */
@@ -284,7 +284,7 @@ inferior_appeared (struct inferior *inf, int pid)
   inf->has_exit_code = 0;
   inf->exit_code = 0;
 
-  observer_notify_inferior_appeared (inf);
+  gdb::observers::inferior_appeared.notify (inf);
 }
 
 void
@@ -713,7 +713,7 @@ inferior_command (const char *args, int from_tty)
 	  switch_to_thread (tp->ptid);
 	}
 
-      observer_notify_user_selected_context_changed
+      gdb::observers::user_selected_context_changed.notify
 	(USER_SELECTED_INFERIOR
 	 | USER_SELECTED_THREAD
 	 | USER_SELECTED_FRAME);
@@ -724,7 +724,8 @@ inferior_command (const char *args, int from_tty)
       switch_to_thread (null_ptid);
       set_current_program_space (inf->pspace);
 
-      observer_notify_user_selected_context_changed (USER_SELECTED_INFERIOR);
+      gdb::observers::user_selected_context_changed.notify
+	(USER_SELECTED_INFERIOR);
     }
 }
 
@@ -988,19 +989,22 @@ initialize_inferiors (void)
      can only allocate an inferior when all those modules have done
      that.  Do this after initialize_progspace, due to the
      current_program_space reference.  */
-  current_inferior_ = add_inferior (0);
+  current_inferior_ = add_inferior_silent (0);
   current_inferior_->incref ();
   current_inferior_->pspace = current_program_space;
   current_inferior_->aspace = current_program_space->aspace;
   /* The architecture will be initialized shortly, by
      initialize_current_architecture.  */
 
-  add_info ("inferiors", info_inferiors_command, 
-	    _("IDs of specified inferiors (all inferiors if no argument)."));
+  add_info ("inferiors", info_inferiors_command,
+	    _("Print a list of inferiors being managed.\n\
+Usage: info inferiors [ID]...\n\
+If IDs are specified, the list is limited to just those inferiors.\n\
+By default all inferiors are displayed."));
 
   c = add_com ("add-inferior", no_class, add_inferior_command, _("\
 Add a new inferior.\n\
-Usage: add-inferior [-copies <N>] [-exec <FILENAME>]\n\
+Usage: add-inferior [-copies N] [-exec FILENAME]\n\
 N is the optional number of inferiors to add, default is 1.\n\
 FILENAME is the file name of the executable to use\n\
 as main program."));
@@ -1012,22 +1016,25 @@ Usage: remove-inferiors ID..."));
 
   add_com ("clone-inferior", no_class, clone_inferior_command, _("\
 Clone inferior ID.\n\
-Usage: clone-inferior [-copies <N>] [ID]\n\
+Usage: clone-inferior [-copies N] [ID]\n\
 Add N copies of inferior ID.  The new inferior has the same\n\
 executable loaded as the copied inferior.  If -copies is not specified,\n\
 adds 1 copy.  If ID is not specified, it is the current inferior\n\
 that is cloned."));
 
   add_cmd ("inferiors", class_run, detach_inferior_command, _("\
-Detach from inferior ID (or list of IDS)."),
+Detach from inferior ID (or list of IDS).\n\
+Usage; detach inferiors ID..."),
 	   &detachlist);
 
   add_cmd ("inferiors", class_run, kill_inferior_command, _("\
-Kill inferior ID (or list of IDs)."),
+Kill inferior ID (or list of IDs).\n\
+Usage: kill inferiors ID..."),
 	   &killlist);
 
   add_cmd ("inferior", class_run, inferior_command, _("\
 Use this command to switch between inferiors.\n\
+Usage: inferior ID\n\
 The new inferior ID must be currently known."),
 	   &cmdlist);
 

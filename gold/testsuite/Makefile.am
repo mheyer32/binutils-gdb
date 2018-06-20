@@ -1211,6 +1211,32 @@ x32_overflow_pc32.err: x32_overflow_pc32.o gcctestdir/ld
 	  exit 1; \
 	fi
 
+check_SCRIPTS += pr23016_1.sh
+check_DATA += pr23016_1.stdout pr23016_1r.stdout
+pr23016_1.stdout: pr23016_1.o
+	$(TEST_READELF) -rSW $< >$@ 2>/dev/null
+pr23016_1.o: pr23016_1a.o pr23016_1b.o gcctestdir/ld
+	gcctestdir/ld -r -o $@ pr23016_1a.o pr23016_1b.o
+pr23016_1r.stdout: pr23016_1r.o
+	$(TEST_READELF) -rSW $< >$@ 2>/dev/null
+pr23016_1r.o: pr23016_1a.o pr23016_1b.o gcctestdir/ld
+	gcctestdir/ld -r -o $@ pr23016_1b.o pr23016_1a.o
+pr23016_1a.o: pr23016_1a.s
+	$(TEST_AS) -o $@ $<
+pr23016_1b.o: pr23016_1b.s
+	$(TEST_AS) -o $@ $<
+
+check_SCRIPTS += pr23016_2.sh
+check_DATA += pr23016_2.stdout
+pr23016_2.stdout: pr23016_2.o
+	$(TEST_READELF) -rW $< >$@ 2>/dev/null
+pr23016_2.o: pr23016_2a.o pr23016_2b.o gcctestdir/ld
+	gcctestdir/ld -r -o $@ pr23016_2a.o pr23016_2b.o
+pr23016_2a.o: pr23016_2a.s
+	$(TEST_AS) -o $@ $<
+pr23016_2b.o: pr23016_2b.s
+	$(TEST_AS) -o $@ $<
+
 endif DEFAULT_TARGET_X86_64
 
 if DEFAULT_TARGET_X86_64_OR_X32
@@ -2468,6 +2494,44 @@ plugin_section_alignment.so: plugin_section_alignment.o gcctestdir/ld
 	$(CXXLINK) -Bgcctestdir/ -shared plugin_section_alignment.o
 plugin_section_alignment.o: plugin_section_alignment.cc
 	$(CXXCOMPILE) -O0 -c -fpic -o $@ $<
+
+check_SCRIPTS += plugin_pr22868.sh
+check_DATA += plugin_pr22868.stdout
+MOSTLYCLEANFILES += plugin_pr22868.stdout
+plugin_pr22868.stdout: plugin_pr22868.so
+	$(TEST_READELF) -W --dyn-syms $< >$@ 2>/dev/null
+plugin_pr22868.so: plugin_pr22868_a.o.syms plugin_pr22868_b.o.syms plugin_pr22868_b.o plugin_test.so gcctestdir/ld
+	$(LINK) -Bgcctestdir/ -shared -Wl,--plugin,"./plugin_test.so" plugin_pr22868_a.o.syms plugin_pr22868_b.o.syms
+plugin_pr22868_a.o.syms: plugin_pr22868_a.o
+	$(TEST_READELF) -sW $< >$@ 2>/dev/null
+# Generate the .syms file from an alternate version of the original source
+# file, with a "protected" visibility attribute. We'll link with a
+# "replacement" object that does not have that attribute.
+plugin_pr22868_b.o.syms: plugin_pr22868_b_ir.o
+	$(TEST_READELF) -sW $< >$@ 2>/dev/null
+plugin_pr22868_a.o: plugin_pr22868_a.c
+	$(COMPILE) -c -fpic -o $@ $<
+plugin_pr22868_b_ir.o: plugin_pr22868_b.c
+	$(COMPILE) -c -DIR -fpic -o $@ $<
+plugin_pr22868_b.o: plugin_pr22868_b.c
+	$(COMPILE) -c -fpic -o $@ $<
+
+check_SCRIPTS += ver_test_pr16504.sh
+check_DATA += ver_test_pr16504.stdout
+ver_test_pr16504.stdout: ver_test_pr16504.so
+	$(TEST_READELF) -W --dyn-syms $< >$@ 2>/dev/null
+ver_test_pr16504.so: ver_test_pr16504_a.so ver_test_pr16504_b.o.syms ver_test_pr16504_b.script gcctestdir/ld
+	gcctestdir/ld -shared -o $@ --plugin ./plugin_test.so --version-script $(srcdir)/ver_test_pr16504_b.script ver_test_pr16504_b.o.syms ver_test_pr16504_a.so
+ver_test_pr16504_a.so: ver_test_pr16504_a.o ver_test_pr16504_a.script gcctestdir/ld
+	gcctestdir/ld -shared -o $@ --version-script $(srcdir)/ver_test_pr16504_a.script ver_test_pr16504_a.o
+ver_test_pr16504_a.o: ver_test_pr16504_a.c
+	$(COMPILE) -c -fpic -o $@ $<
+# Filter out the UNDEFs from the symbols file to simulate GCC behavior,
+# which does not pass the UNDEF from a .symver directive.
+ver_test_pr16504_b.o.syms: ver_test_pr16504_b.o
+	$(TEST_READELF) -sW $< 2>/dev/null | grep -v "UND" >$@
+ver_test_pr16504_b.o: ver_test_pr16504_b.c
+	$(COMPILE) -c -fpic -o $@ $<
 
 endif PLUGINS
 

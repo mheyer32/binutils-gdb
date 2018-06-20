@@ -721,25 +721,11 @@ struct main_type
 
   /* * Name of this type, or NULL if none.
 
-     This is used for printing only, except by poorly designed C++
-     code.  For looking up a name, look for a symbol in the
-     VAR_DOMAIN.  This is generally allocated in the objfile's
-     obstack.  However coffread.c uses malloc.  */
+     This is used for printing only.  For looking up a name, look for
+     a symbol in the VAR_DOMAIN.  This is generally allocated in the
+     objfile's obstack.  However coffread.c uses malloc.  */
 
   const char *name;
-
-  /* * Tag name for this type, or NULL if none.  This means that the
-     name of the type consists of a keyword followed by the tag name.
-     Which keyword is determined by the type code ("struct" for
-     TYPE_CODE_STRUCT, etc.).  As far as I know C/C++ are the only
-     languages with this feature.
-
-     This is used for printing only, except by poorly designed C++ code.
-     For looking up a name, look for a symbol in the STRUCT_DOMAIN.
-     One more legitimate use is that if TYPE_STUB is set, this is
-     the name to use to look for definitions in other files.  */
-
-  const char *tag_name;
 
   /* * Every type is now associated with a particular objfile, and the
      type is allocated on the objfile_obstack for that objfile.  One
@@ -802,6 +788,10 @@ struct main_type
   struct dynamic_prop_list *dyn_prop_list;
 };
 
+/* * Number of bits allocated for alignment.  */
+
+#define TYPE_ALIGN_BITS 8
+
 /* * A ``struct type'' describes a particular instance of a type, with
    some particular qualification.  */
 
@@ -831,6 +821,14 @@ struct type
 
   struct type *chain;
 
+  /* * The alignment for this type.  Zero means that the alignment was
+     not specified in the debug info.  Note that this is stored in a
+     funny way: as the log base 2 (plus 1) of the alignment; so a
+     value of 1 means the alignment is 1, and a value of 9 means the
+     alignment is 256.  */
+
+  unsigned align_log2 : TYPE_ALIGN_BITS;
+
   /* * Flags specific to this instance of the type, indicating where
      on the ring we are.
 
@@ -841,7 +839,7 @@ struct type
      instance flags are completely inherited from the target type.  No
      qualifiers can be cleared by the typedef.  See also
      check_typedef.  */
-  int instance_flags;
+  unsigned instance_flags : 9;
 
   /* * Length of storage for a value of this type.  The value is the
      expression in host bytes of what sizeof(type) would return.  This
@@ -1281,7 +1279,6 @@ extern void allocate_gnat_aux_type (struct type *);
 #define TYPE_INSTANCE_FLAGS(thistype) (thistype)->instance_flags
 #define TYPE_MAIN_TYPE(thistype) (thistype)->main_type
 #define TYPE_NAME(thistype) TYPE_MAIN_TYPE(thistype)->name
-#define TYPE_TAG_NAME(type) TYPE_MAIN_TYPE(type)->tag_name
 #define TYPE_TARGET_TYPE(thistype) TYPE_MAIN_TYPE(thistype)->target_type
 #define TYPE_POINTER_TYPE(thistype) (thistype)->pointer_type
 #define TYPE_REFERENCE_TYPE(thistype) (thistype)->reference_type
@@ -1292,6 +1289,26 @@ extern void allocate_gnat_aux_type (struct type *);
    so you only have to call check_typedef once.  Since allocate_value
    calls check_typedef, TYPE_LENGTH (VALUE_TYPE (X)) is safe.  */
 #define TYPE_LENGTH(thistype) (thistype)->length
+
+/* * Return the alignment of the type in target addressable memory
+   units, or 0 if no alignment was specified.  */
+#define TYPE_RAW_ALIGN(thistype) type_raw_align (thistype)
+
+/* * Return the alignment of the type in target addressable memory
+   units, or 0 if no alignment was specified.  */
+extern unsigned type_raw_align (struct type *);
+
+/* * Return the alignment of the type in target addressable memory
+   units.  Return 0 if the alignment cannot be determined; but note
+   that this makes an effort to compute the alignment even it it was
+   not specified in the debug info.  */
+extern unsigned type_align (struct type *);
+
+/* * Set the alignment of the type.  The alignment must be a power of
+   2.  Returns false if the given value does not fit in the available
+   space in struct type.  */
+extern bool set_type_align (struct type *, ULONGEST);
+
 /* * Note that TYPE_CODE can be TYPE_CODE_TYPEDEF, so if you want the real
    type, you need to do TYPE_CODE (check_type (this_type)).  */
 #define TYPE_CODE(thistype) TYPE_MAIN_TYPE(thistype)->code
@@ -1850,9 +1867,7 @@ extern void smash_to_methodptr_type (struct type *, struct type *);
 
 extern struct type *allocate_stub_method (struct type *);
 
-extern const char *type_name_no_tag (const struct type *);
-
-extern const char *type_name_no_tag_or_error (struct type *type);
+extern const char *type_name_or_error (struct type *type);
 
 extern struct type *lookup_struct_elt_type (struct type *, const char *, int);
 
@@ -2060,9 +2075,9 @@ extern struct type *copy_type_recursive (struct objfile *objfile,
 
 extern struct type *copy_type (const struct type *type);
 
-extern int types_equal (struct type *, struct type *);
+extern bool types_equal (struct type *, struct type *);
 
-extern int types_deeply_equal (struct type *, struct type *);
+extern bool types_deeply_equal (struct type *, struct type *);
 
 extern int type_not_allocated (const struct type *type);
 

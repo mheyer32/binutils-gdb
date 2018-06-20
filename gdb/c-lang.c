@@ -25,6 +25,7 @@
 #include "language.h"
 #include "varobj.h"
 #include "c-lang.h"
+#include "c-support.h"
 #include "valprint.h"
 #include "macroscope.h"
 #include "charset.h"
@@ -382,7 +383,7 @@ convert_ucn (char *p, char *limit, const char *dest_charset,
   gdb_byte data[4];
   int i;
 
-  for (i = 0; i < length && p < limit && isxdigit (*p); ++i, ++p)
+  for (i = 0; i < length && p < limit && ISXDIGIT (*p); ++i, ++p)
     result = (result << 4) + host_hex_value (*p);
 
   for (i = 3; i >= 0; --i)
@@ -424,7 +425,7 @@ convert_octal (struct type *type, char *p,
   unsigned long value = 0;
 
   for (i = 0;
-       i < 3 && p < limit && isdigit (*p) && *p != '8' && *p != '9';
+       i < 3 && p < limit && ISDIGIT (*p) && *p != '8' && *p != '9';
        ++i)
     {
       value = 8 * value + host_hex_value (*p);
@@ -447,7 +448,7 @@ convert_hex (struct type *type, char *p,
 {
   unsigned long value = 0;
 
-  while (p < limit && isxdigit (*p))
+  while (p < limit && ISXDIGIT (*p))
     {
       value = 16 * value + host_hex_value (*p);
       ++p;
@@ -488,7 +489,7 @@ convert_escape (struct type *type, const char *dest_charset,
 
     case 'x':
       ADVANCE;
-      if (!isxdigit (*p))
+      if (!ISXDIGIT (*p))
 	error (_("\\x used with no following hex digits."));
       p = convert_hex (type, p, limit, output);
       break;
@@ -510,7 +511,7 @@ convert_escape (struct type *type, const char *dest_charset,
 	int length = *p == 'u' ? 4 : 8;
 
 	ADVANCE;
-	if (!isxdigit (*p))
+	if (!ISXDIGIT (*p))
 	  error (_("\\u used with no following hex digits"));
 	p = convert_ucn (p, limit, dest_charset, output, length);
       }
@@ -751,6 +752,7 @@ const struct op_print c_op_print_tab[] =
   {"*", UNOP_IND, PREC_PREFIX, 0},
   {"&", UNOP_ADDR, PREC_PREFIX, 0},
   {"sizeof ", UNOP_SIZEOF, PREC_PREFIX, 0},
+  {"alignof ", UNOP_ALIGNOF, PREC_PREFIX, 0},
   {"++", UNOP_PREINCREMENT, PREC_PREFIX, 0},
   {"--", UNOP_PREDECREMENT, PREC_PREFIX, 0},
   {NULL, OP_NULL, PREC_PREFIX, 0}
@@ -853,6 +855,7 @@ extern const struct language_defn c_language_defn =
   default_read_var_value,	/* la_read_var_value */
   NULL,				/* Language specific skip_trampoline */
   NULL,				/* name_of_this */
+  true,				/* la_store_sym_names_in_linkage_form_p */
   basic_lookup_symbol_nonlocal,	/* lookup_symbol_nonlocal */
   basic_lookup_transparent_type,/* lookup_transparent_type */
   NULL,				/* Language specific symbol demangler */
@@ -998,6 +1001,7 @@ extern const struct language_defn cplus_language_defn =
   default_read_var_value,	/* la_read_var_value */
   cplus_skip_trampoline,	/* Language specific skip_trampoline */
   "this",                       /* name_of_this */
+  false,			/* la_store_sym_names_in_linkage_form_p */
   cp_lookup_symbol_nonlocal,	/* lookup_symbol_nonlocal */
   cp_lookup_transparent_type,   /* lookup_transparent_type */
   gdb_demangle,			/* Language specific symbol demangler */
@@ -1052,6 +1056,7 @@ extern const struct language_defn asm_language_defn =
   default_read_var_value,	/* la_read_var_value */
   NULL,				/* Language specific skip_trampoline */
   NULL,				/* name_of_this */
+  true,				/* la_store_sym_names_in_linkage_form_p */
   basic_lookup_symbol_nonlocal,	/* lookup_symbol_nonlocal */
   basic_lookup_transparent_type,/* lookup_transparent_type */
   NULL,				/* Language specific symbol demangler */
@@ -1106,6 +1111,7 @@ extern const struct language_defn minimal_language_defn =
   default_read_var_value,	/* la_read_var_value */
   NULL,				/* Language specific skip_trampoline */
   NULL,				/* name_of_this */
+  true,				/* la_store_sym_names_in_linkage_form_p */
   basic_lookup_symbol_nonlocal,	/* lookup_symbol_nonlocal */
   basic_lookup_transparent_type,/* lookup_transparent_type */
   NULL,				/* Language specific symbol demangler */

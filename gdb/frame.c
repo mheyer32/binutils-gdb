@@ -34,7 +34,7 @@
 #include "frame-base.h"
 #include "command.h"
 #include "gdbcmd.h"
-#include "observer.h"
+#include "observable.h"
 #include "objfiles.h"
 #include "gdbthread.h"
 #include "block.h"
@@ -267,6 +267,22 @@ static void
 frame_stash_invalidate (void)
 {
   htab_empty (frame_stash);
+}
+
+/* See frame.h  */
+scoped_restore_selected_frame::scoped_restore_selected_frame ()
+{
+  m_fid = get_frame_id (get_selected_frame (NULL));
+}
+
+/* See frame.h  */
+scoped_restore_selected_frame::~scoped_restore_selected_frame ()
+{
+  frame_info *frame = frame_find_by_id (m_fid);
+  if (frame == NULL)
+    warning (_("Unable to restore previously selected frame."));
+  else
+    select_frame (frame);
 }
 
 /* Flag to control debugging.  */
@@ -1117,7 +1133,6 @@ frame_register_unwind (struct frame_info *frame, int regnum,
   /* Dispose of the new value.  This prevents watchpoints from
      trying to watch the saved frame pointer.  */
   release_value (value);
-  value_free (value);
 }
 
 void
@@ -1264,7 +1279,6 @@ frame_unwind_register_signed (struct frame_info *frame, int regnum)
 				      byte_order);
 
   release_value (value);
-  value_free (value);
   return r;
 }
 
@@ -1299,7 +1313,6 @@ frame_unwind_register_unsigned (struct frame_info *frame, int regnum)
 					 byte_order);
 
   release_value (value);
-  value_free (value);
   return r;
 }
 
@@ -1352,7 +1365,7 @@ put_frame_register (struct frame_info *frame, int regnum,
 	break;
       }
     case lval_register:
-      regcache_cooked_write (get_current_regcache (), realnum, buf);
+      get_current_regcache ()->cooked_write (realnum, buf);
       break;
     default:
       error (_("Attempt to assign to an unmodifiable value."));
@@ -1446,12 +1459,10 @@ get_frame_register_bytes (struct frame_info *frame, int regnum,
 	  if (*optimizedp || *unavailablep)
 	    {
 	      release_value (value);
-	      value_free (value);
 	      return 0;
 	    }
 	  memcpy (myaddr, value_contents_all (value) + offset, curr_len);
 	  release_value (value);
-	  value_free (value);
 	}
 
       myaddr += curr_len;
@@ -1500,7 +1511,6 @@ put_frame_register_bytes (struct frame_info *frame, int regnum,
 		  curr_len);
 	  put_frame_register (frame, regnum, value_contents_raw (value));
 	  release_value (value);
-	  value_free (value);
 	}
 
       myaddr += curr_len;
@@ -1861,22 +1871,6 @@ frame_register_unwind_location (struct frame_info *this_frame, int regnum,
     }
 }
 
-/* Called during frame unwinding to remove a previous frame pointer from a
-   frame passed in ARG.  */
-
-static void
-remove_prev_frame (void *arg)
-{
-  struct frame_info *this_frame, *prev_frame;
-
-  this_frame = (struct frame_info *) arg;
-  prev_frame = this_frame->prev;
-  gdb_assert (prev_frame != NULL);
-
-  prev_frame->next = NULL;
-  this_frame->prev = NULL;
-}
-
 /* Get the previous raw frame, and check that it is not identical to
    same other frame frame already in the chain.  If it is, there is
    most likely a stack cycle, so we discard it, and mark THIS_FRAME as
@@ -1889,7 +1883,6 @@ static struct frame_info *
 get_prev_frame_if_no_cycle (struct frame_info *this_frame)
 {
   struct frame_info *prev_frame;
-  struct cleanup *prev_frame_cleanup;
 
   prev_frame = get_prev_frame_raw (this_frame);
 
@@ -1905,29 +1898,35 @@ get_prev_frame_if_no_cycle (struct frame_info *this_frame)
   if (prev_frame->level == 0)
     return prev_frame;
 
-  /* The cleanup will remove the previous frame that get_prev_frame_raw
-     linked onto THIS_FRAME.  */
-  prev_frame_cleanup = make_cleanup (remove_prev_frame, this_frame);
-
-  compute_frame_id (prev_frame);
-  if (!frame_stash_add (prev_frame))
+  TRY
     {
-      /* Another frame with the same id was already in the stash.  We just
-	 detected a cycle.  */
-      if (frame_debug)
+      compute_frame_id (prev_frame);
+      if (!frame_stash_add (prev_frame))
 	{
-	  fprintf_unfiltered (gdb_stdlog, "-> ");
-	  fprint_frame (gdb_stdlog, NULL);
-	  fprintf_unfiltered (gdb_stdlog, " // this frame has same ID }\n");
+	  /* Another frame with the same id was already in the stash.  We just
+	     detected a cycle.  */
+	  if (frame_debug)
+	    {
+	      fprintf_unfiltered (gdb_stdlog, "-> ");
+	      fprint_frame (gdb_stdlog, NULL);
+	      fprintf_unfiltered (gdb_stdlog, " // this frame has same ID }\n");
+	    }
+	  this_frame->stop_reason = UNWIND_SAME_ID;
+	  /* Unlink.  */
+	  prev_frame->next = NULL;
+	  this_frame->prev = NULL;
+	  prev_frame = NULL;
 	}
-      this_frame->stop_reason = UNWIND_SAME_ID;
-      /* Unlink.  */
+    }
+  CATCH (ex, RETURN_MASK_ALL)
+    {
       prev_frame->next = NULL;
       this_frame->prev = NULL;
-      prev_frame = NULL;
-    }
 
-  discard_cleanups (prev_frame_cleanup);
+      throw_exception (ex);
+    }
+  END_CATCH
+
   return prev_frame;
 }
 
@@ -2223,7 +2222,7 @@ inside_main_func (struct frame_info *this_frame)
      returned.  */
   maddr = gdbarch_convert_from_func_ptr_addr (get_frame_arch (this_frame),
 					      BMSYMBOL_VALUE_ADDRESS (msymbol),
-					      &current_target);
+					      current_top_target ());
   return maddr == get_frame_func (this_frame);
 }
 
@@ -2923,7 +2922,7 @@ _initialize_frame (void)
 
   frame_stash_create ();
 
-  observer_attach_target_changed (frame_observer_target_changed);
+  gdb::observers::target_changed.attach (frame_observer_target_changed);
 
   add_prefix_cmd ("backtrace", class_maintenance, set_backtrace_cmd, _("\
 Set backtrace specific variables.\n\

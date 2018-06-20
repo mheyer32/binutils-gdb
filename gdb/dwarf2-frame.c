@@ -216,7 +216,7 @@ dwarf2_restore_rule (struct gdbarch *gdbarch, ULONGEST reg_num,
     {
       int regnum = dwarf_reg_to_regnum (gdbarch, reg);
 
-      complaint (&symfile_complaints, _("\
+      complaint (_("\
 incomplete CFI data; DW_CFA_restore unspecified\n\
 register %s (#%d) at %s"),
 		 gdbarch_register_name (gdbarch, regnum), regnum,
@@ -230,12 +230,12 @@ class dwarf_expr_executor : public dwarf_expr_context
 
   struct frame_info *this_frame;
 
-  CORE_ADDR read_addr_from_reg (int reg) OVERRIDE
+  CORE_ADDR read_addr_from_reg (int reg) override
   {
     return ::read_addr_from_reg (this_frame, reg);
   }
 
-  struct value *get_reg_value (struct type *type, int reg) OVERRIDE
+  struct value *get_reg_value (struct type *type, int reg) override
   {
     struct gdbarch *gdbarch = get_frame_arch (this_frame);
     int regnum = dwarf_reg_to_regnum_or_error (gdbarch, reg);
@@ -243,44 +243,44 @@ class dwarf_expr_executor : public dwarf_expr_context
     return value_from_register (type, regnum, this_frame);
   }
 
-  void read_mem (gdb_byte *buf, CORE_ADDR addr, size_t len) OVERRIDE
+  void read_mem (gdb_byte *buf, CORE_ADDR addr, size_t len) override
   {
     read_memory (addr, buf, len);
   }
 
-  void get_frame_base (const gdb_byte **start, size_t *length) OVERRIDE
+  void get_frame_base (const gdb_byte **start, size_t *length) override
   {
     invalid ("DW_OP_fbreg");
   }
 
   void push_dwarf_reg_entry_value (enum call_site_parameter_kind kind,
 				   union call_site_parameter_u kind_u,
-				   int deref_size) OVERRIDE
+				   int deref_size) override
   {
     invalid ("DW_OP_entry_value");
   }
 
-  CORE_ADDR get_object_address () OVERRIDE
+  CORE_ADDR get_object_address () override
   {
     invalid ("DW_OP_push_object_address");
   }
 
-  CORE_ADDR get_frame_cfa () OVERRIDE
+  CORE_ADDR get_frame_cfa () override
   {
     invalid ("DW_OP_call_frame_cfa");
   }
 
-  CORE_ADDR get_tls_address (CORE_ADDR offset) OVERRIDE
+  CORE_ADDR get_tls_address (CORE_ADDR offset) override
   {
     invalid ("DW_OP_form_tls_address");
   }
 
-  void dwarf_call (cu_offset die_offset) OVERRIDE
+  void dwarf_call (cu_offset die_offset) override
   {
     invalid ("DW_OP_call*");
   }
 
-  CORE_ADDR get_addr_index (unsigned int index)
+  CORE_ADDR get_addr_index (unsigned int index) override
   {
     invalid ("DW_OP_GNU_addr_index");
   }
@@ -449,7 +449,7 @@ execute_cfa_program (struct dwarf2_fde *fde, const gdb_byte *insn_ptr,
 
 		if (old_rs == NULL)
 		  {
-		    complaint (&symfile_complaints, _("\
+		    complaint (_("\
 bad CFI data; mismatched DW_CFA_restore_state at %s"),
 			       paddress (gdbarch, fs->pc));
 		  }
@@ -1111,7 +1111,7 @@ dwarf2_frame_cache (struct frame_info *this_frame, void **this_cache)
 	if (fs.regs.reg[column].how == DWARF2_FRAME_REG_UNSPECIFIED)
 	  {
 	    if (cache->reg[regnum].how == DWARF2_FRAME_REG_UNSPECIFIED)
-	      complaint (&symfile_complaints, _("\
+	      complaint (_("\
 incomplete CFI data; unspecified registers (e.g., %s) at %s"),
 			 gdbarch_register_name (gdbarch, regnum),
 			 paddress (gdbarch, fs.pc));
@@ -2144,22 +2144,21 @@ decode_frame_entry (struct comp_unit *unit, const gdb_byte *start,
       break;
 
     case ALIGN4:
-      complaint (&symfile_complaints, _("\
+      complaint (_("\
 Corrupt data in %s:%s; align 4 workaround apparently succeeded"),
 		 unit->dwarf_frame_section->owner->filename,
 		 unit->dwarf_frame_section->name);
       break;
 
     case ALIGN8:
-      complaint (&symfile_complaints, _("\
+      complaint (_("\
 Corrupt data in %s:%s; align 8 workaround apparently succeeded"),
 		 unit->dwarf_frame_section->owner->filename,
 		 unit->dwarf_frame_section->name);
       break;
 
     default:
-      complaint (&symfile_complaints,
-		 _("Corrupt data in %s:%s"),
+      complaint (_("Corrupt data in %s:%s"),
 		 unit->dwarf_frame_section->owner->filename,
 		 unit->dwarf_frame_section->name);
       break;
@@ -2205,8 +2204,7 @@ dwarf2_build_frame_info (struct objfile *objfile)
   fde_table.entries = NULL;
 
   /* Build a minimal decoding of the DWARF2 compilation unit.  */
-  unit = (struct comp_unit *) obstack_alloc (&objfile->objfile_obstack,
-					     sizeof (struct comp_unit));
+  unit = XOBNEW (&objfile->objfile_obstack, comp_unit);
   unit->abfd = objfile->obfd;
   unit->objfile = objfile;
   unit->dbase = 0;

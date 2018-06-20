@@ -3859,6 +3859,7 @@ bfd_boolean amiga_final_link PARAMS ((bfd *, struct bfd_link_info *));
 #define amiga_bfd_discard_group                    bfd_generic_discard_group
 #define amiga_section_already_linked               _bfd_generic_section_already_linked
 #define amiga_bfd_define_common_symbol             bfd_generic_define_common_symbol
+#define amiga_bfd_link_hide_symbol _bfd_generic_link_hide_symbol
 #define amiga_bfd_define_start_stop                bfd_generic_define_start_stop
 
 

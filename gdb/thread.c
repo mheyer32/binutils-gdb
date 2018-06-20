@@ -36,7 +36,7 @@
 #include <sys/types.h>
 #include <signal.h>
 #include "ui-out.h"
-#include "observer.h"
+#include "observable.h"
 #include "annotate.h"
 #include "cli/cli-decode.h"
 #include "gdb_regex.h"
@@ -207,7 +207,7 @@ set_thread_exited (thread_info *tp, int silent)
 
   if (tp->state != THREAD_EXITED)
     {
-      observer_notify_thread_exit (tp, silent);
+      gdb::observers::thread_exit.notify (tp, silent);
 
       /* Tag it as exited.  */
       tp->state = THREAD_EXITED;
@@ -299,7 +299,7 @@ add_thread_silent (ptid_t ptid)
 	  tp->state = THREAD_STOPPED;
 	  switch_to_thread (ptid);
 
-	  observer_notify_new_thread (tp);
+	  gdb::observers::new_thread.notify (tp);
 
 	  /* All done.  */
 	  return tp;
@@ -310,7 +310,7 @@ add_thread_silent (ptid_t ptid)
     }
 
   tp = new_thread (inf, ptid);
-  observer_notify_new_thread (tp);
+  gdb::observers::new_thread.notify (tp);
 
   return tp;
 }
@@ -783,7 +783,7 @@ value_in_thread_stack_temporaries (struct value *val, ptid_t ptid)
   struct thread_info *tp = find_thread_ptid (ptid);
 
   gdb_assert (tp != NULL && tp->stack_temporaries_enabled);
-  for (struct value *v : tp->stack_temporaries)
+  for (value *v : tp->stack_temporaries)
     if (v == val)
       return true;
 
@@ -821,7 +821,7 @@ thread_change_ptid (ptid_t old_ptid, ptid_t new_ptid)
   tp = find_thread_ptid (old_ptid);
   tp->ptid = new_ptid;
 
-  observer_notify_thread_ptid_changed (old_ptid, new_ptid);
+  gdb::observers::thread_ptid_changed.notify (old_ptid, new_ptid);
 }
 
 /* See gdbthread.h.  */
@@ -901,7 +901,7 @@ set_running (ptid_t ptid, int running)
 	any_started = 1;
     }
   if (any_started)
-    observer_notify_target_resumed (ptid);
+    gdb::observers::target_resumed.notify (ptid);
 }
 
 static int
@@ -1000,7 +1000,7 @@ set_stop_requested (ptid_t ptid, int stop)
   /* Call the stop requested observer so other components of GDB can
      react to this request.  */
   if (stop)
-    observer_notify_thread_stop_requested (ptid);
+    gdb::observers::thread_stop_requested.notify (ptid);
 }
 
 void
@@ -1037,17 +1037,7 @@ finish_thread_state (ptid_t ptid)
     }
 
   if (any_started)
-    observer_notify_target_resumed (ptid);
-}
-
-void
-finish_thread_state_cleanup (void *arg)
-{
-  ptid_t *ptid_p = (ptid_t *) arg;
-
-  gdb_assert (arg);
-
-  finish_thread_state (*ptid_p);
+    gdb::observers::target_resumed.notify (ptid);
 }
 
 /* See gdbthread.h.  */
@@ -1592,12 +1582,12 @@ tp_array_compar (const thread_info *a, const thread_info *b)
 }
 
 /* Apply a GDB command to a list of threads.  List syntax is a whitespace
-   seperated list of numbers, or ranges, or the keyword `all'.  Ranges consist
-   of two numbers seperated by a hyphen.  Examples:
+   separated list of numbers, or ranges, or the keyword `all'.  Ranges consist
+   of two numbers separated by a hyphen.  Examples:
 
    thread apply 1 2 7 4 backtrace       Apply backtrace cmd to threads 1,2,7,4
    thread apply 2-7 9 p foo(1)  Apply p foo(1) cmd to threads 2->7 & 9
-   thread apply all p x/i $pc   Apply x/i $pc cmd to all threads.  */
+   thread apply all x/i $pc   Apply x/i $pc cmd to all threads.  */
 
 static void
 thread_apply_all_command (const char *cmd, int from_tty)
@@ -1743,8 +1733,7 @@ thread_apply_command (const char *tidlist, int from_tty)
     }
 }
 
-/* Switch to the specified thread.  Will dispatch off to thread_apply_command
-   if prefix of arg is `apply'.  */
+/* Switch to the specified thread, or print the current thread.  */
 
 void
 thread_command (const char *tidstr, int from_tty)
@@ -1786,8 +1775,8 @@ thread_command (const char *tidstr, int from_tty)
 	}
       else
 	{
-	  observer_notify_user_selected_context_changed (USER_SELECTED_THREAD
-							 | USER_SELECTED_FRAME);
+	  gdb::observers::user_selected_context_changed.notify
+	    (USER_SELECTED_THREAD | USER_SELECTED_FRAME);
 	}
     }
 }
@@ -2039,15 +2028,17 @@ The new thread ID must be currently known."),
 		  &thread_cmd_list, "thread ", 1, &cmdlist);
 
   add_prefix_cmd ("apply", class_run, thread_apply_command,
-		  _("Apply a command to a list of threads."),
+		  _("Apply a command to a list of threads.\n\
+Usage: thread apply ID... COMMAND\n\
+ID is a space-separated list of IDs of threads to apply COMMAND on."),
 		  &thread_apply_list, "thread apply ", 1, &thread_cmd_list);
 
   add_cmd ("all", class_run, thread_apply_all_command,
 	   _("\
 Apply a command to all threads.\n\
 \n\
-Usage: thread apply all [-ascending] <command>\n\
--ascending: Call <command> for all threads in ascending order.\n\
+Usage: thread apply all [-ascending] COMMAND\n\
+-ascending: Call COMMAND for all threads in ascending order.\n\
             The default is descending order.\
 "),
 	   &thread_apply_list);

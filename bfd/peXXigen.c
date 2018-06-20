@@ -1018,7 +1018,7 @@ _bfd_XXi_swap_scnhdr_out (bfd * abfd, void * in, void * out)
 
     typedef struct
     {
-      const char *	section_name;
+      char section_name[SCNNMLEN];
       unsigned long	must_have;
     }
     pe_required_section_flags;
@@ -1037,7 +1037,6 @@ _bfd_XXi_swap_scnhdr_out (bfd * abfd, void * in, void * out)
 	{ ".text" , IMAGE_SCN_MEM_READ | IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE },
 	{ ".tls",   IMAGE_SCN_MEM_READ | IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_WRITE },
 	{ ".xdata", IMAGE_SCN_MEM_READ | IMAGE_SCN_CNT_INITIALIZED_DATA },
-	{ NULL, 0}
       };
 
     pe_required_section_flags * p;
@@ -1050,10 +1049,12 @@ _bfd_XXi_swap_scnhdr_out (bfd * abfd, void * in, void * out)
        by ld --enable-auto-import (if auto-import is actually needed),
        by ld --omagic, or by obcopy --writable-text.  */
 
-    for (p = known_sections; p->section_name; p++)
-      if (strcmp (scnhdr_int->s_name, p->section_name) == 0)
+    for (p = known_sections;
+	 p < known_sections + ARRAY_SIZE (known_sections);
+	 p++)
+      if (memcmp (scnhdr_int->s_name, p->section_name, SCNNMLEN) == 0)
 	{
-	  if (strcmp (scnhdr_int->s_name, ".text")
+	  if (memcmp (scnhdr_int->s_name, ".text", sizeof ".text")
 	      || (bfd_get_file_flags (abfd) & WP_TEXT))
 	    scnhdr_int->s_flags &= ~IMAGE_SCN_MEM_WRITE;
 	  scnhdr_int->s_flags |= p->must_have;
@@ -1066,7 +1067,7 @@ _bfd_XXi_swap_scnhdr_out (bfd * abfd, void * in, void * out)
   if (coff_data (abfd)->link_info
       && ! bfd_link_relocatable (coff_data (abfd)->link_info)
       && ! bfd_link_pic (coff_data (abfd)->link_info)
-      && strcmp (scnhdr_int->s_name, ".text") == 0)
+      && memcmp (scnhdr_int->s_name, ".text", sizeof ".text") == 0)
     {
       /* By inference from looking at MS output, the 32 bit field
 	 which is the combination of the number_of_relocs and
@@ -1437,7 +1438,7 @@ pe_print_idata (bfd * abfd, void * vfile)
       if (hint_addr == 0)
 	hint_addr = first_thunk;
 
-      if (hint_addr != 0)
+      if (hint_addr != 0 && hint_addr - adj < datasize)
 	{
 	  bfd_byte *ft_data;
 	  asection *ft_section;
@@ -1670,7 +1671,7 @@ pe_print_edata (bfd * abfd, void * vfile)
     }
 
   /* PR 17512: Handle corrupt PE binaries.  */
-  if (datasize < 36)
+  if (datasize < 40)
     {
       fprintf (file,
 	       /* xgettext:c-format */
@@ -2991,6 +2992,15 @@ _bfd_XX_bfd_copy_private_bfd_data_common (bfd * ibfd, bfd * obfd)
 		   "exceeds space left in section (%" PRIx64 ")"),
 		 obfd, ope->pe_opthdr.DataDirectory[PE_DEBUG_DATA].Size,
 		 (uint64_t) (section->size - (addr - section->vma)));
+	      return FALSE;
+	    }
+	  /* PR 23110.  */
+	  else if (ope->pe_opthdr.DataDirectory[PE_DEBUG_DATA].Size < 0)
+	    {
+	      /* xgettext:c-format */
+	      _bfd_error_handler
+		(_("%pB: Data Directory size (%#lx) is negative"),
+		 obfd, ope->pe_opthdr.DataDirectory[PE_DEBUG_DATA].Size);
 	      return FALSE;
 	    }
 

@@ -3582,7 +3582,7 @@ dump_bfd (bfd *abfd)
     printf (_("\n%s:     file format %s\n"), bfd_get_filename (abfd),
 	    abfd->xvec->name);
   if (dump_ar_hdrs)
-    print_arelt_descr (stdout, abfd, TRUE);
+    print_arelt_descr (stdout, abfd, TRUE, FALSE);
   if (dump_file_header)
     dump_bfd_header (abfd);
   if (dump_private_headers)
@@ -3646,8 +3646,8 @@ dump_bfd (bfd *abfd)
 	      exit_status = 1;
 	    }
 	}
-      /* PR 6483: If there was no STABS or IEEE debug
-	 info in the file, try DWARF instead.  */
+      /* PR 6483: If there was no STABS debug info in the file, try
+	 DWARF instead.  */
       else if (! dump_dwarf_section_info)
 	{
 	  dwarf_select_sections_all ();

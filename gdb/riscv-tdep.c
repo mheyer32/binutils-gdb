@@ -53,7 +53,7 @@
 #include "common-defs.h"
 #include "opcode/riscv-opc.h"
 #include "cli/cli-decode.h"
-#include "observer.h"
+#include "observable.h"
 
 /* The stack must be 16-byte aligned.  */
 #define SP_ALIGNMENT 16
@@ -369,6 +369,7 @@ riscv_isa_xlen (struct gdbarch *gdbarch)
     {
     default:
       warning (_("unknown xlen size, assuming 4 bytes"));
+      /* Fall through.  */
     case 1:
       return 4;
     case 2:
@@ -446,7 +447,7 @@ riscv_sw_breakpoint_from_kind (struct gdbarch *gdbarch, int kind, int *size)
     case 4:
       return ebreak;
     default:
-      gdb_assert_not_reached ("unhandled breakpoint kind");
+      gdb_assert_not_reached (_("unhandled breakpoint kind"));
     }
 }
 
@@ -481,7 +482,8 @@ riscv_register_name (struct gdbarch *gdbarch, int regnum)
     {
       static char buf[20];
 
-      sprintf (buf, "csr%d", regnum - RISCV_FIRST_CSR_REGNUM);
+      xsnprintf (buf, sizeof (buf), "csr%d",
+		 regnum - RISCV_FIRST_CSR_REGNUM);
       return buf;
     }
 
@@ -1049,12 +1051,10 @@ riscv_insn::fetch_instruction (struct gdbarch *gdbarch,
 
   /* If we need more, grab it now.  */
   instlen = riscv_insn_length (buf[0]);
+  gdb_assert (instlen <= sizeof (buf));
   *len = instlen;
-  if (instlen > sizeof (buf))
-    internal_error (__FILE__, __LINE__,
-		    _("%s: riscv_insn_length returned %i"),
-		    __func__, instlen);
-  else if (instlen > 2)
+
+  if (instlen > 2)
     {
       status = target_read_memory (addr + 2, buf + 2, instlen - 2);
       if (status)
@@ -2009,7 +2009,7 @@ riscv_print_arg_location (ui_file *stream, struct gdbarch *gdbarch,
       break;
 
     default:
-      error ("unknown argument location type");
+      gdb_assert_not_reached (_("unknown argument location type"));
     }
 }
 
@@ -2103,7 +2103,7 @@ riscv_push_dummy_call (struct gdbarch *gdbarch,
       gdb_byte buf[sizeof (LONGEST)];
 
       store_unsigned_integer (buf, call_info.xlen, byte_order, struct_addr);
-      regcache_cooked_write (regcache, RISCV_A0_REGNUM, buf);
+      regcache->cooked_write (RISCV_A0_REGNUM, buf);
     }
 
   for (i = 0; i < nargs; ++i)
@@ -2124,9 +2124,7 @@ riscv_push_dummy_call (struct gdbarch *gdbarch,
 	    gdb_assert (info->argloc[0].c_length <= info->length);
 	    memset (tmp, 0, sizeof (tmp));
 	    memcpy (tmp, info->contents, info->argloc[0].c_length);
-	    regcache_cooked_write (regcache,
-				   info->argloc[0].loc_data.regno,
-				   tmp);
+	    regcache->cooked_write (info->argloc[0].loc_data.regno, tmp);
 	    second_arg_length =
 	      ((info->argloc[0].c_length < info->length)
 	       ? info->argloc[1].c_length : 0);
@@ -2149,7 +2147,7 @@ riscv_push_dummy_call (struct gdbarch *gdbarch,
 	  break;
 
 	default:
-	  error ("unknown argument location type");
+	  gdb_assert_not_reached (_("unknown argument location type"));
 	}
 
       if (second_arg_length > 0)
@@ -2163,9 +2161,7 @@ riscv_push_dummy_call (struct gdbarch *gdbarch,
 		gdb_assert (second_arg_length <= call_info.xlen);
 		memset (tmp, 0, sizeof (tmp));
 		memcpy (tmp, second_arg_data, second_arg_length);
-		regcache_cooked_write (regcache,
-				       info->argloc[1].loc_data.regno,
-				       tmp);
+		regcache->cooked_write (info->argloc[1].loc_data.regno, tmp);
 	      }
 	      break;
 
@@ -2248,10 +2244,10 @@ riscv_return_value (struct gdbarch  *gdbarch,
 	      regnum = info.argloc[0].loc_data.regno;
 
 	      if (readbuf)
-		regcache_cooked_read (regcache, regnum, readbuf);
+		regcache->cooked_read (regnum, readbuf);
 
 	      if (writebuf)
-		regcache_cooked_write (regcache, regnum, writebuf);
+		regcache->cooked_write (regnum, writebuf);
 
 	      /* A return value in register can have a second part in a
 		 second register.  */
@@ -2265,13 +2261,13 @@ riscv_return_value (struct gdbarch  *gdbarch,
 		      if (readbuf)
 			{
 			  readbuf += info.argloc[1].c_offset;
-			  regcache_cooked_read (regcache, regnum, readbuf);
+			  regcache->cooked_read (regnum, readbuf);
 			}
 
 		      if (writebuf)
 			{
 			  writebuf += info.argloc[1].c_offset;
-			  regcache_cooked_write (regcache, regnum, writebuf);
+			  regcache->cooked_write (regnum, writebuf);
 			}
 		      break;
 
@@ -2642,8 +2638,8 @@ _initialize_riscv_tdep (void)
     = register_inferior_data_with_cleanup (NULL, riscv_inferior_data_cleanup);
 
   /* Observers used to invalidate the inferior data when needed.  */
-  observer_attach_inferior_exit (riscv_invalidate_inferior_data);
-  observer_attach_inferior_appeared (riscv_invalidate_inferior_data);
+  gdb::observers::inferior_exit.attach (riscv_invalidate_inferior_data);
+  gdb::observers::inferior_appeared.attach (riscv_invalidate_inferior_data);
 
   /* Add root prefix command for all "set debug riscv" and "show debug
      riscv" commands.  */

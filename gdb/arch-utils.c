@@ -727,7 +727,6 @@ gdbarch_info_init (struct gdbarch_info *info)
   memset (info, 0, sizeof (struct gdbarch_info));
   info->byte_order = BFD_ENDIAN_UNKNOWN;
   info->byte_order_for_code = info->byte_order;
-  info->osabi = GDB_OSABI_UNINITIALIZED;
 }
 
 /* Similar to init, but this time fill in the blanks.  Information is
@@ -769,12 +768,15 @@ gdbarch_info_fill (struct gdbarch_info *info)
   if (info->byte_order == BFD_ENDIAN_UNKNOWN)
     info->byte_order = default_byte_order;
   info->byte_order_for_code = info->byte_order;
+  /* Wire the default to the last selected byte order.  */
+  default_byte_order = info->byte_order;
 
   /* "(gdb) set osabi ...".  Handled by gdbarch_lookup_osabi.  */
   /* From the manual override, or from file.  */
-  if (info->osabi == GDB_OSABI_UNINITIALIZED)
+  if (info->osabi == GDB_OSABI_UNKNOWN)
     info->osabi = gdbarch_lookup_osabi (info->abfd);
   /* From the target.  */
+
   if (info->osabi == GDB_OSABI_UNKNOWN && info->target_desc != NULL)
     info->osabi = tdesc_osabi (info->target_desc);
   /* From the configured default.  */
@@ -782,6 +784,9 @@ gdbarch_info_fill (struct gdbarch_info *info)
   if (info->osabi == GDB_OSABI_UNKNOWN)
     info->osabi = GDB_OSABI_DEFAULT;
 #endif
+  /* If we still don't know which osabi to pick, pick none.  */
+  if (info->osabi == GDB_OSABI_UNKNOWN)
+    info->osabi = GDB_OSABI_NONE;
 
   /* Must have at least filled in the architecture.  */
   gdb_assert (info->bfd_arch_info != NULL);
@@ -943,7 +948,7 @@ default_guess_tracepoint_registers (struct gdbarch *gdbarch,
   regs = (gdb_byte *) alloca (register_size (gdbarch, pc_regno));
   store_unsigned_integer (regs, register_size (gdbarch, pc_regno),
 			  gdbarch_byte_order (gdbarch), addr);
-  regcache_raw_supply (regcache, pc_regno, regs);
+  regcache->raw_supply (pc_regno, regs);
 }
 
 int
@@ -974,6 +979,22 @@ gdbarch_skip_prologue_noexcept (gdbarch *gdbarch, CORE_ADDR pc) noexcept
   END_CATCH
 
   return new_pc;
+}
+
+/* See arch-utils.h.  */
+
+bool
+default_in_indirect_branch_thunk (gdbarch *gdbarch, CORE_ADDR pc)
+{
+  return false;
+}
+
+/* See arch-utils.h.  */
+
+ULONGEST
+default_type_align (struct gdbarch *gdbarch, struct type *type)
+{
+  return type_length_units (check_typedef (type));
 }
 
 void

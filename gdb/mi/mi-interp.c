@@ -30,7 +30,7 @@
 #include "mi-out.h"
 #include "mi-console.h"
 #include "mi-common.h"
-#include "observer.h"
+#include "observable.h"
 #include "gdbthread.h"
 #include "solist.h"
 #include "objfiles.h"
@@ -106,16 +106,13 @@ display_mi_prompt (struct mi_interp *mi)
 static struct mi_interp *
 as_mi_interp (struct interp *interp)
 {
-  if (interp_ui_out (interp)->is_mi_like_p ())
-    return (struct mi_interp *) interp;
-  return NULL;
+  return dynamic_cast<mi_interp *> (interp);
 }
 
 void
 mi_interp::init (bool top_level)
 {
   mi_interp *mi = this;
-  const char *name;
   int mi_version;
 
   /* Store the current output channel, so that we can create a console
@@ -131,16 +128,15 @@ mi_interp::init (bool top_level)
   mi->targ = new mi_console_file (mi->raw_stdout, "@", '"');
   mi->event_channel = new mi_console_file (mi->raw_stdout, "=", 0);
 
-  name = interp_name (this);
   /* INTERP_MI selects the most recent released version.  "mi2" was
      released as part of GDB 6.0.  */
-  if (strcmp (name, INTERP_MI) == 0)
+  if (strcmp (name (), INTERP_MI) == 0)
     mi_version = 2;
-  else if (strcmp (name, INTERP_MI1) == 0)
+  else if (strcmp (name (), INTERP_MI1) == 0)
     mi_version = 1;
-  else if (strcmp (name, INTERP_MI2) == 0)
+  else if (strcmp (name (), INTERP_MI2) == 0)
     mi_version = 2;
-  else if (strcmp (name, INTERP_MI3) == 0)
+  else if (strcmp (name (), INTERP_MI3) == 0)
     mi_version = 3;
   else
     gdb_assert_not_reached ("unhandled MI version");
@@ -627,7 +623,7 @@ mi_on_normal_stop_1 (struct bpstats *bs, int print_frame)
   /* Since this can be called when CLI command is executing,
      using cli interpreter, be sure to use MI uiout for output,
      not the current one.  */
-  struct ui_out *mi_uiout = interp_ui_out (top_level_interpreter ());
+  struct ui_out *mi_uiout = top_level_interpreter ()->interp_ui_out ();
   struct mi_interp *mi = (struct mi_interp *) top_level_interpreter ();
 
   if (print_frame)
@@ -760,7 +756,7 @@ mi_tsv_created (const struct trace_state_variable *tsv)
 
       fprintf_unfiltered (mi->event_channel, "tsv-created,"
 			  "name=\"%s\",initial=\"%s\"\n",
-			  tsv->name, plongest (tsv->initial_value));
+			  tsv->name.c_str (), plongest (tsv->initial_value));
 
       gdb_flush (mi->event_channel);
     }
@@ -783,7 +779,7 @@ mi_tsv_deleted (const struct trace_state_variable *tsv)
 
       if (tsv != NULL)
 	fprintf_unfiltered (mi->event_channel, "tsv-deleted,"
-			    "name=\"%s\"\n", tsv->name);
+			    "name=\"%s\"\n", tsv->name.c_str ());
       else
 	fprintf_unfiltered (mi->event_channel, "tsv-deleted\n");
 
@@ -804,7 +800,7 @@ mi_tsv_modified (const struct trace_state_variable *tsv)
       if (mi == NULL)
 	continue;
 
-      mi_uiout = interp_ui_out (top_level_interpreter ());
+      mi_uiout = top_level_interpreter ()->interp_ui_out ();
 
       target_terminal::scoped_restore_terminal_state term_state;
       target_terminal::ours_for_output ();
@@ -831,7 +827,7 @@ mi_tsv_modified (const struct trace_state_variable *tsv)
 static void
 mi_print_breakpoint_for_event (struct mi_interp *mi, breakpoint *bp)
 {
-  ui_out *mi_uiout = interp_ui_out (mi);
+  ui_out *mi_uiout = mi->interp_ui_out ();
 
   /* We want the output from print_breakpoint to go to
      mi->event_channel.  One approach would be to just call
@@ -1092,7 +1088,7 @@ mi_solib_loaded (struct so_list *solib)
       if (mi == NULL)
 	continue;
 
-      uiout = interp_ui_out (top_level_interpreter ());
+      uiout = top_level_interpreter ()->interp_ui_out ();
 
       target_terminal::scoped_restore_terminal_state term_state;
       target_terminal::ours_for_output ();
@@ -1120,7 +1116,7 @@ mi_solib_unloaded (struct so_list *solib)
       if (mi == NULL)
 	continue;
 
-      uiout = interp_ui_out (top_level_interpreter ());
+      uiout = top_level_interpreter ()->interp_ui_out ();
 
       target_terminal::scoped_restore_terminal_state term_state;
       target_terminal::ours_for_output ();
@@ -1159,7 +1155,7 @@ mi_command_param_changed (const char *param, const char *value)
       if (mi == NULL)
 	continue;
 
-      mi_uiout = interp_ui_out (top_level_interpreter ());
+      mi_uiout = top_level_interpreter ()->interp_ui_out ();
 
       target_terminal::scoped_restore_terminal_state term_state;
       target_terminal::ours_for_output ();
@@ -1195,7 +1191,7 @@ mi_memory_changed (struct inferior *inferior, CORE_ADDR memaddr,
       if (mi == NULL)
 	continue;
 
-      mi_uiout = interp_ui_out (top_level_interpreter ());
+      mi_uiout = top_level_interpreter ()->interp_ui_out ();
 
       target_terminal::scoped_restore_terminal_state term_state;
       target_terminal::ours_for_output ();
@@ -1248,7 +1244,7 @@ mi_user_selected_context_changed (user_selected_what selection)
       if (mi == NULL)
 	continue;
 
-      mi_uiout = interp_ui_out (top_level_interpreter ());
+      mi_uiout = top_level_interpreter ()->interp_ui_out ();
 
       mi_uiout->redirect (mi->event_channel);
       ui_out_redirect_pop redirect_popper (mi_uiout);
@@ -1353,33 +1349,33 @@ _initialize_mi_interp (void)
   interp_factory_register (INTERP_MI3, mi_interp_factory);
   interp_factory_register (INTERP_MI, mi_interp_factory);
 
-  observer_attach_signal_received (mi_on_signal_received);
-  observer_attach_end_stepping_range (mi_on_end_stepping_range);
-  observer_attach_signal_exited (mi_on_signal_exited);
-  observer_attach_exited (mi_on_exited);
-  observer_attach_no_history (mi_on_no_history);
-  observer_attach_new_thread (mi_new_thread);
-  observer_attach_thread_exit (mi_thread_exit);
-  observer_attach_inferior_added (mi_inferior_added);
-  observer_attach_inferior_appeared (mi_inferior_appeared);
-  observer_attach_inferior_exit (mi_inferior_exit);
-  observer_attach_inferior_removed (mi_inferior_removed);
-  observer_attach_record_changed (mi_record_changed);
-  observer_attach_normal_stop (mi_on_normal_stop);
-  observer_attach_target_resumed (mi_on_resume);
-  observer_attach_solib_loaded (mi_solib_loaded);
-  observer_attach_solib_unloaded (mi_solib_unloaded);
-  observer_attach_about_to_proceed (mi_about_to_proceed);
-  observer_attach_traceframe_changed (mi_traceframe_changed);
-  observer_attach_tsv_created (mi_tsv_created);
-  observer_attach_tsv_deleted (mi_tsv_deleted);
-  observer_attach_tsv_modified (mi_tsv_modified);
-  observer_attach_breakpoint_created (mi_breakpoint_created);
-  observer_attach_breakpoint_deleted (mi_breakpoint_deleted);
-  observer_attach_breakpoint_modified (mi_breakpoint_modified);
-  observer_attach_command_param_changed (mi_command_param_changed);
-  observer_attach_memory_changed (mi_memory_changed);
-  observer_attach_sync_execution_done (mi_on_sync_execution_done);
-  observer_attach_user_selected_context_changed
+  gdb::observers::signal_received.attach (mi_on_signal_received);
+  gdb::observers::end_stepping_range.attach (mi_on_end_stepping_range);
+  gdb::observers::signal_exited.attach (mi_on_signal_exited);
+  gdb::observers::exited.attach (mi_on_exited);
+  gdb::observers::no_history.attach (mi_on_no_history);
+  gdb::observers::new_thread.attach (mi_new_thread);
+  gdb::observers::thread_exit.attach (mi_thread_exit);
+  gdb::observers::inferior_added.attach (mi_inferior_added);
+  gdb::observers::inferior_appeared.attach (mi_inferior_appeared);
+  gdb::observers::inferior_exit.attach (mi_inferior_exit);
+  gdb::observers::inferior_removed.attach (mi_inferior_removed);
+  gdb::observers::record_changed.attach (mi_record_changed);
+  gdb::observers::normal_stop.attach (mi_on_normal_stop);
+  gdb::observers::target_resumed.attach (mi_on_resume);
+  gdb::observers::solib_loaded.attach (mi_solib_loaded);
+  gdb::observers::solib_unloaded.attach (mi_solib_unloaded);
+  gdb::observers::about_to_proceed.attach (mi_about_to_proceed);
+  gdb::observers::traceframe_changed.attach (mi_traceframe_changed);
+  gdb::observers::tsv_created.attach (mi_tsv_created);
+  gdb::observers::tsv_deleted.attach (mi_tsv_deleted);
+  gdb::observers::tsv_modified.attach (mi_tsv_modified);
+  gdb::observers::breakpoint_created.attach (mi_breakpoint_created);
+  gdb::observers::breakpoint_deleted.attach (mi_breakpoint_deleted);
+  gdb::observers::breakpoint_modified.attach (mi_breakpoint_modified);
+  gdb::observers::command_param_changed.attach (mi_command_param_changed);
+  gdb::observers::memory_changed.attach (mi_memory_changed);
+  gdb::observers::sync_execution_done.attach (mi_on_sync_execution_done);
+  gdb::observers::user_selected_context_changed.attach
     (mi_user_selected_context_changed);
 }

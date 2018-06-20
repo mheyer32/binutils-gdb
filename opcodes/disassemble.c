@@ -41,12 +41,8 @@
 #define ARCH_frv
 #define ARCH_ft32
 #define ARCH_h8300
-#define ARCH_h8500
 #define ARCH_hppa
-#define ARCH_i370
 #define ARCH_i386
-#define ARCH_i860
-#define ARCH_i960
 #define ARCH_ia64
 #define ARCH_ip2k
 #define ARCH_iq2000
@@ -56,7 +52,6 @@
 #define ARCH_m68hc11
 #define ARCH_m68hc12
 #define ARCH_m68k
-#define ARCH_m88k
 #define ARCH_mcore
 #define ARCH_mep
 #define ARCH_metag
@@ -69,6 +64,7 @@
 #define ARCH_mt
 #define ARCH_msp430
 #define ARCH_nds32
+#define ARCH_nfp
 #define ARCH_nios2
 #define ARCH_ns32k
 #define ARCH_or1k
@@ -95,7 +91,6 @@
 #define ARCH_v850
 #define ARCH_vax
 #define ARCH_visium
-#define ARCH_w65
 #define ARCH_wasm32
 #define ARCH_xstormy16
 #define ARCH_xc16x
@@ -103,7 +98,6 @@
 #define ARCH_xtensa
 #define ARCH_z80
 #define ARCH_z8k
-#define INCLUDE_SHMEDIA
 #endif
 
 #ifdef ARCH_m32c
@@ -199,19 +193,9 @@ disassembler (enum bfd_architecture a,
 	disassemble = print_insn_h8300;
       break;
 #endif
-#ifdef ARCH_h8500
-    case bfd_arch_h8500:
-      disassemble = print_insn_h8500;
-      break;
-#endif
 #ifdef ARCH_hppa
     case bfd_arch_hppa:
       disassemble = print_insn_hppa;
-      break;
-#endif
-#ifdef ARCH_i370
-    case bfd_arch_i370:
-      disassemble = print_insn_i370;
       break;
 #endif
 #ifdef ARCH_i386
@@ -220,16 +204,6 @@ disassembler (enum bfd_architecture a,
     case bfd_arch_l1om:
     case bfd_arch_k1om:
       disassemble = print_insn_i386;
-      break;
-#endif
-#ifdef ARCH_i860
-    case bfd_arch_i860:
-      disassemble = print_insn_i860;
-      break;
-#endif
-#ifdef ARCH_i960
-    case bfd_arch_i960:
-      disassemble = print_insn_i960;
       break;
 #endif
 #ifdef ARCH_ia64
@@ -277,14 +251,14 @@ disassembler (enum bfd_architecture a,
       disassemble = print_insn_m9s12xg;
       break;
 #endif
+#if defined(ARCH_s12z)
+    case bfd_arch_s12z:
+      disassemble = print_insn_s12z;
+      break;
+#endif
 #ifdef ARCH_m68k
     case bfd_arch_m68k:
       disassemble = print_insn_m68k;
-      break;
-#endif
-#ifdef ARCH_m88k
-    case bfd_arch_m88k:
-      disassemble = print_insn_m88k;
       break;
 #endif
 #ifdef ARCH_mt
@@ -305,6 +279,11 @@ disassembler (enum bfd_architecture a,
 #ifdef ARCH_nds32
     case bfd_arch_nds32:
       disassemble = print_insn_nds32;
+      break;
+#endif
+#ifdef ARCH_nfp
+    case bfd_arch_nfp:
+      disassemble = print_insn_nfp;
       break;
 #endif
 #ifdef ARCH_ns32k
@@ -470,11 +449,6 @@ disassembler (enum bfd_architecture a,
       disassemble = print_insn_v850;
       break;
 #endif
-#ifdef ARCH_w65
-    case bfd_arch_w65:
-      disassemble = print_insn_w65;
-      break;
-#endif
 #ifdef ARCH_wasm32
     case bfd_arch_wasm32:
       disassemble = print_insn_wasm32;
@@ -573,6 +547,9 @@ disassembler_usage (FILE *stream ATTRIBUTE_UNUSED)
 #endif
 #ifdef ARCH_mips
   print_mips_disassembler_options (stream);
+#endif
+#ifdef ARCH_nfp
+  print_nfp_disassembler_options (stream);
 #endif
 #ifdef ARCH_powerpc
   print_ppc_disassembler_options (stream);

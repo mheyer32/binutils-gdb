@@ -46,7 +46,7 @@
 #include "addrmap.h"
 #include "arch-utils.h"
 #include "exec.h"
-#include "observer.h"
+#include "observable.h"
 #include "complaints.h"
 #include "psymtab.h"
 #include "solist.h"
@@ -144,18 +144,14 @@ get_objfile_bfd_data (struct objfile *objfile, struct bfd *abfd)
 	  storage
 	    = ((struct objfile_per_bfd_storage *)
 	       bfd_alloc (abfd, sizeof (struct objfile_per_bfd_storage)));
+	  /* objfile_per_bfd_storage is not trivially constructible, must
+	     call the ctor manually.  */
+	  storage = new (storage) objfile_per_bfd_storage ();
 	  set_bfd_data (abfd, objfiles_bfd_data, storage);
 	}
       else
-	{
-	  storage = (objfile_per_bfd_storage *)
-	    obstack_alloc (&objfile->objfile_obstack,
-			   sizeof (objfile_per_bfd_storage));
-	}
-
-      /* objfile_per_bfd_storage is not trivially constructible, must
-	 call the ctor manually.  */
-      storage = new (storage) objfile_per_bfd_storage ();
+	storage
+	  = obstack_new<objfile_per_bfd_storage> (&objfile->objfile_obstack);
 
       /* Look up the gdbarch associated with the BFD.  */
       if (abfd != NULL)
@@ -269,8 +265,7 @@ objfile_register_static_link (struct objfile *objfile,
   slot = htab_find_slot (objfile->static_links, &lookup_entry, INSERT);
   gdb_assert (*slot == NULL);
 
-  entry = (struct static_link_htab_entry *) obstack_alloc
-	    (&objfile->objfile_obstack, sizeof (*entry));
+  entry = XOBNEW (&objfile->objfile_obstack, static_link_htab_entry);
   entry->block = block;
   entry->static_link = static_link;
   *slot = (void *) entry;
@@ -617,7 +612,7 @@ free_objfile_separate_debug (struct objfile *objfile)
 objfile::~objfile ()
 {
   /* First notify observers that this objfile is about to be freed.  */
-  observer_notify_free_objfile (this);
+  gdb::observers::free_objfile.notify (this);
 
   /* Free all separate debug objfiles.  */
   free_objfile_separate_debug (this);
@@ -906,16 +901,13 @@ objfile_relocate (struct objfile *objfile,
        debug_objfile;
        debug_objfile = objfile_separate_debug_iterate (objfile, debug_objfile))
     {
-      struct section_addr_info *objfile_addrs;
-      struct cleanup *my_cleanups;
-
-      objfile_addrs = build_section_addr_info_from_objfile (objfile);
-      my_cleanups = make_cleanup (xfree, objfile_addrs);
+      section_addr_info objfile_addrs
+	= build_section_addr_info_from_objfile (objfile);
 
       /* Here OBJFILE_ADDRS contain the correct absolute addresses, the
 	 relative ones must be already created according to debug_objfile.  */
 
-      addr_info_make_relative (objfile_addrs, debug_objfile->obfd);
+      addr_info_make_relative (&objfile_addrs, debug_objfile->obfd);
 
       gdb_assert (debug_objfile->num_sections
 		  == gdb_bfd_count_sections (debug_objfile->obfd));
@@ -926,8 +918,6 @@ objfile_relocate (struct objfile *objfile,
 					     objfile_addrs);
 
       changed |= objfile_relocate1 (debug_objfile, new_debug_offsets.data ());
-
-      do_cleanups (my_cleanups);
     }
 
   /* Relocate breakpoints as necessary, after things are relocated.  */
@@ -1294,8 +1284,7 @@ filter_overlapping_sections (struct obj_section **map, int map_size)
 
 	      struct gdbarch *const gdbarch = get_objfile_arch (objf1);
 
-	      complaint (&symfile_complaints,
-			 _("unexpected overlap between:\n"
+	      complaint (_("unexpected overlap between:\n"
 			   " (A) section `%s' from `%s' [%s, %s)\n"
 			   " (B) section `%s' from `%s' [%s, %s).\n"
 			   "Will ignore section B"),

@@ -44,7 +44,7 @@
 #include "remote.h"
 #include "target-descriptions.h"
 #include "user-regs.h"
-#include "observer.h"
+#include "observable.h"
 
 #include "arch/arm.h"
 #include "arch/arm-get-next-pcs.h"
@@ -2040,50 +2040,40 @@ arm_obj_section_from_vma (struct objfile *objfile, bfd_vma vma)
 static void
 arm_exidx_new_objfile (struct objfile *objfile)
 {
-  struct cleanup *cleanups;
   struct arm_exidx_data *data;
   asection *exidx, *extab;
   bfd_vma exidx_vma = 0, extab_vma = 0;
-  bfd_size_type exidx_size = 0, extab_size = 0;
-  gdb_byte *exidx_data = NULL, *extab_data = NULL;
   LONGEST i;
 
   /* If we've already touched this file, do nothing.  */
   if (!objfile || objfile_data (objfile, arm_exidx_data_key) != NULL)
     return;
-  cleanups = make_cleanup (null_cleanup, NULL);
 
   /* Read contents of exception table and index.  */
   exidx = bfd_get_section_by_name (objfile->obfd, ELF_STRING_ARM_unwind);
+  gdb::byte_vector exidx_data;
   if (exidx)
     {
       exidx_vma = bfd_section_vma (objfile->obfd, exidx);
-      exidx_size = bfd_get_section_size (exidx);
-      exidx_data = (gdb_byte *) xmalloc (exidx_size);
-      make_cleanup (xfree, exidx_data);
+      exidx_data.resize (bfd_get_section_size (exidx));
 
       if (!bfd_get_section_contents (objfile->obfd, exidx,
-				     exidx_data, 0, exidx_size))
-	{
-	  do_cleanups (cleanups);
-	  return;
-	}
+				     exidx_data.data (), 0,
+				     exidx_data.size ()))
+	return;
     }
 
   extab = bfd_get_section_by_name (objfile->obfd, ".ARM.extab");
+  gdb::byte_vector extab_data;
   if (extab)
     {
       extab_vma = bfd_section_vma (objfile->obfd, extab);
-      extab_size = bfd_get_section_size (extab);
-      extab_data = (gdb_byte *) xmalloc (extab_size);
-      make_cleanup (xfree, extab_data);
+      extab_data.resize (bfd_get_section_size (extab));
 
       if (!bfd_get_section_contents (objfile->obfd, extab,
-				     extab_data, 0, extab_size))
-	{
-	  do_cleanups (cleanups);
-	  return;
-	}
+				     extab_data.data (), 0,
+				     extab_data.size ()))
+	return;
     }
 
   /* Allocate exception table data structure.  */
@@ -2094,11 +2084,12 @@ arm_exidx_new_objfile (struct objfile *objfile)
 				       VEC(arm_exidx_entry_s) *);
 
   /* Fill in exception table.  */
-  for (i = 0; i < exidx_size / 8; i++)
+  for (i = 0; i < exidx_data.size () / 8; i++)
     {
       struct arm_exidx_entry new_exidx_entry;
-      bfd_vma idx = bfd_h_get_32 (objfile->obfd, exidx_data + i * 8);
-      bfd_vma val = bfd_h_get_32 (objfile->obfd, exidx_data + i * 8 + 4);
+      bfd_vma idx = bfd_h_get_32 (objfile->obfd, exidx_data.data () + i * 8);
+      bfd_vma val = bfd_h_get_32 (objfile->obfd,
+				  exidx_data.data () + i * 8 + 4);
       bfd_vma addr = 0, word = 0;
       int n_bytes = 0, n_words = 0;
       struct obj_section *sec;
@@ -2132,10 +2123,10 @@ arm_exidx_new_objfile (struct objfile *objfile)
 	  addr = ((val & 0x7fffffff) ^ 0x40000000) - 0x40000000;
 	  addr += exidx_vma + i * 8 + 4;
 
-	  if (addr >= extab_vma && addr + 4 <= extab_vma + extab_size)
+	  if (addr >= extab_vma && addr + 4 <= extab_vma + extab_data.size ())
 	    {
 	      word = bfd_h_get_32 (objfile->obfd,
-				   extab_data + addr - extab_vma);
+				   extab_data.data () + addr - extab_vma);
 	      addr += 4;
 
 	      if ((word & 0xff000000) == 0x80000000)
@@ -2190,10 +2181,11 @@ arm_exidx_new_objfile (struct objfile *objfile)
 		     byte, followed by the same unwind instructions as the
 		     pre-defined forms.  */
 		  if (gnu_personality
-		      && addr + 4 <= extab_vma + extab_size)
+		      && addr + 4 <= extab_vma + extab_data.size ())
 		    {
 		      word = bfd_h_get_32 (objfile->obfd,
-					   extab_data + addr - extab_vma);
+					   (extab_data.data ()
+					    + addr - extab_vma));
 		      addr += 4;
 		      n_bytes = 3;
 		      n_words = ((word >> 24) & 0xff);
@@ -2204,7 +2196,8 @@ arm_exidx_new_objfile (struct objfile *objfile)
 
       /* Sanity check address.  */
       if (n_words)
-	if (addr < extab_vma || addr + 4 * n_words > extab_vma + extab_size)
+	if (addr < extab_vma
+	    || addr + 4 * n_words > extab_vma + extab_data.size ())
 	  n_words = n_bytes = 0;
 
       /* The unwind instructions reside in WORD (only the N_BYTES least
@@ -2222,7 +2215,7 @@ arm_exidx_new_objfile (struct objfile *objfile)
 	  while (n_words--)
 	    {
 	      word = bfd_h_get_32 (objfile->obfd,
-				   extab_data + addr - extab_vma);
+				   extab_data.data () + addr - extab_vma);
 	      addr += 4;
 
 	      *p++ = (gdb_byte) ((word >> 24) & 0xff);
@@ -2243,8 +2236,6 @@ arm_exidx_new_objfile (struct objfile *objfile)
 		     data->section_maps[sec->the_bfd_section->index],
 		     &new_exidx_entry);
     }
-
-  do_cleanups (cleanups);
 }
 
 /* Search for the exception table entry covering MEMADDR.  If one is found,
@@ -3813,8 +3804,7 @@ arm_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 				 reg_char, reg_scaled + i);
 		      regnum = user_reg_map_name_to_regnum (gdbarch, name_buf,
 							    strlen (name_buf));
-		      regcache_cooked_write (regcache, regnum,
-					     val + i * unit_length);
+		      regcache->cooked_write (regnum, val + i * unit_length);
 		    }
 		}
 	      continue;
@@ -6577,6 +6567,7 @@ arm_decode_miscellaneous (struct gdbarch *gdbarch, uint32_t insn,
       else if (op == 0x3)
         /* Not really supported.  */
 	return arm_copy_unmodified (gdbarch, insn, "smc", dsc);
+      /* Fall through.  */
 
     default:
       return arm_copy_undef (gdbarch, insn, dsc);
@@ -7901,7 +7892,7 @@ arm_extract_return_value (struct type *type, struct regcache *regs,
 	       internal type.  */
 	    bfd_byte tmpbuf[FP_REGISTER_SIZE];
 
-	    regcache_cooked_read (regs, ARM_F0_REGNUM, tmpbuf);
+	    regs->cooked_read (ARM_F0_REGNUM, tmpbuf);
 	    target_float_convert (tmpbuf, arm_ext_type (gdbarch),
 				  valbuf, type);
 	  }
@@ -7912,10 +7903,9 @@ arm_extract_return_value (struct type *type, struct regcache *regs,
 	  /* ARM_FLOAT_VFP can arise if this is a variadic function so
 	     not using the VFP ABI code.  */
 	case ARM_FLOAT_VFP:
-	  regcache_cooked_read (regs, ARM_A1_REGNUM, valbuf);
+	  regs->cooked_read (ARM_A1_REGNUM, valbuf);
 	  if (TYPE_LENGTH (type) > 4)
-	    regcache_cooked_read (regs, ARM_A1_REGNUM + 1,
-				  valbuf + INT_REGISTER_SIZE);
+	    regs->cooked_read (ARM_A1_REGNUM + 1, valbuf + INT_REGISTER_SIZE);
 	  break;
 
 	default:
@@ -7963,7 +7953,7 @@ arm_extract_return_value (struct type *type, struct regcache *regs,
 
       while (len > 0)
 	{
-	  regcache_cooked_read (regs, regno++, tmpbuf);
+	  regs->cooked_read (regno++, tmpbuf);
 	  memcpy (valbuf, tmpbuf,
 		  len > INT_REGISTER_SIZE ? INT_REGISTER_SIZE : len);
 	  len -= INT_REGISTER_SIZE;
@@ -8108,7 +8098,7 @@ arm_store_return_value (struct type *type, struct regcache *regs,
 	case ARM_FLOAT_FPA:
 
 	  target_float_convert (valbuf, type, buf, arm_ext_type (gdbarch));
-	  regcache_cooked_write (regs, ARM_F0_REGNUM, buf);
+	  regs->cooked_write (ARM_F0_REGNUM, buf);
 	  break;
 
 	case ARM_FLOAT_SOFT_FPA:
@@ -8116,10 +8106,9 @@ arm_store_return_value (struct type *type, struct regcache *regs,
 	  /* ARM_FLOAT_VFP can arise if this is a variadic function so
 	     not using the VFP ABI code.  */
 	case ARM_FLOAT_VFP:
-	  regcache_cooked_write (regs, ARM_A1_REGNUM, valbuf);
+	  regs->cooked_write (ARM_A1_REGNUM, valbuf);
 	  if (TYPE_LENGTH (type) > 4)
-	    regcache_cooked_write (regs, ARM_A1_REGNUM + 1, 
-				   valbuf + INT_REGISTER_SIZE);
+	    regs->cooked_write (ARM_A1_REGNUM + 1, valbuf + INT_REGISTER_SIZE);
 	  break;
 
 	default:
@@ -8144,7 +8133,7 @@ arm_store_return_value (struct type *type, struct regcache *regs,
 	  LONGEST val = unpack_long (type, valbuf);
 
 	  store_signed_integer (tmpbuf, INT_REGISTER_SIZE, byte_order, val);
-	  regcache_cooked_write (regs, ARM_A1_REGNUM, tmpbuf);
+	  regs->cooked_write (ARM_A1_REGNUM, tmpbuf);
 	}
       else
 	{
@@ -8156,7 +8145,7 @@ arm_store_return_value (struct type *type, struct regcache *regs,
 
 	  while (len > 0)
 	    {
-	      regcache_cooked_write (regs, regno++, valbuf);
+	      regs->cooked_write (regno++, valbuf);
 	      len -= INT_REGISTER_SIZE;
 	      valbuf += INT_REGISTER_SIZE;
 	    }
@@ -8175,7 +8164,7 @@ arm_store_return_value (struct type *type, struct regcache *regs,
 	{
 	  memcpy (tmpbuf, valbuf,
 		  len > INT_REGISTER_SIZE ? INT_REGISTER_SIZE : len);
-	  regcache_cooked_write (regs, regno++, tmpbuf);
+	  regs->cooked_write (regno++, tmpbuf);
 	  len -= INT_REGISTER_SIZE;
 	  valbuf += INT_REGISTER_SIZE;
 	}
@@ -8222,11 +8211,9 @@ arm_return_value (struct gdbarch *gdbarch, struct value *function,
 	      regnum = user_reg_map_name_to_regnum (gdbarch, name_buf,
 						    strlen (name_buf));
 	      if (writebuf)
-		regcache_cooked_write (regcache, regnum,
-				       writebuf + i * unit_length);
+		regcache->cooked_write (regnum, writebuf + i * unit_length);
 	      if (readbuf)
-		regcache_cooked_read (regcache, regnum,
-				      readbuf + i * unit_length);
+		regcache->cooked_read (regnum, readbuf + i * unit_length);
 	    }
 	}
       return RETURN_VALUE_REGISTER_CONVENTION;
@@ -8773,9 +8760,9 @@ arm_neon_quad_write (struct gdbarch *gdbarch, struct regcache *regcache,
   else
     offset = 0;
 
-  regcache_raw_write (regcache, double_regnum, buf + offset);
+  regcache->raw_write (double_regnum, buf + offset);
   offset = 8 - offset;
-  regcache_raw_write (regcache, double_regnum + 1, buf + offset);
+  regcache->raw_write (double_regnum + 1, buf + offset);
 }
 
 static void
@@ -8808,9 +8795,9 @@ arm_pseudo_write (struct gdbarch *gdbarch, struct regcache *regcache,
       double_regnum = user_reg_map_name_to_regnum (gdbarch, name_buf,
 						   strlen (name_buf));
 
-      regcache_raw_read (regcache, double_regnum, reg_buf);
+      regcache->raw_read (double_regnum, reg_buf);
       memcpy (reg_buf + offset, buf, 4);
-      regcache_raw_write (regcache, double_regnum, reg_buf);
+      regcache->raw_write (double_regnum, reg_buf);
     }
 }
 
@@ -9556,7 +9543,7 @@ _initialize_arm_tdep (void)
     = register_objfile_data_with_cleanup (NULL, arm_objfile_data_free);
 
   /* Add ourselves to objfile event chain.  */
-  observer_attach_new_objfile (arm_exidx_new_objfile);
+  gdb::observers::new_objfile.attach (arm_exidx_new_objfile);
   arm_exidx_data_key
     = register_objfile_data_with_cleanup (NULL, arm_exidx_data_free);
 
@@ -11429,7 +11416,8 @@ arm_record_vfp_data_proc_insn (insn_decode_record *arm_insn_r)
   opc3 = bits (arm_insn_r->arm_insn, 6, 7);
   dp_op_sz = bit (arm_insn_r->arm_insn, 8);
   bit_d = bit (arm_insn_r->arm_insn, 22);
-  opc1 = opc1 & 0x04;
+  /* Mask off the "D" bit.  */
+  opc1 = opc1 & ~0x04;
 
   /* Handle VMLA, VMLS.  */
   if (opc1 == 0x00)
@@ -11494,7 +11482,7 @@ arm_record_vfp_data_proc_insn (insn_decode_record *arm_insn_r)
         }
     }
   /* Handle VDIV.  */
-  else if (opc1 == 0x0b)
+  else if (opc1 == 0x08)
     {
       if (dp_op_sz)
         curr_insn_type = INSN_T1;
@@ -13070,7 +13058,7 @@ public:
 class instruction_reader : public abstract_memory_reader
 {
  public:
-  bool read (CORE_ADDR memaddr, gdb_byte *buf, const size_t len)
+  bool read (CORE_ADDR memaddr, gdb_byte *buf, const size_t len) override
   {
     if (target_read_memory (memaddr, buf, len))
       return false;
@@ -13223,7 +13211,7 @@ public:
     : m_endian (endian), m_insns (insns), m_insns_size (SIZE)
   {}
 
-  bool read (CORE_ADDR memaddr, gdb_byte *buf, const size_t len)
+  bool read (CORE_ADDR memaddr, gdb_byte *buf, const size_t len) override
   {
     SELF_CHECK (len == 4 || len == 2);
     SELF_CHECK (memaddr % 2 == 0);

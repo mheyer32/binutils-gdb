@@ -3751,7 +3751,7 @@ elf_s390_write_core_note (bfd *abfd, char *buf, int *bufsiz,
 
     case NT_PRPSINFO:
       {
-	char data[136] = { 0 };
+	char data[136] ATTRIBUTE_NONSTRING = { 0 };
 	const char *fname, *psargs;
 
 	va_start (ap, note_type);
@@ -3760,7 +3760,16 @@ elf_s390_write_core_note (bfd *abfd, char *buf, int *bufsiz,
 	va_end (ap);
 
 	strncpy (data + 40, fname, 16);
+	DIAGNOSTIC_PUSH;
+	/* GCC 8.1 warns about 80 equals destination size with
+	   -Wstringop-truncation:
+	   https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85643
+	 */
+#if GCC_VERSION == 8001
+	DIAGNOSTIC_IGNORE_STRINGOP_TRUNCATION;
+#endif
 	strncpy (data + 56, psargs, 80);
+	DIAGNOSTIC_POP;
 	return elfcore_write_note (abfd, buf, bufsiz, "CORE", note_type,
 				   &data, sizeof (data));
       }
@@ -3962,7 +3971,6 @@ const struct elf_size_info s390_elf64_size_info =
 #define elf_backend_grok_psinfo		      elf_s390_grok_psinfo
 #define elf_backend_write_core_note	      elf_s390_write_core_note
 #define elf_backend_plt_sym_val		      elf_s390_plt_sym_val
-#define elf_backend_add_symbol_hook	      elf_s390_add_symbol_hook
 #define elf_backend_sort_relocs_p	      elf_s390_elf_sort_relocs_p
 #define elf_backend_additional_program_headers elf_s390_additional_program_headers
 #define elf_backend_modify_segment_map	      elf_s390_modify_segment_map

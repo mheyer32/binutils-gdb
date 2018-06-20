@@ -23,6 +23,7 @@
 
 #include "target.h"
 #include "vec.h"
+#include "gdb_bfd.h"
 #include "gdb_vecs.h"
 #include "registry.h"
 
@@ -34,9 +35,6 @@ struct exec;
 struct address_space;
 struct program_space_data;
 struct address_space_data;
-
-typedef struct so_list *so_list_ptr;
-DEF_VEC_P (so_list_ptr);
 
 /* A program space represents a symbolic view of an address space.
    Roughly speaking, it holds all the data associated with a
@@ -157,6 +155,9 @@ struct program_space
      It needs to be freed by xfree.  It is not NULL iff EBFD is not NULL.  */
   char *pspace_exec_filename = NULL;
 
+  /* Binary file diddling handle for the core file.  */
+  gdb_bfd_ref_ptr cbfd;
+
   /* The address space attached to this program space.  More than one
      program space may be bound to the same address space.  In the
      traditional unix-like debugging scenario, this will usually
@@ -203,7 +204,7 @@ struct program_space
 
   /* When an solib is added, it is also added to this vector.  This
      is so we can properly report solib changes to the user.  */
-  VEC (so_list_ptr) *added_solibs = NULL;
+  std::vector<struct so_list *> added_solibs;
 
   /* When an solib is removed, its name is added to this vector.
      This is so we can properly report solib changes to the user.  */

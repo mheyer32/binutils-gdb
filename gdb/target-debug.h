@@ -118,14 +118,16 @@
   target_debug_do_print (host_address_to_string (X))
 #define target_debug_print_std_vector_mem_region(X) \
   target_debug_do_print (host_address_to_string (X.data ()))
-#define target_debug_print_VEC_static_tracepoint_marker_p_p(X)	\
-  target_debug_do_print (host_address_to_string (X))
+#define target_debug_print_std_vector_static_tracepoint_marker(X)	\
+  target_debug_do_print (host_address_to_string (X.data ()))
 #define target_debug_print_const_struct_target_desc_p(X)	\
   target_debug_do_print (host_address_to_string (X))
 #define target_debug_print_struct_bp_location_p(X)	\
   target_debug_do_print (host_address_to_string (X))
 #define target_debug_print_struct_trace_state_variable_p(X)	\
   target_debug_do_print (host_address_to_string (X))
+#define target_debug_print_const_trace_state_variable_r(X)	\
+  target_debug_do_print (host_address_to_string (&X))
 #define target_debug_print_struct_trace_status_p(X)	\
   target_debug_do_print (host_address_to_string (X))
 #define target_debug_print_struct_breakpoint_p(X)	\
@@ -136,7 +138,7 @@
   target_debug_do_print (host_address_to_string (X))
 #define target_debug_print_struct_uploaded_tsv_pp(X)	\
   target_debug_do_print (host_address_to_string (X))
-#define target_debug_print_struct_static_tracepoint_marker_p(X)	\
+#define target_debug_print_static_tracepoint_marker_p(X)	\
   target_debug_do_print (host_address_to_string (X))
 #define target_debug_print_struct_traceframe_info_p(X)	\
   target_debug_do_print (host_address_to_string (X))
@@ -174,6 +176,12 @@
   target_debug_do_print (host_address_to_string (inf))
 #define target_debug_print_record_print_flags(X) \
   target_debug_do_print (plongest (X))
+#define target_debug_print_enum_info_proc_what(X) \
+  target_debug_do_print (plongest (X))
+#define target_debug_print_thread_control_capabilities(X) \
+  target_debug_do_print (plongest (X))
+#define target_debug_print_thread_info_p(X)	\
+  target_debug_do_print (host_address_to_string (X))
 
 static void
 target_debug_print_struct_target_waitstatus_p (struct target_waitstatus *status)

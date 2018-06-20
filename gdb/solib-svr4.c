@@ -33,7 +33,7 @@
 #include "infrun.h"
 #include "regcache.h"
 #include "gdbthread.h"
-#include "observer.h"
+#include "observable.h"
 
 #include "solist.h"
 #include "solib.h"
@@ -168,28 +168,22 @@ svr4_same (struct so_list *gdb, struct so_list *inferior)
   return (svr4_same_1 (gdb->so_original_name, inferior->so_original_name));
 }
 
-static lm_info_svr4 *
+static std::unique_ptr<lm_info_svr4>
 lm_info_read (CORE_ADDR lm_addr)
 {
   struct link_map_offsets *lmo = svr4_fetch_link_map_offsets ();
-  gdb_byte *lm;
-  lm_info_svr4 *lm_info;
-  struct cleanup *back_to;
+  std::unique_ptr<lm_info_svr4> lm_info;
 
-  lm = (gdb_byte *) xmalloc (lmo->link_map_size);
-  back_to = make_cleanup (xfree, lm);
+  gdb::byte_vector lm (lmo->link_map_size);
 
-  if (target_read_memory (lm_addr, lm, lmo->link_map_size) != 0)
-    {
-      warning (_("Error reading shared library list entry at %s"),
-	       paddress (target_gdbarch (), lm_addr)),
-      lm_info = NULL;
-    }
+  if (target_read_memory (lm_addr, lm.data (), lmo->link_map_size) != 0)
+    warning (_("Error reading shared library list entry at %s"),
+	     paddress (target_gdbarch (), lm_addr));
   else
     {
       struct type *ptr_type = builtin_type (target_gdbarch ())->builtin_data_ptr;
 
-      lm_info = new lm_info_svr4;
+      lm_info.reset (new lm_info_svr4);
       lm_info->lm_addr = lm_addr;
 
       lm_info->l_addr_inferior = extract_typed_address (&lm[lmo->l_addr_offset],
@@ -202,8 +196,6 @@ lm_info_read (CORE_ADDR lm_addr)
       lm_info->l_name = extract_typed_address (&lm[lmo->l_name_offset],
 					       ptr_type);
     }
-
-  do_cleanups (back_to);
 
   return lm_info;
 }
@@ -440,11 +432,11 @@ read_program_header (int type, int *p_sect_size, int *p_arch_size,
   int pt_phdr_p = 0;
 
   /* Get required auxv elements from target.  */
-  if (target_auxv_search (&current_target, AT_PHDR, &at_phdr) <= 0)
+  if (target_auxv_search (current_top_target (), AT_PHDR, &at_phdr) <= 0)
     return 0;
-  if (target_auxv_search (&current_target, AT_PHENT, &at_phent) <= 0)
+  if (target_auxv_search (current_top_target (), AT_PHENT, &at_phent) <= 0)
     return 0;
-  if (target_auxv_search (&current_target, AT_PHNUM, &at_phnum) <= 0)
+  if (target_auxv_search (current_top_target (), AT_PHNUM, &at_phnum) <= 0)
     return 0;
   if (!at_phdr || !at_phnum)
     return 0;
@@ -958,8 +950,6 @@ svr4_keep_data_in_core (CORE_ADDR vaddr, unsigned long size)
 {
   struct svr4_info *info;
   CORE_ADDR ldsomap;
-  struct so_list *newobj;
-  struct cleanup *old_chain;
   CORE_ADDR name_lm;
 
   info = get_svr4_info ();
@@ -973,13 +963,8 @@ svr4_keep_data_in_core (CORE_ADDR vaddr, unsigned long size)
   if (!ldsomap)
     return 0;
 
-  newobj = XCNEW (struct so_list);
-  old_chain = make_cleanup (xfree, newobj);
-  lm_info_svr4 *li = lm_info_read (ldsomap);
-  newobj->lm_info = li;
-  make_cleanup (xfree, newobj->lm_info);
+  std::unique_ptr<lm_info_svr4> li = lm_info_read (ldsomap);
   name_lm = li != NULL ? li->l_name : 0;
-  do_cleanups (old_chain);
 
   return (name_lm >= vaddr && name_lm < vaddr + size);
 }
@@ -990,13 +975,12 @@ static int
 open_symbol_file_object (int from_tty)
 {
   CORE_ADDR lm, l_name;
-  char *filename;
+  gdb::unique_xmalloc_ptr<char> filename;
   int errcode;
   struct link_map_offsets *lmo = svr4_fetch_link_map_offsets ();
   struct type *ptr_type = builtin_type (target_gdbarch ())->builtin_data_ptr;
   int l_name_size = TYPE_LENGTH (ptr_type);
-  gdb_byte *l_name_buf = (gdb_byte *) xmalloc (l_name_size);
-  struct cleanup *cleanups = make_cleanup (xfree, l_name_buf);
+  gdb::byte_vector l_name_buf (l_name_size);
   struct svr4_info *info = get_svr4_info ();
   symfile_add_flags add_flags = 0;
 
@@ -1005,55 +989,40 @@ open_symbol_file_object (int from_tty)
 
   if (symfile_objfile)
     if (!query (_("Attempt to reload symbols from process? ")))
-      {
-	do_cleanups (cleanups);
-	return 0;
-      }
+      return 0;
 
   /* Always locate the debug struct, in case it has moved.  */
   info->debug_base = 0;
   if (locate_base (info) == 0)
-    {
-      do_cleanups (cleanups);
-      return 0;	/* failed somehow...  */
-    }
+    return 0;	/* failed somehow...  */
 
   /* First link map member should be the executable.  */
   lm = solib_svr4_r_map (info);
   if (lm == 0)
-    {
-      do_cleanups (cleanups);
-      return 0;	/* failed somehow...  */
-    }
+    return 0;	/* failed somehow...  */
 
   /* Read address of name from target memory to GDB.  */
-  read_memory (lm + lmo->l_name_offset, l_name_buf, l_name_size);
+  read_memory (lm + lmo->l_name_offset, l_name_buf.data (), l_name_size);
 
   /* Convert the address to host format.  */
-  l_name = extract_typed_address (l_name_buf, ptr_type);
+  l_name = extract_typed_address (l_name_buf.data (), ptr_type);
 
   if (l_name == 0)
-    {
-      do_cleanups (cleanups);
-      return 0;		/* No filename.  */
-    }
+    return 0;		/* No filename.  */
 
   /* Now fetch the filename from target memory.  */
   target_read_string (l_name, &filename, SO_NAME_MAX_PATH_SIZE - 1, &errcode);
-  make_cleanup (xfree, filename);
 
   if (errcode)
     {
       warning (_("failed to read exec filename from attached file: %s"),
 	       safe_strerror (errcode));
-      do_cleanups (cleanups);
       return 0;
     }
 
   /* Have a pathname: read the symbol file.  */
-  symbol_file_add_main (filename, add_flags);
+  symbol_file_add_main (filename.get (), add_flags);
 
-  do_cleanups (cleanups);
   return 1;
 }
 
@@ -1274,13 +1243,13 @@ svr4_current_sos_via_xfer_libraries (struct svr4_library_list *list,
   gdb_assert (annex == NULL || target_augmented_libraries_svr4_read ());
 
   /* Fetch the list of shared libraries.  */
-  gdb::unique_xmalloc_ptr<char> svr4_library_document
-    = target_read_stralloc (&current_target, TARGET_OBJECT_LIBRARIES_SVR4,
+  gdb::optional<gdb::char_vector> svr4_library_document
+    = target_read_stralloc (current_top_target (), TARGET_OBJECT_LIBRARIES_SVR4,
 			    annex);
-  if (svr4_library_document == NULL)
+  if (!svr4_library_document)
     return 0;
 
-  return svr4_parse_libraries (svr4_library_document.get (), list);
+  return svr4_parse_libraries (svr4_library_document->data (), list);
 }
 
 #else
@@ -1339,11 +1308,11 @@ svr4_read_so_list (CORE_ADDR lm, CORE_ADDR prev_lm,
   for (; lm != 0; prev_lm = lm, lm = next_lm)
     {
       int errcode;
-      char *buffer;
+      gdb::unique_xmalloc_ptr<char> buffer;
 
       so_list_up newobj (XCNEW (struct so_list));
 
-      lm_info_svr4 *li = lm_info_read (lm);
+      lm_info_svr4 *li = lm_info_read (lm).release ();
       newobj->lm_info = li;
       if (li == NULL)
 	return 0;
@@ -1387,10 +1356,9 @@ svr4_read_so_list (CORE_ADDR lm, CORE_ADDR prev_lm,
 	  continue;
 	}
 
-      strncpy (newobj->so_name, buffer, SO_NAME_MAX_PATH_SIZE - 1);
+      strncpy (newobj->so_name, buffer.get (), SO_NAME_MAX_PATH_SIZE - 1);
       newobj->so_name[SO_NAME_MAX_PATH_SIZE - 1] = '\0';
       strcpy (newobj->so_original_name, newobj->so_name);
-      xfree (buffer);
 
       /* If this entry has no name, or its name matches the name
 	 for the main executable, don't include it in the list.  */
@@ -2249,9 +2217,10 @@ enable_break (struct svr4_info *info, int from_tty)
       struct obj_section *os;
 
       sym_addr = gdbarch_addr_bits_remove
-	(target_gdbarch (), gdbarch_convert_from_func_ptr_addr (target_gdbarch (),
-							     sym_addr,
-							     &current_target));
+	(target_gdbarch (),
+	 gdbarch_convert_from_func_ptr_addr (target_gdbarch (),
+					     sym_addr,
+					     current_top_target ()));
 
       /* On at least some versions of Solaris there's a dynamic relocation
 	 on _r_debug.r_brk and SYM_ADDR may not be relocated yet, e.g., if
@@ -2366,7 +2335,7 @@ enable_break (struct svr4_info *info, int from_tty)
       /* If we were not able to find the base address of the loader
          from our so_list, then try using the AT_BASE auxilliary entry.  */
       if (!load_addr_found)
-        if (target_auxv_search (&current_target, AT_BASE, &load_addr) > 0)
+	if (target_auxv_search (current_top_target (), AT_BASE, &load_addr) > 0)
 	  {
 	    int addr_bit = gdbarch_addr_bit (target_gdbarch ());
 
@@ -2491,7 +2460,7 @@ enable_break (struct svr4_info *info, int from_tty)
 	  sym_addr = BMSYMBOL_VALUE_ADDRESS (msymbol);
 	  sym_addr = gdbarch_convert_from_func_ptr_addr (target_gdbarch (),
 							 sym_addr,
-							 &current_target);
+							 current_top_target ());
 	  svr4_create_solib_event_breakpoints (target_gdbarch (), sym_addr);
 	  return 1;
 	}
@@ -2508,7 +2477,7 @@ enable_break (struct svr4_info *info, int from_tty)
 	      sym_addr = BMSYMBOL_VALUE_ADDRESS (msymbol);
 	      sym_addr = gdbarch_convert_from_func_ptr_addr (target_gdbarch (),
 							     sym_addr,
-							     &current_target);
+							     current_top_target ());
 	      svr4_create_solib_event_breakpoints (target_gdbarch (), sym_addr);
 	      return 1;
 	    }
@@ -2603,7 +2572,7 @@ svr4_exec_displacement (CORE_ADDR *displacementp)
   if ((bfd_get_file_flags (exec_bfd) & DYNAMIC) == 0)
     return 0;
 
-  if (target_auxv_search (&current_target, AT_ENTRY, &entry_point) <= 0)
+  if (target_auxv_search (current_top_target (), AT_ENTRY, &entry_point) <= 0)
     return 0;
 
   exec_displacement = entry_point - bfd_get_start_address (exec_bfd);

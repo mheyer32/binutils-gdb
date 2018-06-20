@@ -327,15 +327,6 @@ extern int print_address_symbolic (struct gdbarch *, CORE_ADDR,
 				   struct ui_file *, int,
 				   const char *);
 
-extern int build_address_symbolic (struct gdbarch *,
-				   CORE_ADDR addr,
-				   int do_demangle, 
-				   char **name, 
-				   int *offset, 
-				   char **filename, 
-				   int *line, 	
-				   int *unmapped);
-
 extern void print_address (struct gdbarch *, CORE_ADDR, struct ui_file *);
 extern const char *pc_prefix (CORE_ADDR);
 
@@ -482,9 +473,8 @@ extern int longest_to_int (LONGEST);
    table in osabi.c.  */
 enum gdb_osabi
 {
-  GDB_OSABI_UNINITIALIZED = -1, /* For struct gdbarch_info.  */
-
   GDB_OSABI_UNKNOWN = 0,	/* keep this zero */
+  GDB_OSABI_NONE,
 
   GDB_OSABI_SVR4,
   GDB_OSABI_HURD,
@@ -658,7 +648,7 @@ enum block_enum
   FIRST_LOCAL_BLOCK = 2
 };
 
-/* User selection used in observer.h and multiple print functions.  */
+/* User selection used in observable.h and multiple print functions.  */
 
 enum user_selected_what_flag
   {

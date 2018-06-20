@@ -285,11 +285,18 @@ _bfd_aarch64_elf_put_addend (bfd *abfd,
     case BFD_RELOC_AARCH64_TLSLD_LDST64_DTPREL_LO12_NC:
     case BFD_RELOC_AARCH64_TLSLD_LDST8_DTPREL_LO12:
     case BFD_RELOC_AARCH64_TLSLD_LDST8_DTPREL_LO12_NC:
+    case BFD_RELOC_AARCH64_TLSLE_LDST16_TPREL_LO12:
+    case BFD_RELOC_AARCH64_TLSLE_LDST16_TPREL_LO12_NC:
+    case BFD_RELOC_AARCH64_TLSLE_LDST32_TPREL_LO12:
+    case BFD_RELOC_AARCH64_TLSLE_LDST32_TPREL_LO12_NC:
+    case BFD_RELOC_AARCH64_TLSLE_LDST64_TPREL_LO12:
+    case BFD_RELOC_AARCH64_TLSLE_LDST64_TPREL_LO12_NC:
+    case BFD_RELOC_AARCH64_TLSLE_LDST8_TPREL_LO12:
+    case BFD_RELOC_AARCH64_TLSLE_LDST8_TPREL_LO12_NC:
       if (old_addend & ((1 << howto->rightshift) - 1))
 	return bfd_reloc_overflow;
       /* Used for ldr*|str* rt, [rn, #uimm12] to provide the low order
-	 12 bits of the page offset following BFD_RELOC_AARCH64_ADR_HI21_PCREL
-	 which computes the (pc-relative) page base.  */
+	 12 bits address offset.  */
       contents = reencode_ldst_pos_imm (contents, addend);
       break;
 
@@ -457,6 +464,14 @@ _bfd_aarch64_elf_resolve_relocation (bfd_reloc_code_real_type r_type,
     case BFD_RELOC_AARCH64_TLSLD_MOVW_DTPREL_G1:
     case BFD_RELOC_AARCH64_TLSLD_MOVW_DTPREL_G1_NC:
     case BFD_RELOC_AARCH64_TLSLD_MOVW_DTPREL_G2:
+    case BFD_RELOC_AARCH64_TLSLE_LDST16_TPREL_LO12:
+    case BFD_RELOC_AARCH64_TLSLE_LDST16_TPREL_LO12_NC:
+    case BFD_RELOC_AARCH64_TLSLE_LDST32_TPREL_LO12:
+    case BFD_RELOC_AARCH64_TLSLE_LDST32_TPREL_LO12_NC:
+    case BFD_RELOC_AARCH64_TLSLE_LDST64_TPREL_LO12:
+    case BFD_RELOC_AARCH64_TLSLE_LDST64_TPREL_LO12_NC:
+    case BFD_RELOC_AARCH64_TLSLE_LDST8_TPREL_LO12:
+    case BFD_RELOC_AARCH64_TLSLE_LDST8_TPREL_LO12_NC:
       value = value + addend;
       break;
 
@@ -543,25 +558,6 @@ _bfd_aarch64_elf_resolve_relocation (bfd_reloc_code_real_type r_type,
   return value;
 }
 
-/* Hook called by the linker routine which adds symbols from an object
-   file.  */
-
-bfd_boolean
-_bfd_aarch64_elf_add_symbol_hook (bfd *abfd, struct bfd_link_info *info,
-				  Elf_Internal_Sym *sym,
-				  const char **namep ATTRIBUTE_UNUSED,
-				  flagword *flagsp ATTRIBUTE_UNUSED,
-				  asection **secp ATTRIBUTE_UNUSED,
-				  bfd_vma *valp ATTRIBUTE_UNUSED)
-{
-  if (ELF_ST_TYPE (sym->st_info) == STT_GNU_IFUNC
-      && (abfd->flags & DYNAMIC) == 0
-      && bfd_get_flavour (info->output_bfd) == bfd_target_elf_flavour)
-    elf_tdata (info->output_bfd)->has_gnu_symbols |= elf_gnu_symbol_ifunc;
-
-  return TRUE;
-}
-
 /* Support for core dump NOTE sections.  */
 
 bfd_boolean
@@ -638,13 +634,22 @@ _bfd_aarch64_elf_write_core_note (bfd *abfd, char *buf, int *bufsiz, int note_ty
 
     case NT_PRPSINFO:
       {
-	char data[136];
+	char data[136] ATTRIBUTE_NONSTRING;
 	va_list ap;
 
 	va_start (ap, note_type);
 	memset (data, 0, sizeof (data));
 	strncpy (data + 40, va_arg (ap, const char *), 16);
+	DIAGNOSTIC_PUSH;
+	/* GCC 8.1 warns about 80 equals destination size with
+	   -Wstringop-truncation:
+	   https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85643
+	 */
+#if GCC_VERSION == 8001
+	DIAGNOSTIC_IGNORE_STRINGOP_TRUNCATION;
+#endif
 	strncpy (data + 56, va_arg (ap, const char *), 80);
+	DIAGNOSTIC_POP;
 	va_end (ap);
 
 	return elfcore_write_note (abfd, buf, bufsiz, "CORE",

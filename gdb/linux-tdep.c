@@ -32,7 +32,7 @@
 #include "cli/cli-utils.h"
 #include "arch-utils.h"
 #include "gdb_obstack.h"
-#include "observer.h"
+#include "observable.h"
 #include "objfiles.h"
 #include "infcall.h"
 #include "gdbcmd.h"
@@ -402,8 +402,8 @@ linux_is_uclinux (void)
 {
   CORE_ADDR dummy;
 
-  return (target_auxv_search (&current_target, AT_NULL, &dummy) > 0
-	  && target_auxv_search (&current_target, AT_PAGESZ, &dummy) == 0);
+  return (target_auxv_search (current_top_target (), AT_NULL, &dummy) > 0
+	  && target_auxv_search (current_top_target (), AT_PAGESZ, &dummy) == 0);
 }
 
 static int
@@ -754,10 +754,22 @@ linux_info_proc (struct gdbarch *gdbarch, const char *args,
   if (cmdline_f)
     {
       xsnprintf (filename, sizeof filename, "/proc/%ld/cmdline", pid);
-      gdb::unique_xmalloc_ptr<char> cmdline
-	= target_fileio_read_stralloc (NULL, filename);
-      if (cmdline)
-	printf_filtered ("cmdline = '%s'\n", cmdline.get ());
+      gdb_byte *buffer;
+      ssize_t len = target_fileio_read_alloc (NULL, filename, &buffer);
+
+      if (len > 0)
+	{
+	  gdb::unique_xmalloc_ptr<char> cmdline ((char *) buffer);
+	  ssize_t pos;
+
+	  for (pos = 0; pos < len - 1; pos++)
+	    {
+	      if (buffer[pos] == '\0')
+		buffer[pos] = ' ';
+	    }
+	  buffer[len - 1] = '\0';
+	  printf_filtered ("cmdline = '%s'\n", buffer);
+	}
       else
 	warning (_("unable to open /proc file '%s'"), filename);
     }
@@ -1408,46 +1420,41 @@ linux_spu_make_corefile_notes (bfd *obfd, char *note_data, int *note_size)
    };
 
   enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
-  gdb_byte *spu_ids;
-  LONGEST i, j, size;
 
   /* Determine list of SPU ids.  */
-  size = target_read_alloc (&current_target, TARGET_OBJECT_SPU,
-			    NULL, &spu_ids);
+  gdb::optional<gdb::byte_vector>
+    spu_ids = target_read_alloc (current_top_target (),
+				 TARGET_OBJECT_SPU, NULL);
+
+  if (!spu_ids)
+    return note_data;
 
   /* Generate corefile notes for each SPU file.  */
-  for (i = 0; i < size; i += 4)
+  for (size_t i = 0; i < spu_ids->size (); i += 4)
     {
-      int fd = extract_unsigned_integer (spu_ids + i, 4, byte_order);
+      int fd = extract_unsigned_integer (spu_ids->data () + i, 4, byte_order);
 
-      for (j = 0; j < sizeof (spu_files) / sizeof (spu_files[0]); j++)
+      for (size_t j = 0; j < sizeof (spu_files) / sizeof (spu_files[0]); j++)
 	{
 	  char annex[32], note_name[32];
-	  gdb_byte *spu_data;
-	  LONGEST spu_len;
 
 	  xsnprintf (annex, sizeof annex, "%d/%s", fd, spu_files[j]);
-	  spu_len = target_read_alloc (&current_target, TARGET_OBJECT_SPU,
-				       annex, &spu_data);
-	  if (spu_len > 0)
+	  gdb::optional<gdb::byte_vector> spu_data
+	    = target_read_alloc (current_top_target (), TARGET_OBJECT_SPU, annex);
+
+	  if (spu_data && !spu_data->empty ())
 	    {
 	      xsnprintf (note_name, sizeof note_name, "SPU/%s", annex);
 	      note_data = elfcore_write_note (obfd, note_data, note_size,
 					      note_name, NT_SPU,
-					      spu_data, spu_len);
-	      xfree (spu_data);
+					      spu_data->data (),
+					      spu_data->size ());
 
 	      if (!note_data)
-		{
-		  xfree (spu_ids);
-		  return NULL;
-		}
+		return nullptr;
 	    }
 	}
     }
-
-  if (size > 0)
-    xfree (spu_ids);
 
   return note_data;
 }
@@ -1655,7 +1662,7 @@ linux_get_siginfo_data (thread_info *thread, struct gdbarch *gdbarch)
 
   gdb::byte_vector buf (TYPE_LENGTH (siginfo_type));
 
-  bytes_read = target_read (&current_target, TARGET_OBJECT_SIGNAL_INFO, NULL,
+  bytes_read = target_read (current_top_target (), TARGET_OBJECT_SIGNAL_INFO, NULL,
 			    buf.data (), 0, TYPE_LENGTH (siginfo_type));
   if (bytes_read != TYPE_LENGTH (siginfo_type))
     buf.clear ();
@@ -1899,8 +1906,6 @@ linux_make_corefile_notes (struct gdbarch *gdbarch, bfd *obfd, int *note_size)
   struct linux_corefile_thread_data thread_args;
   struct elf_internal_linux_prpsinfo prpsinfo;
   char *note_data = NULL;
-  gdb_byte *auxv;
-  int auxv_len;
   struct thread_info *curr_thr, *signalled_thr, *thr;
 
   if (! gdbarch_iterate_over_regset_sections_p (gdbarch))
@@ -1965,13 +1970,13 @@ linux_make_corefile_notes (struct gdbarch *gdbarch, bfd *obfd, int *note_size)
     return NULL;
 
   /* Auxillary vector.  */
-  auxv_len = target_read_alloc (&current_target, TARGET_OBJECT_AUXV,
-				NULL, &auxv);
-  if (auxv_len > 0)
+  gdb::optional<gdb::byte_vector> auxv =
+    target_read_alloc (current_top_target (), TARGET_OBJECT_AUXV, NULL);
+  if (auxv && !auxv->empty ())
     {
       note_data = elfcore_write_note (obfd, note_data, note_size,
-				      "CORE", NT_AUXV, auxv, auxv_len);
-      xfree (auxv);
+				      "CORE", NT_AUXV, auxv->data (),
+				      auxv->size ());
 
       if (!note_data)
 	return NULL;
@@ -2249,7 +2254,7 @@ linux_vsyscall_range_raw (struct gdbarch *gdbarch, struct mem_range *range)
   char filename[100];
   long pid;
 
-  if (target_auxv_search (&current_target, AT_SYSINFO_EHDR, &range->start) <= 0)
+  if (target_auxv_search (current_top_target (), AT_SYSINFO_EHDR, &range->start) <= 0)
     return 0;
 
   /* It doesn't make sense to access the host's /proc when debugging a
@@ -2439,14 +2444,14 @@ linux_displaced_step_location (struct gdbarch *gdbarch)
      local-store address and is thus not usable as displaced stepping
      location.  The auxiliary vector gets us the PowerPC-side entry
      point address instead.  */
-  if (target_auxv_search (&current_target, AT_ENTRY, &addr) <= 0)
+  if (target_auxv_search (current_top_target (), AT_ENTRY, &addr) <= 0)
     throw_error (NOT_SUPPORTED_ERROR,
 		 _("Cannot find AT_ENTRY auxiliary vector entry."));
 
   /* Make certain that the address points at real code, and not a
      function descriptor.  */
   addr = gdbarch_convert_from_func_ptr_addr (gdbarch, addr,
-					     &current_target);
+					     current_top_target ());
 
   /* Inferior calls also use the entry point as a breakpoint location.
      We don't want displaced stepping to interfere with those
@@ -2513,8 +2518,8 @@ _initialize_linux_tdep (void)
   linux_inferior_data
     = register_inferior_data_with_cleanup (NULL, linux_inferior_data_cleanup);
   /* Observers used to invalidate the cache when needed.  */
-  observer_attach_inferior_exit (invalidate_linux_cache_inf);
-  observer_attach_inferior_appeared (invalidate_linux_cache_inf);
+  gdb::observers::inferior_exit.attach (invalidate_linux_cache_inf);
+  gdb::observers::inferior_appeared.attach (invalidate_linux_cache_inf);
 
   add_setshow_boolean_cmd ("use-coredump-filter", class_files,
 			   &use_coredump_filter, _("\

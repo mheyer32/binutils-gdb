@@ -51,7 +51,7 @@
 #include "safe-ctype.h"
 #include "symfile.h"
 #include "extension.h"
-#include "observer.h"
+#include "observable.h"
 #include "common/def-vector.h"
 
 /* The possible choices of "set print frame-arguments", and the value
@@ -777,7 +777,7 @@ do_gdb_disassembly (struct gdbarch *gdbarch,
    
    SRC_LINE: Print only source line.
    LOCATION: Print only location.
-   LOC_AND_SRC: Print location and source line.
+   SRC_AND_LOC: Print location and source line.
 
    Used in "where" output, and to emit breakpoint or step
    messages.  */
@@ -1645,7 +1645,6 @@ info_frame_command (const char *addr_exp, int from_tty)
 	      }
 
 	    release_value (value);
-	    value_free (value);
 	    need_nl = 0;
 	  }
 	/* else keep quiet.  */
@@ -1692,55 +1691,22 @@ info_frame_command (const char *addr_exp, int from_tty)
    frames.  */
 
 static void
-backtrace_command_1 (const char *count_exp, int show_locals, int no_filters,
-		     int from_tty)
+backtrace_command_1 (const char *count_exp, frame_filter_flags flags,
+		     int no_filters, int from_tty)
 {
   struct frame_info *fi;
   int count;
-  int i;
-  struct frame_info *trailing;
-  int trailing_level, py_start = 0, py_end = 0;
+  int py_start = 0, py_end = 0;
   enum ext_lang_bt_status result = EXT_LANG_BT_ERROR;
 
   if (!target_has_stack)
     error (_("No stack."));
 
-  /* The following code must do two things.  First, it must set the
-     variable TRAILING to the frame from which we should start
-     printing.  Second, it must set the variable count to the number
-     of frames which we should print, or -1 if all of them.  */
-  trailing = get_current_frame ();
-
-  trailing_level = 0;
   if (count_exp)
     {
       count = parse_and_eval_long (count_exp);
       if (count < 0)
-	{
-	  struct frame_info *current;
-
-	  py_start = count;
-	  count = -count;
-
-	  current = trailing;
-	  while (current && count--)
-	    {
-	      QUIT;
-	      current = get_prev_frame (current);
-	    }
-
-	  /* Will stop when CURRENT reaches the top of the stack.
-	     TRAILING will be COUNT below it.  */
-	  while (current)
-	    {
-	      QUIT;
-	      trailing = get_prev_frame (trailing);
-	      current = get_prev_frame (current);
-	      trailing_level++;
-	    }
-
-	  count = -1;
-	}
+	py_start = count;
       else
 	{
 	  py_start = 0;
@@ -1755,31 +1721,11 @@ backtrace_command_1 (const char *count_exp, int show_locals, int no_filters,
       count = -1;
     }
 
-  if (info_verbose)
-    {
-      /* Read in symbols for all of the frames.  Need to do this in a
-         separate pass so that "Reading in symbols for xxx" messages
-         don't screw up the appearance of the backtrace.  Also if
-         people have strong opinions against reading symbols for
-         backtrace this may have to be an option.  */
-      i = count;
-      for (fi = trailing; fi != NULL && i--; fi = get_prev_frame (fi))
-	{
-	  CORE_ADDR pc;
-
-	  QUIT;
-	  pc = get_frame_address_in_block (fi);
-	  expand_symtab_containing_pc (pc, find_pc_mapped_section (pc));
-	}
-    }
-
   if (! no_filters)
     {
-      frame_filter_flags flags = PRINT_LEVEL | PRINT_FRAME_INFO | PRINT_ARGS;
       enum ext_lang_frame_args arg_type;
 
-      if (show_locals)
-	flags |= PRINT_LOCALS;
+      flags |= PRINT_LEVEL | PRINT_FRAME_INFO | PRINT_ARGS;
       if (from_tty)
 	flags |= PRINT_MORE_FRAMES;
 
@@ -1799,7 +1745,40 @@ backtrace_command_1 (const char *count_exp, int show_locals, int no_filters,
      "no-filters" has been specified from the command.  */
   if (no_filters ||  result == EXT_LANG_BT_NO_FILTERS)
     {
-      for (i = 0, fi = trailing; fi && count--; i++, fi = get_prev_frame (fi))
+      struct frame_info *trailing;
+
+      /* The following code must do two things.  First, it must set the
+	 variable TRAILING to the frame from which we should start
+	 printing.  Second, it must set the variable count to the number
+	 of frames which we should print, or -1 if all of them.  */
+      trailing = get_current_frame ();
+
+      if (count_exp != NULL && count < 0)
+	{
+	  struct frame_info *current;
+
+	  count = -count;
+
+	  current = trailing;
+	  while (current && count--)
+	    {
+	      QUIT;
+	      current = get_prev_frame (current);
+	    }
+
+	  /* Will stop when CURRENT reaches the top of the stack.
+	     TRAILING will be COUNT below it.  */
+	  while (current)
+	    {
+	      QUIT;
+	      trailing = get_prev_frame (trailing);
+	      current = get_prev_frame (current);
+	    }
+
+	  count = -1;
+	}
+
+      for (fi = trailing; fi && count--; fi = get_prev_frame (fi))
 	{
 	  QUIT;
 
@@ -1809,7 +1788,7 @@ backtrace_command_1 (const char *count_exp, int show_locals, int no_filters,
 	     the frame->prev field gets set to NULL in that case).  */
 
 	  print_frame_info (fi, 1, LOCATION, 1, 0);
-	  if (show_locals)
+	  if ((flags & PRINT_LOCALS) != 0)
 	    {
 	      struct frame_id frame_id = get_frame_id (fi);
 
@@ -1850,61 +1829,40 @@ backtrace_command_1 (const char *count_exp, int show_locals, int no_filters,
 static void
 backtrace_command (const char *arg, int from_tty)
 {
-  int fulltrace_arg = -1, arglen = 0, argc = 0, no_filters  = -1;
-  int user_arg = 0;
+  bool filters = true;
+  frame_filter_flags flags = 0;
 
-  std::string reconstructed_arg;
   if (arg)
     {
-      char **argv;
-      int i;
+      bool done = false;
 
-      gdb_argv built_argv (arg);
-      argv = built_argv.get ();
-      argc = 0;
-      for (i = 0; argv[i]; i++)
+      while (!done)
 	{
-	  unsigned int j;
+	  const char *save_arg = arg;
+	  std::string this_arg = extract_arg (&arg);
 
-	  for (j = 0; j < strlen (argv[i]); j++)
-	    argv[i][j] = TOLOWER (argv[i][j]);
+	  if (this_arg.empty ())
+	    break;
 
-	  if (no_filters < 0 && subset_compare (argv[i], "no-filters"))
-	    no_filters = argc;
+	  if (subset_compare (this_arg.c_str (), "no-filters"))
+	    filters = false;
+	  else if (subset_compare (this_arg.c_str (), "full"))
+	    flags |= PRINT_LOCALS;
+	  else if (subset_compare (this_arg.c_str (), "hide"))
+	    flags |= PRINT_HIDE;
 	  else
 	    {
-	      if (fulltrace_arg < 0 && subset_compare (argv[i], "full"))
-		fulltrace_arg = argc;
-	      else
-		{
-		  user_arg++;
-		  arglen += strlen (argv[i]);
-		}
+	      /* Not a recognized argument, so stop.  */
+	      arg = save_arg;
+	      done = true;
 	    }
-	  argc++;
 	}
-      arglen += user_arg;
-      if (fulltrace_arg >= 0 || no_filters >= 0)
-	{
-	  if (arglen > 0)
-	    {
-	      for (i = 0; i < argc; i++)
-		{
-		  if (i != fulltrace_arg && i != no_filters)
-		    {
-		      reconstructed_arg += argv[i];
-		      reconstructed_arg += " ";
-		    }
-		}
-	      arg = reconstructed_arg.c_str ();
-	    }
-	  else
-	    arg = NULL;
-	}
+
+      if (*arg == '\0')
+	arg = NULL;
     }
 
-  backtrace_command_1 (arg, fulltrace_arg >= 0 /* show_locals */,
-		       no_filters >= 0 /* no frame-filters */, from_tty);
+  backtrace_command_1 (arg, flags, !filters /* no frame-filters */, from_tty);
 }
 
 /* Iterate over the local variables of a block B, calling CB with
@@ -2060,7 +2018,6 @@ print_frame_local_vars (struct frame_info *frame, int num_tabs,
   struct print_variable_and_value_data cb_data;
   const struct block *block;
   CORE_ADDR pc;
-  struct gdb_exception except = exception_none;
 
   if (!get_frame_pc_if_available (frame, &pc))
     {
@@ -2084,27 +2041,12 @@ print_frame_local_vars (struct frame_info *frame, int num_tabs,
   /* Temporarily change the selected frame to the given FRAME.
      This allows routines that rely on the selected frame instead
      of being given a frame as parameter to use the correct frame.  */
+  scoped_restore_selected_frame restore_selected_frame;
   select_frame (frame);
 
-  TRY
-    {
-      iterate_over_block_local_vars (block,
-				     do_print_variable_and_value,
-				     &cb_data);
-    }
-  CATCH (ex, RETURN_MASK_ALL)
-    {
-      except = ex;
-    }
-  END_CATCH
-
-  /* Restore the selected frame, and then rethrow if there was a problem.  */
-  select_frame (frame_find_by_id (cb_data.frame_id));
-  if (except.reason < 0)
-    throw_exception (except);
-
-  /* do_print_variable_and_value invalidates FRAME.  */
-  frame = NULL;
+  iterate_over_block_local_vars (block,
+				 do_print_variable_and_value,
+				 &cb_data);
 
   if (!cb_data.values_printed)
     fprintf_filtered (stream, _("No locals.\n"));
@@ -2117,9 +2059,7 @@ info_locals_command (const char *args, int from_tty)
 			  0, gdb_stdout);
 }
 
-/* Iterate over all the argument variables in block B.
-
-   Returns 1 if any argument was walked; 0 otherwise.  */
+/* Iterate over all the argument variables in block B.  */
 
 void
 iterate_over_block_arg_vars (const struct block *b,
@@ -2179,7 +2119,7 @@ print_frame_arg_vars (struct frame_info *frame, struct ui_file *stream)
 
   cb_data.frame_id = get_frame_id (frame);
   cb_data.num_tabs = 0;
-  cb_data.stream = gdb_stdout;
+  cb_data.stream = stream;
   cb_data.values_printed = 0;
 
   iterate_over_block_arg_vars (SYMBOL_BLOCK_VALUE (func),
@@ -2197,16 +2137,6 @@ info_args_command (const char *ignore, int from_tty)
 {
   print_frame_arg_vars (get_selected_frame (_("No frame selected.")),
 			gdb_stdout);
-}
-
-/* Select frame FRAME.  Also print the stack frame and show the source
-   if this is the tui version.  */
-static void
-select_and_print_frame (struct frame_info *frame)
-{
-  select_frame (frame);
-  if (frame)
-    print_stack_frame (frame, 1, SRC_AND_LOC, 1);
 }
 
 /* Return the symbol-block in which the selected frame is executing.
@@ -2277,7 +2207,7 @@ select_frame_command (const char *level_exp, int from_tty)
 
   select_frame (parse_frame_specification (level_exp, NULL));
   if (get_selected_frame_if_set () != prev_frame)
-    observer_notify_user_selected_context_changed (USER_SELECTED_FRAME);
+    gdb::observers::user_selected_context_changed.notify (USER_SELECTED_FRAME);
 }
 
 /* The "frame" command.  With no argument, print the selected frame
@@ -2291,7 +2221,7 @@ frame_command (const char *level_exp, int from_tty)
 
   select_frame (parse_frame_specification (level_exp, NULL));
   if (get_selected_frame_if_set () != prev_frame)
-    observer_notify_user_selected_context_changed (USER_SELECTED_FRAME);
+    gdb::observers::user_selected_context_changed.notify (USER_SELECTED_FRAME);
   else
     print_selected_thread_frame (current_uiout, USER_SELECTED_FRAME);
 }
@@ -2324,7 +2254,7 @@ static void
 up_command (const char *count_exp, int from_tty)
 {
   up_silently_base (count_exp);
-  observer_notify_user_selected_context_changed (USER_SELECTED_FRAME);
+  gdb::observers::user_selected_context_changed.notify (USER_SELECTED_FRAME);
 }
 
 /* Select the frame down one or COUNT_EXP stack levels from the previously
@@ -2363,7 +2293,7 @@ static void
 down_command (const char *count_exp, int from_tty)
 {
   down_silently_base (count_exp);
-  observer_notify_user_selected_context_changed (USER_SELECTED_FRAME);
+  gdb::observers::user_selected_context_changed.notify (USER_SELECTED_FRAME);
 }
 
 void
@@ -2493,29 +2423,30 @@ return_command (const char *retval_exp, int from_tty)
     print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC, 1);
 }
 
-/* Sets the scope to input function name, provided that the function
-   is within the current stack frame.  */
+/* Find the most inner frame in the current stack for a function called
+   FUNCTION_NAME.  If no matching frame is found return NULL.  */
 
-struct function_bounds
+static struct frame_info *
+find_frame_for_function (const char *function_name)
 {
-  CORE_ADDR low, high;
-};
-
-static void
-func_command (const char *arg, int from_tty)
-{
+  /* Used to hold the lower and upper addresses for each of the
+     SYMTAB_AND_LINEs found for functions matching FUNCTION_NAME.  */
+  struct function_bounds
+  {
+    CORE_ADDR low, high;
+  };
   struct frame_info *frame;
-  int found = 0;
+  bool found = false;
   int level = 1;
 
-  if (arg == NULL)
-    return;
+  gdb_assert (function_name != NULL);
 
   frame = get_current_frame ();
   std::vector<symtab_and_line> sals
-    = decode_line_with_current_source (arg, DECODE_LINE_FUNFIRSTLINE);
+    = decode_line_with_current_source (function_name,
+				       DECODE_LINE_FUNFIRSTLINE);
   gdb::def_vector<function_bounds> func_bounds (sals.size ());
-  for (size_t i = 0; (i < sals.size () && !found); i++)
+  for (size_t i = 0; i < sals.size (); i++)
     {
       if (sals[i].pspace != current_program_space)
 	func_bounds[i].low = func_bounds[i].high = 0;
@@ -2523,9 +2454,7 @@ func_command (const char *arg, int from_tty)
 	       || find_pc_partial_function (sals[i].pc, NULL,
 					    &func_bounds[i].low,
 					    &func_bounds[i].high) == 0)
-	{
-	  func_bounds[i].low = func_bounds[i].high = 0;
-	}
+	func_bounds[i].low = func_bounds[i].high = 0;
     }
 
   do
@@ -2542,9 +2471,27 @@ func_command (const char *arg, int from_tty)
   while (!found && level == 0);
 
   if (!found)
-    printf_filtered (_("'%s' not within current stack frame.\n"), arg);
-  else if (frame != get_selected_frame (NULL))
-    select_and_print_frame (frame);
+    frame = NULL;
+
+  return frame;
+}
+
+/* Implements the dbx 'func' command.  */
+
+static void
+func_command (const char *arg, int from_tty)
+{
+  if (arg == NULL)
+    return;
+
+  struct frame_info *frame = find_frame_for_function (arg);
+  if (frame == NULL)
+    error (_("'%s' not within current stack frame."), arg);
+  if (frame != get_selected_frame (NULL))
+    {
+      select_frame (frame);
+      print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC, 1);
+    }
 }
 
 void
@@ -2576,22 +2523,23 @@ This is useful in command scripts."));
 Select and print a stack frame.\nWith no argument, \
 print the selected stack frame.  (See also \"info frame\").\n\
 An argument specifies the frame to select.\n\
-It can be a stack frame number or the address of the frame.\n"));
+It can be a stack frame number or the address of the frame."));
 
   add_com_alias ("f", "frame", class_stack, 1);
 
   add_com_suppress_notification ("select-frame", class_stack, select_frame_command, _("\
 Select a stack frame without printing anything.\n\
 An argument specifies the frame to select.\n\
-It can be a stack frame number or the address of the frame.\n"),
+It can be a stack frame number or the address of the frame."),
 		 &cli_suppress_notification.user_selected_context);
 
   add_com ("backtrace", class_stack, backtrace_command, _("\
 Print backtrace of all stack frames, or innermost COUNT frames.\n\
-With a negative argument, print outermost -COUNT frames.\nUse of the \
-'full' qualifier also prints the values of the local variables.\n\
+Usage: backtrace [QUALIFIERS]... [COUNT]\n\
+With a negative argument, print outermost -COUNT frames.\n\
+Use of the 'full' qualifier also prints the values of the local variables.\n\
 Use of the 'no-filters' qualifier prohibits frame filters from executing\n\
-on this backtrace.\n"));
+on this backtrace."));
   add_com_alias ("bt", "backtrace", class_stack, 0);
 
   add_com_alias ("where", "backtrace", class_alias, 0);
@@ -2609,7 +2557,7 @@ on this backtrace.\n"));
   if (dbx_commands)
     add_com ("func", class_stack, func_command, _("\
 Select the stack frame that contains <func>.\n\
-Usage: func <name>\n"));
+Usage: func <name>"));
 
   add_setshow_enum_cmd ("frame-arguments", class_stack,
 			print_frame_arguments_choices, &print_frame_arguments,

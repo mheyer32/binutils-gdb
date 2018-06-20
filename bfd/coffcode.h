@@ -32,18 +32,13 @@ SECTION
 
 	Coff in all its varieties is implemented with a few common
 	files and a number of implementation specific files. For
-	example, The 88k bcs coff format is implemented in the file
-	@file{coff-m88k.c}. This file @code{#include}s
-	@file{coff/m88k.h} which defines the external structure of the
-	coff format for the 88k, and @file{coff/internal.h} which
-	defines the internal structure. @file{coff-m88k.c} also
-	defines the relocations used by the 88k format
+	example, the i386 coff format is implemented in the file
+	@file{coff-i386.c}.  This file @code{#include}s
+	@file{coff/i386.h} which defines the external structure of the
+	coff format for the i386, and @file{coff/internal.h} which
+	defines the internal structure. @file{coff-i386.c} also
+	defines the relocations used by the i386 coff format
 	@xref{Relocations}.
-
-	The Intel i960 processor version of coff is implemented in
-	@file{coff-i960.c}. This file has the same structure as
-	@file{coff-m88k.c}, except that it includes @file{coff/i960.h}
-	rather than @file{coff-m88k.h}.
 
 SUBSECTION
 	Porting to a new version of coff
@@ -96,15 +91,6 @@ SUBSUBSECTION
 
 	Some of the Coff targets then also have additional routines in
 	the target source file itself.
-
-	For example, @file{coff-i960.c} includes
-	@file{coff/internal.h} and @file{coff/i960.h}.  It then
-	defines a few constants, such as @code{I960}, and includes
-	@file{coffcode.h}.  Since the i960 has complex relocation
-	types, @file{coff-i960.c} also includes some code to
-	manipulate the i960 relocs.  This code is not in
-	@file{coffcode.h} because it would not be used by any other
-	target.
 
 SUBSUBSECTION
 	Coff long section names
@@ -1664,19 +1650,6 @@ coff_bad_format_hook (bfd * abfd ATTRIBUTE_UNUSED, void * filehdr)
   if (BADMAG (*internal_f))
     return FALSE;
 
-  /* If the optional header is NULL or not the correct size then
-     quit; the only difference I can see between m88k dgux headers (MC88DMAGIC)
-     and Intel 960 readwrite headers (I960WRMAGIC) is that the
-     optional header is of a different size.
-
-     But the mips keeps extra stuff in it's opthdr, so dont check
-     when doing that.  */
-
-#if defined(M88) || defined(I960)
-  if (internal_f->f_opthdr != 0 && bfd_coff_aoutsz (abfd) != internal_f->f_opthdr)
-    return FALSE;
-#endif
-
   return TRUE;
 }
 
@@ -1848,12 +1821,6 @@ coff_set_alignment_hook (bfd * abfd ATTRIBUTE_UNUSED,
   struct internal_scnhdr *hdr = (struct internal_scnhdr *) scnhdr;
   unsigned int i;
 
-#ifdef I960
-  /* Extract ALIGN from 2**ALIGN stored in section header.  */
-  for (i = 0; i < 32; i++)
-    if ((1 << i) >= hdr->s_align)
-      break;
-#endif
 #ifdef COFF_DECODE_ALIGNMENT
   i = COFF_DECODE_ALIGNMENT(hdr->s_flags);
 #endif
@@ -2136,7 +2103,7 @@ coff_set_arch_mach_hook (bfd *abfd, void * filehdr)
     case I386MAGIC:
     case I386PTXMAGIC:
     case I386AIXMAGIC:		/* Danbury PS/2 AIX C Compiler.  */
-    case LYNXCOFFMAGIC:		/* Shadows the m68k Lynx number below, sigh.  */
+    case LYNXCOFFMAGIC:
       arch = bfd_arch_i386;
       break;
 #endif
@@ -2178,30 +2145,6 @@ coff_set_arch_mach_hook (bfd *abfd, void * filehdr)
 	}
       break;
 #endif
-#ifdef MC68MAGIC
-    case MC68MAGIC:
-    case M68MAGIC:
-#ifdef MC68KBCSMAGIC
-    case MC68KBCSMAGIC:
-#endif
-#ifdef APOLLOM68KMAGIC
-    case APOLLOM68KMAGIC:
-#endif
-#ifdef LYNXCOFFMAGIC
-    case LYNXCOFFMAGIC:
-#endif
-      arch = bfd_arch_m68k;
-      machine = bfd_mach_m68020;
-      break;
-#endif
-#ifdef MC88MAGIC
-    case MC88MAGIC:
-    case MC88DMAGIC:
-    case MC88OMAGIC:
-      arch = bfd_arch_m88k;
-      machine = 88100;
-      break;
-#endif
 #ifdef Z80MAGIC
     case Z80MAGIC:
       arch = bfd_arch_z80;
@@ -2234,47 +2177,6 @@ coff_set_arch_mach_hook (bfd *abfd, void * filehdr)
 	  return FALSE;
 	}
       break;
-#endif
-#ifdef I860
-    case I860MAGIC:
-      arch = bfd_arch_i860;
-      break;
-#endif
-#ifdef I960
-#ifdef I960ROMAGIC
-    case I960ROMAGIC:
-    case I960RWMAGIC:
-      arch = bfd_arch_i960;
-      switch (F_I960TYPE & internal_f->f_flags)
-	{
-	default:
-	case F_I960CORE:
-	  machine = bfd_mach_i960_core;
-	  break;
-	case F_I960KB:
-	  machine = bfd_mach_i960_kb_sb;
-	  break;
-	case F_I960MC:
-	  machine = bfd_mach_i960_mc;
-	  break;
-	case F_I960XA:
-	  machine = bfd_mach_i960_xa;
-	  break;
-	case F_I960CA:
-	  machine = bfd_mach_i960_ca;
-	  break;
-	case F_I960KA:
-	  machine = bfd_mach_i960_ka_sa;
-	  break;
-	case F_I960JX:
-	  machine = bfd_mach_i960_jx;
-	  break;
-	case F_I960HX:
-	  machine = bfd_mach_i960_hx;
-	  break;
-	}
-      break;
-#endif
 #endif
 
 #ifdef RS6000COFF_C
@@ -2353,57 +2255,6 @@ coff_set_arch_mach_hook (bfd *abfd, void * filehdr)
       break;
 #endif
 
-#ifdef WE32KMAGIC
-    case WE32KMAGIC:
-      arch = bfd_arch_we32k;
-      break;
-#endif
-
-#ifdef H8300MAGIC
-    case H8300MAGIC:
-      arch = bfd_arch_h8300;
-      machine = bfd_mach_h8300;
-      /* !! FIXME this probably isn't the right place for this.  */
-      abfd->flags |= BFD_IS_RELAXABLE;
-      break;
-#endif
-
-#ifdef H8300HMAGIC
-    case H8300HMAGIC:
-      arch = bfd_arch_h8300;
-      machine = bfd_mach_h8300h;
-      /* !! FIXME this probably isn't the right place for this.  */
-      abfd->flags |= BFD_IS_RELAXABLE;
-      break;
-#endif
-
-#ifdef H8300SMAGIC
-    case H8300SMAGIC:
-      arch = bfd_arch_h8300;
-      machine = bfd_mach_h8300s;
-      /* !! FIXME this probably isn't the right place for this.  */
-      abfd->flags |= BFD_IS_RELAXABLE;
-      break;
-#endif
-
-#ifdef H8300HNMAGIC
-    case H8300HNMAGIC:
-      arch = bfd_arch_h8300;
-      machine = bfd_mach_h8300hn;
-      /* !! FIXME this probably isn't the right place for this.  */
-      abfd->flags |= BFD_IS_RELAXABLE;
-      break;
-#endif
-
-#ifdef H8300SNMAGIC
-    case H8300SNMAGIC:
-      arch = bfd_arch_h8300;
-      machine = bfd_mach_h8300sn;
-      /* !! FIXME this probably isn't the right place for this.  */
-      abfd->flags |= BFD_IS_RELAXABLE;
-      break;
-#endif
-
 #ifdef SH_ARCH_MAGIC_BIG
     case SH_ARCH_MAGIC_BIG:
     case SH_ARCH_MAGIC_LITTLE:
@@ -2417,12 +2268,6 @@ coff_set_arch_mach_hook (bfd *abfd, void * filehdr)
 #ifdef MIPS_ARCH_MAGIC_WINCE
     case MIPS_ARCH_MAGIC_WINCE:
       arch = bfd_arch_mips;
-      break;
-#endif
-
-#ifdef H8500MAGIC
-    case H8500MAGIC:
-      arch = bfd_arch_h8500;
       break;
 #endif
 
@@ -2486,12 +2331,6 @@ coff_set_arch_mach_hook (bfd *abfd, void * filehdr)
       break;
 #endif
 
-#ifdef W65MAGIC
-    case W65MAGIC:
-      arch = bfd_arch_w65;
-      break;
-#endif
-
     default:			/* Unreadable input file type.  */
       arch = bfd_arch_obscure;
       break;
@@ -2552,31 +2391,7 @@ coff_pointerize_aux_hook (bfd *abfd ATTRIBUTE_UNUSED,
 }
 
 #else
-#ifdef I960
-
-/* We don't want to pointerize bal entries.  */
-
-static bfd_boolean
-coff_pointerize_aux_hook (bfd *abfd ATTRIBUTE_UNUSED,
-			  combined_entry_type *table_base ATTRIBUTE_UNUSED,
-			  combined_entry_type *symbol,
-			  unsigned int indaux,
-			  combined_entry_type *aux ATTRIBUTE_UNUSED)
-{
-  /* Return TRUE if we don't want to pointerize this aux entry, which
-     is the case for the lastfirst aux entry for a C_LEAFPROC symbol.  */
-  return (indaux == 1
-	  && symbol->is_sym
-	  && (symbol->u.syment.n_sclass == C_LEAFPROC
-	      || symbol->u.syment.n_sclass == C_LEAFSTAT
-	      || symbol->u.syment.n_sclass == C_LEAFEXT));
-}
-
-#else /* ! I960 */
-
 #define coff_pointerize_aux_hook 0
-
-#endif /* ! I960 */
 #endif /* ! RS6000COFF_C */
 
 /* Print an aux entry.  This returns TRUE if it has printed it.  */
@@ -2856,32 +2671,6 @@ coff_set_flags (bfd * abfd,
       return TRUE;
 #endif
 
-#ifdef I960ROMAGIC
-    case bfd_arch_i960:
-
-      {
-	unsigned flags;
-
-	*magicp = I960ROMAGIC;
-
-	switch (bfd_get_mach (abfd))
-	  {
-	  case bfd_mach_i960_core:  flags = F_I960CORE; break;
-	  case bfd_mach_i960_kb_sb: flags = F_I960KB;	break;
-	  case bfd_mach_i960_mc:    flags = F_I960MC;	break;
-	  case bfd_mach_i960_xa:    flags = F_I960XA;	break;
-	  case bfd_mach_i960_ca:    flags = F_I960CA;	break;
-	  case bfd_mach_i960_ka_sa: flags = F_I960KA;	break;
-	  case bfd_mach_i960_jx:    flags = F_I960JX;	break;
-	  case bfd_mach_i960_hx:    flags = F_I960HX;	break;
-	  default:		    return FALSE;
-	  }
-	*flagsp = flags;
-	return TRUE;
-      }
-      break;
-#endif
-
 #ifdef TIC30MAGIC
     case bfd_arch_tic30:
       *magicp = TIC30MAGIC;
@@ -2981,55 +2770,10 @@ coff_set_flags (bfd * abfd,
       return TRUE;
 #endif
 
-#ifdef I860MAGIC
-    case bfd_arch_i860:
-      *magicp = I860MAGIC;
-      return TRUE;
-#endif
-
 #ifdef IA64MAGIC
     case bfd_arch_ia64:
       *magicp = IA64MAGIC;
       return TRUE;
-#endif
-
-#ifdef MC68MAGIC
-    case bfd_arch_m68k:
-#ifdef APOLLOM68KMAGIC
-      *magicp = APOLLO_COFF_VERSION_NUMBER;
-#else
-      /* NAMES_HAVE_UNDERSCORE may be defined by coff-u68k.c.  */
-#ifdef NAMES_HAVE_UNDERSCORE
-      *magicp = MC68KBCSMAGIC;
-#else
-      *magicp = MC68MAGIC;
-#endif
-#endif
-#ifdef LYNXOS
-      /* Just overwrite the usual value if we're doing Lynx.  */
-      *magicp = LYNXCOFFMAGIC;
-#endif
-      return TRUE;
-#endif
-
-#ifdef MC88MAGIC
-    case bfd_arch_m88k:
-      *magicp = MC88OMAGIC;
-      return TRUE;
-#endif
-
-#ifdef H8300MAGIC
-    case bfd_arch_h8300:
-      switch (bfd_get_mach (abfd))
-	{
-	case bfd_mach_h8300:   *magicp = H8300MAGIC;   return TRUE;
-	case bfd_mach_h8300h:  *magicp = H8300HMAGIC;  return TRUE;
-	case bfd_mach_h8300s:  *magicp = H8300SMAGIC;  return TRUE;
-	case bfd_mach_h8300hn: *magicp = H8300HNMAGIC; return TRUE;
-	case bfd_mach_h8300sn: *magicp = H8300SNMAGIC; return TRUE;
-	default: break;
-	}
-      break;
 #endif
 
 #ifdef SH_ARCH_MAGIC_BIG
@@ -3061,19 +2805,6 @@ coff_set_flags (bfd * abfd,
       return TRUE;
 #endif
 
-#ifdef H8500MAGIC
-    case bfd_arch_h8500:
-      *magicp = H8500MAGIC;
-      return TRUE;
-      break;
-#endif
-
-#ifdef WE32KMAGIC
-    case bfd_arch_we32k:
-      *magicp = WE32KMAGIC;
-      return TRUE;
-#endif
-
 #ifdef RS6000COFF_C
     case bfd_arch_rs6000:
 #ifndef PPCMAGIC
@@ -3087,12 +2818,6 @@ coff_set_flags (bfd * abfd,
 #ifdef MCOREMAGIC
     case bfd_arch_mcore:
       * magicp = MCOREMAGIC;
-      return TRUE;
-#endif
-
-#ifdef W65MAGIC
-    case bfd_arch_w65:
-      *magicp = W65MAGIC;
       return TRUE;
 #endif
 
@@ -3146,9 +2871,7 @@ sort_by_secaddr (const void * arg1, const void * arg2)
 
 /* Calculate the file position for each section.  */
 
-#ifndef I960
 #define ALIGN_SECTIONS_IN_FILE
-#endif
 #if defined(TIC80COFF) || defined(TICOFF)
 #undef ALIGN_SECTIONS_IN_FILE
 #endif
@@ -3389,9 +3112,7 @@ coff_compute_section_file_positions (bfd * abfd)
 #endif
 
       /* Align the sections in the file to the same boundary on
-	 which they are aligned in virtual memory.  I960 doesn't
-	 do this (FIXME) so we can stay in sync with Intel.  960
-	 doesn't yet page from files...  */
+	 which they are aligned in virtual memory.  */
 #ifdef ALIGN_SECTIONS_IN_FILE
       if ((abfd->flags & EXEC_P) != 0)
 	{
@@ -3855,11 +3576,6 @@ coff_write_object_contents (bfd * abfd)
       else if (!strcmp (current->name, _BSS))
 	bss_sec = current;
 
-#ifdef I960
-      section.s_align = (current->alignment_power
-			 ? 1 << current->alignment_power
-			 : 0);
-#endif
 #ifdef COFF_ENCODE_ALIGNMENT
       COFF_ENCODE_ALIGNMENT(section, current->alignment_power);
       if ((unsigned int)COFF_DECODE_ALIGNMENT(section.s_flags)
@@ -4118,41 +3834,6 @@ coff_write_object_contents (bfd * abfd)
     internal_a.magic = TIC80_ARCH_MAGIC;
 #define __A_MAGIC_SET__
 #endif /* TIC80 */
-#ifdef I860
-    /* FIXME: What are the a.out magic numbers for the i860?  */
-    internal_a.magic = 0;
-#define __A_MAGIC_SET__
-#endif /* I860 */
-#ifdef I960
-    internal_a.magic = (magic == I960ROMAGIC ? NMAGIC : OMAGIC);
-#define __A_MAGIC_SET__
-#endif /* I960 */
-#if M88
-#define __A_MAGIC_SET__
-    internal_a.magic = PAGEMAGICBCS;
-#endif /* M88 */
-
-#if APOLLO_M68
-#define __A_MAGIC_SET__
-    internal_a.magic = APOLLO_COFF_VERSION_NUMBER;
-#endif
-
-#if defined(M68) || defined(WE32K) || defined(M68K)
-#define __A_MAGIC_SET__
-#if defined(LYNXOS)
-    internal_a.magic = LYNXCOFFMAGIC;
-#else
-#if defined(TARG_AUX)
-    internal_a.magic = (abfd->flags & D_PAGED ? PAGEMAGICPEXECPAGED :
-			abfd->flags & WP_TEXT ? PAGEMAGICPEXECSWAPPED :
-			PAGEMAGICEXECSWAPPED);
-#else
-#if defined (PAGEMAGICPEXECPAGED)
-    internal_a.magic = PAGEMAGICPEXECPAGED;
-#endif
-#endif /* TARG_AUX */
-#endif /* LYNXOS */
-#endif /* M68 || WE32K || M68K */
 
 #if defined(ARM)
 #define __A_MAGIC_SET__
@@ -4584,6 +4265,9 @@ coff_slurp_line_table (bfd *abfd, asection *asect)
   bfd_boolean have_func;
   bfd_boolean ret = TRUE;
 
+  if (asect->lineno_count == 0)
+    return TRUE;
+
   BFD_ASSERT (asect->lineno == NULL);
 
   if (asect->lineno_count > asect->size)
@@ -4820,11 +4504,6 @@ coff_slurp_symbol_table (bfd * abfd)
 
 	  switch (src->u.syment.n_sclass)
 	    {
-#ifdef I960
-	    case C_LEAFEXT:
-	      /* Fall through to next case.  */
-#endif
-
 	    case C_EXT:
 	    case C_WEAKEXT:
 #if defined ARM
@@ -4918,9 +4597,6 @@ coff_slurp_symbol_table (bfd * abfd)
 	      break;
 
 	    case C_STAT:	 /* Static.  */
-#ifdef I960
-	    case C_LEAFSTAT:	 /* Static leaf procedure.  */
-#endif
 #if defined ARM
 	    case C_THUMBSTAT:    /* Thumb static.  */
 	    case C_THUMBLABEL:   /* Thumb label.  */
@@ -4958,11 +4634,6 @@ coff_slurp_symbol_table (bfd * abfd)
 	    case C_REGPARM:	/* Register parameter.  */
 	    case C_REG:		/* register variable.  */
 	      /* C_AUTOARG conflicts with TI COFF C_UEXT.  */
-#if !defined (TIC80COFF) && !defined (TICOFF)
-#ifdef C_AUTOARG
-	    case C_AUTOARG:	/* 960-specific storage class.  */
-#endif
-#endif
 	    case C_TPDEF:	/* Type definition.  */
 	    case C_ARG:
 	    case C_AUTO:	/* Automatic variable.  */
@@ -5158,9 +4829,6 @@ coff_classify_symbol (bfd *abfd,
     {
     case C_EXT:
     case C_WEAKEXT:
-#ifdef I960
-    case C_LEAFEXT:
-#endif
 #ifdef ARM
     case C_THUMBEXT:
     case C_THUMBEXTFUNC:
@@ -5262,9 +4930,8 @@ SUBSUBSECTION
 
 	o The reloc index is turned into a pointer to a howto
 	structure, in a back end specific way. For instance, the 386
-	and 960 use the @code{r_type} to directly produce an index
-	into a howto table vector; the 88k subtracts a number from the
-	@code{r_type} field and creates an addend field.
+	uses the @code{r_type} to directly produce an index
+	into a howto table vector.
 */
 
 #ifndef CALC_ADDEND
@@ -5864,6 +5531,9 @@ coff_bigobj_swap_aux_in (bfd *abfd,
   AUXENT_BIGOBJ *ext = (AUXENT_BIGOBJ *) ext1;
   union internal_auxent *in = (union internal_auxent *) in1;
 
+  /* Make sure that all fields in the aux structure are
+     initialised.  */
+  memset (in, 0, sizeof * in);
   switch (in_class)
     {
     case C_FILE:
@@ -6080,6 +5750,10 @@ static bfd_coff_backend_data bigobj_swap_table =
 
 #ifndef coff_bfd_define_common_symbol
 #define coff_bfd_define_common_symbol	    bfd_generic_define_common_symbol
+#endif
+
+#ifndef coff_bfd_link_hide_symbol
+#define coff_bfd_link_hide_symbol	    _bfd_generic_link_hide_symbol
 #endif
 
 #ifndef coff_bfd_define_start_stop

@@ -199,7 +199,7 @@ inspect_type (struct demangle_parse_info *info,
 	      && strcmp (TYPE_NAME (type), name) == 0)
 	    return 0;
 
-	  is_anon = (TYPE_TAG_NAME (type) == NULL
+	  is_anon = (TYPE_NAME (type) == NULL
 		     && (TYPE_CODE (type) == TYPE_CODE_ENUM
 			 || TYPE_CODE (type) == TYPE_CODE_STRUCT
 			 || TYPE_CODE (type) == TYPE_CODE_UNION));
@@ -1108,8 +1108,7 @@ cp_find_first_component_aux (const char *name, int permissive)
 static void
 demangled_name_complaint (const char *name)
 {
-  complaint (&symfile_complaints,
-	     "unexpected demangled name '%s'", name);
+  complaint ("unexpected demangled name '%s'", name);
 }
 
 /* If NAME is the fully-qualified name of a C++

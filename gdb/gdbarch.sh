@@ -360,9 +360,6 @@ v;int;long_bit;;;8 * sizeof (long);4*TARGET_CHAR_BIT;;0
 # Number of bits in a long long or unsigned long long for the target
 # machine.
 v;int;long_long_bit;;;8 * sizeof (LONGEST);2*gdbarch->long_bit;;0
-# Alignment of a long long or unsigned long long for the target
-# machine.
-v;int;long_long_align_bit;;;8 * sizeof (LONGEST);2*gdbarch->long_bit;;0
 
 # The ABI default bit-size and format for "half", "float", "double", and
 # "long double".  These bit/format pairs should eventually be combined
@@ -625,7 +622,7 @@ m;CORE_ADDR;addr_bits_remove;CORE_ADDR addr;addr;;core_addr_identity;;0
 # For example, on AArch64, the top bits of an address known as the "tag"
 # are ignored by the kernel, the hardware, etc. and can be regarded as
 # additional data associated with the address.
-v;int;significant_addr_bit;;;;;gdbarch_addr_bit (gdbarch);
+v;int;significant_addr_bit;;;;;;0
 
 # FIXME/cagney/2001-01-18: This should be split in two.  A target method that
 # indicates if the target needs software single step.  An ISA method to
@@ -659,6 +656,9 @@ f;CORE_ADDR;skip_trampoline_code;struct frame_info *frame, CORE_ADDR pc;frame, p
 m;CORE_ADDR;skip_solib_resolver;CORE_ADDR pc;pc;;generic_skip_solib_resolver;;0
 # Some systems also have trampoline code for returning from shared libs.
 m;int;in_solib_return_trampoline;CORE_ADDR pc, const char *name;pc, name;;generic_in_solib_return_trampoline;;0
+
+# Return true if PC lies inside an indirect branch thunk.
+m;bool;in_indirect_branch_thunk;CORE_ADDR pc;pc;;default_in_indirect_branch_thunk;;0
 
 # A target might have problems with watchpoints as soon as the stack
 # frame of the current function has been destroyed.  This mostly happens
@@ -1160,6 +1160,9 @@ m;int;addressable_memory_unit_size;void;;;default_addressable_memory_unit_size;;
 v;char **;disassembler_options;;;0;0;;0;pstring_ptr (gdbarch->disassembler_options)
 v;const disasm_options_t *;valid_disassembler_options;;;0;0;;0;host_address_to_string (gdbarch->valid_disassembler_options)
 
+# Type alignment.
+m;ULONGEST;type_align;struct type *type;type;;default_type_align;;0
+
 EOF
 }
 
@@ -1258,6 +1261,7 @@ cat <<EOF
 #include <vector>
 #include "frame.h"
 #include "dis-asm.h"
+#include "gdb_obstack.h"
 
 struct floatformat;
 struct ui_file;
@@ -1529,14 +1533,19 @@ extern struct gdbarch *gdbarch_alloc (const struct gdbarch_info *info, struct gd
 
 extern void gdbarch_free (struct gdbarch *);
 
+/* Get the obstack owned by ARCH.  */
+
+extern obstack *gdbarch_obstack (gdbarch *arch);
 
 /* Helper function.  Allocate memory from the \`\`struct gdbarch''
    obstack.  The memory is freed when the corresponding architecture
    is also freed.  */
 
-extern void *gdbarch_obstack_zalloc (struct gdbarch *gdbarch, long size);
-#define GDBARCH_OBSTACK_CALLOC(GDBARCH, NR, TYPE) ((TYPE *) gdbarch_obstack_zalloc ((GDBARCH), (NR) * sizeof (TYPE)))
-#define GDBARCH_OBSTACK_ZALLOC(GDBARCH, TYPE) ((TYPE *) gdbarch_obstack_zalloc ((GDBARCH), sizeof (TYPE)))
+#define GDBARCH_OBSTACK_CALLOC(GDBARCH, NR, TYPE) \
+  obstack_calloc<TYPE> (gdbarch_obstack ((GDBARCH)), (NR))
+
+#define GDBARCH_OBSTACK_ZALLOC(GDBARCH, TYPE) \
+  obstack_zalloc<TYPE> (gdbarch_obstack ((GDBARCH)))
 
 /* Duplicate STRING, returning an equivalent string that's allocated on the
    obstack associated with GDBARCH.  The string is freed when the corresponding
@@ -1644,7 +1653,7 @@ cat <<EOF
 #include "reggroups.h"
 #include "osabi.h"
 #include "gdb_obstack.h"
-#include "observer.h"
+#include "observable.h"
 #include "regcache.h"
 #include "objfiles.h"
 #include "auxv.h"
@@ -1846,15 +1855,10 @@ EOF
 printf "\n"
 printf "\n"
 cat <<EOF
-/* Allocate extra space using the per-architecture obstack.  */
 
-void *
-gdbarch_obstack_zalloc (struct gdbarch *arch, long size)
+obstack *gdbarch_obstack (gdbarch *arch)
 {
-  void *data = obstack_alloc (arch->obstack, size);
-
-  memset (data, 0, size);
-  return data;
+  return arch->obstack;
 }
 
 /* See gdbarch.h.  */
@@ -2506,7 +2510,7 @@ set_target_gdbarch (struct gdbarch *new_gdbarch)
   gdb_assert (new_gdbarch != NULL);
   gdb_assert (new_gdbarch->initialized_p);
   current_inferior ()->gdbarch = new_gdbarch;
-  observer_notify_architecture_changed (new_gdbarch);
+  gdb::observers::architecture_changed.notify (new_gdbarch);
   registers_changed ();
 }
 

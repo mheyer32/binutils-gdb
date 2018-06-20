@@ -31,7 +31,6 @@
 #include "common/array-view.h"
 #include "cli/cli-script.h"
 
-struct value;
 struct block;
 struct gdbpy_breakpoint_object;
 struct gdbscm_breakpoint_object;
@@ -491,6 +490,14 @@ public:
      ascertain when an event location was set at a different location than
      the one originally selected by parsing, e.g., inlined symbols.  */
   const struct symbol *symbol = NULL;
+
+  /* Similarly, the minimal symbol found by the location parser, if
+     any.  This may be used to ascertain if the location was
+     originally set on a GNU ifunc symbol.  */
+  const minimal_symbol *msymbol = NULL;
+
+  /* The objfile the symbol or minimal symbol were found in.  */
+  const struct objfile *objfile = NULL;
 };
 
 /* The possible return values for print_bpstat, print_it_normal,
@@ -662,10 +669,6 @@ enum watchpoint_triggered
 typedef struct bp_location *bp_location_p;
 DEF_VEC_P(bp_location_p);
 
-/* A reference-counted struct command_line. This is an implementation
-   detail to the breakpoints module.  */
-typedef std::shared_ptr<command_line> counted_command_line;
-
 /* Some targets (e.g., embedded PowerPC) need two debug registers to set
    a watchpoint over a memory region.  If this flag is true, GDB will use
    only one register per watchpoint, thus assuming that all acesses that
@@ -813,7 +816,7 @@ struct watchpoint : public breakpoint
   /* Value of the watchpoint the last time we checked it, or NULL when
      we do not know the value yet or the value was not readable.  VAL
      is never lazy.  */
-  struct value *val;
+  value_ref_ptr val;
   /* Nonzero if VAL is valid.  If VAL_VALID is set but VAL is NULL,
      then an error occurred reading the value.  */
   int val_valid;
@@ -889,7 +892,7 @@ struct tracepoint : public breakpoint
   ULONGEST traceframe_usage;
 
   /* The static tracepoint marker id, if known.  */
-  char *static_trace_marker_id;
+  std::string static_trace_marker_id;
 
   /* LTTng/UST allow more than one marker with the same ID string,
      although it unadvised because it confuses tools.  When setting
@@ -917,9 +920,37 @@ extern void bpstat_clear (bpstat *);
    is part of the bpstat is copied as well.  */
 extern bpstat bpstat_copy (bpstat);
 
+/* Build the (raw) bpstat chain for the stop information given by ASPACE,
+   BP_ADDR, and WS.  Returns the head of the bpstat chain.  */
+
+extern bpstat build_bpstat_chain (const address_space *aspace,
+				  CORE_ADDR bp_addr,
+				  const struct target_waitstatus *ws);
+
+/* Get a bpstat associated with having just stopped at address
+   BP_ADDR in thread PTID.  STOP_CHAIN may be supplied as a previously
+   computed stop chain or NULL, in which case the stop chain will be
+   computed using build_bpstat_chain.
+
+   Determine whether we stopped at a breakpoint, etc, or whether we
+   don't understand this stop.  Result is a chain of bpstat's such
+   that:
+
+   if we don't understand the stop, the result is a null pointer.
+
+   if we understand why we stopped, the result is not null.
+
+   Each element of the chain refers to a particular breakpoint or
+   watchpoint at which we have stopped.  (We may have stopped for
+   several reasons concurrently.)
+
+   Each element of the chain has valid next, breakpoint_at,
+   commands, FIXME??? fields.  */
+
 extern bpstat bpstat_stop_status (const address_space *aspace,
 				  CORE_ADDR pc, ptid_t ptid,
-				  const struct target_waitstatus *ws);
+				  const struct target_waitstatus *ws,
+				  bpstat stop_chain = NULL);
 
 /* This bpstat_what stuff tells wait_for_inferior what to do with a
    breakpoint (a challenging task).
@@ -1125,7 +1156,7 @@ struct bpstats
     counted_command_line commands;
 
     /* Old value associated with a watchpoint.  */
-    struct value *old_val;
+    value_ref_ptr old_val;
 
     /* Nonzero if this breakpoint tells us to print the frame.  */
     char print;
@@ -1480,7 +1511,7 @@ extern void disable_breakpoint (struct breakpoint *);
 extern void enable_breakpoint (struct breakpoint *);
 
 extern void breakpoint_set_commands (struct breakpoint *b, 
-				     command_line_up &&commands);
+				     counted_command_line &&commands);
 
 extern void breakpoint_set_silent (struct breakpoint *b, int silent);
 
@@ -1604,10 +1635,6 @@ extern int is_tracepoint (const struct breakpoint *b);
    vector is newly allocated; the caller should free when done with
    it.  */
 extern VEC(breakpoint_p) *static_tracepoints_here (CORE_ADDR addr);
-
-/* Function that can be passed to read_command_line to validate
-   that each command is suitable for tracepoint command list.  */
-extern void check_tracepoint_command (char *line, void *closure);
 
 /* Create an instance of this to start registering breakpoint numbers
    for a later "commands" command.  */

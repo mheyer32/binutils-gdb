@@ -52,7 +52,7 @@
 #include "linespec.h"
 #include "extension.h"
 #include "gdbcmd.h"
-#include "observer.h"
+#include "observable.h"
 #include "common/gdb_optional.h"
 #include "common/byte-vector.h"
 
@@ -266,7 +266,7 @@ proceed_thread_callback (struct thread_info *thread, void *arg)
 static void
 exec_continue (char **argv, int argc)
 {
-  prepare_execution_command (&current_target, mi_async_p ());
+  prepare_execution_command (current_top_target (), mi_async_p ());
 
   if (non_stop)
     {
@@ -405,7 +405,7 @@ run_one_inferior (struct inferior *inf, void *arg)
   int start_p = *(int *) arg;
   const char *run_cmd = start_p ? "start" : "run";
   struct target_ops *run_target = find_run_target ();
-  int async_p = mi_async && run_target->to_can_async_p (run_target);
+  int async_p = mi_async && run_target->can_async_p ();
 
   if (inf->pid != 0)
     {
@@ -479,7 +479,7 @@ mi_cmd_exec_run (const char *command, char **argv, int argc)
     {
       const char *run_cmd = start_p ? "start" : "run";
       struct target_ops *run_target = find_run_target ();
-      int async_p = mi_async && run_target->to_can_async_p (run_target);
+      int async_p = mi_async && run_target->can_async_p ();
 
       mi_execute_cli_command (run_cmd, async_p,
 			      async_p ? "&" : NULL);
@@ -573,8 +573,8 @@ mi_cmd_thread_select (const char *command, char **argv, int argc)
   /* Notify if the thread has effectively changed.  */
   if (!ptid_equal (inferior_ptid, previous_ptid))
     {
-      observer_notify_user_selected_context_changed (USER_SELECTED_THREAD
-						     | USER_SELECTED_FRAME);
+      gdb::observers::user_selected_context_changed.notify
+	(USER_SELECTED_THREAD | USER_SELECTED_FRAME);
     }
 }
 
@@ -1017,8 +1017,6 @@ register_changed_p (int regnum, readonly_detached_regcache *prev_regs,
 
   release_value (prev_value);
   release_value (this_value);
-  value_free (prev_value);
-  value_free (this_value);
   return ret;
 }
 
@@ -1355,11 +1353,8 @@ mi_cmd_data_read_memory (const char *command, char **argv, int argc)
 
   gdb::byte_vector mbuf (total_bytes);
 
-  /* Dispatch memory reads to the topmost target, not the flattened
-     current_target.  */
-  nr_bytes = target_read (current_target.beneath,
-			  TARGET_OBJECT_MEMORY, NULL, mbuf.data (),
-			  addr, total_bytes);
+  nr_bytes = target_read (current_top_target (), TARGET_OBJECT_MEMORY, NULL,
+			  mbuf.data (), addr, total_bytes);
   if (nr_bytes <= 0)
     error (_("Unable to read memory."));
 
@@ -1478,7 +1473,7 @@ mi_cmd_data_read_memory_bytes (const char *command, char **argv, int argc)
   length = atol (argv[1]);
 
   std::vector<memory_read_result> result
-    = read_memory_robust (current_target.beneath, addr, length);
+    = read_memory_robust (current_top_target (), addr, length);
 
   if (result.size () == 0)
     error (_("Unable to read memory."));
@@ -1998,7 +1993,7 @@ mi_execute_command (const char *cmd, int from_tty)
 
       if (/* The notifications are only output when the top-level
 	     interpreter (specified on the command line) is MI.  */
-	  interp_ui_out (top_level_interpreter ())->is_mi_like_p ()
+	  top_level_interpreter ()->interp_ui_out ()->is_mi_like_p ()
 	  /* Don't try report anything if there are no threads --
 	     the program is dead.  */
 	  && thread_count () != 0
@@ -2024,8 +2019,8 @@ mi_execute_command (const char *cmd, int from_tty)
 
 	  if (report_change)
 	    {
-		observer_notify_user_selected_context_changed
-		  (USER_SELECTED_THREAD | USER_SELECTED_FRAME);
+	      gdb::observers::user_selected_context_changed.notify
+		(USER_SELECTED_THREAD | USER_SELECTED_FRAME);
 	    }
 	}
     }
@@ -2573,6 +2568,7 @@ mi_cmd_trace_frame_collected (const char *command, char **argv, int argc)
 	  break;
 	case REGISTERS_FORMAT:
 	  registers_format = oarg[0];
+	  break;
 	case MEMORY_CONTENTS:
 	  memory_contents = 1;
 	  break;
@@ -2667,7 +2663,7 @@ mi_cmd_trace_frame_collected (const char *command, char **argv, int argc)
 
 	if (tsv != NULL)
 	  {
-	    uiout->field_fmt ("name", "$%s", tsv->name);
+	    uiout->field_fmt ("name", "$%s", tsv->name.c_str ());
 
 	    tsv->value_known = target_get_trace_state_variable_value (tsv->number,
 								      &tsv->value);
