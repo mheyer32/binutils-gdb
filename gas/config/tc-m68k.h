@@ -24,11 +24,11 @@ struct fix;
 
 #define TARGET_BYTES_BIG_ENDIAN 1
 
-#define TARGET_FORMAT "elf32-m68k"
-
 #ifdef OBJ_AMIGAHUNK
 #undef TARGET_FORMAT
 #define TARGET_FORMAT "amiga"
+#else
+#define TARGET_FORMAT "elf32-m68k"
 #endif
 
 #define TARGET_ARCH bfd_arch_m68k
