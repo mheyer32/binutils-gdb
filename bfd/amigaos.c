@@ -3405,13 +3405,13 @@ amiga_load_stab_symbols (bfd *abfd)
       else
       if (0 == strcmp(".stab", s->name))
 	{
-	  amiga_data->symtab_size = s->rawsize;
+	  amiga_data->symtab_size = s->size;
 	  stab = s->contents;
 	}
       else
       if (0 == strcmp(".stabstr", s->name))
 	{
-	  amiga_data->stringtab_size = s->rawsize;
+	  amiga_data->stringtab_size = s->size;
 	  stabstr = s->contents;
 	}
     }

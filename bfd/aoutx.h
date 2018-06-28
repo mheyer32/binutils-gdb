@@ -1737,8 +1737,10 @@ NAME (aout, translate_symbol_table) (bfd *abfd,
 
       if (dynamic)
 	in->symbol.flags |= BSF_DYNAMIC;
-    }
 
+//      printf("%4x%4x %08x %s\n", in->type, in->desc, (unsigned)in->symbol.value, in->symbol.name);
+    }
+//fflush(stdout);
   return TRUE;
 }
 
@@ -2828,8 +2830,8 @@ NAME (aout, find_nearest_line) (bfd *abfd,
   else
     funclen = strlen (bfd_asymbol_name (func));
 
-  if (adata (abfd).line_buf != NULL)
-    free (adata (abfd).line_buf);
+//  if (adata (abfd).line_buf != NULL)
+//    free (adata (abfd).line_buf);	// NOOOOOO! dis is used elsewhere!! e.g. objdump print_files
 
   if (filelen + funclen == 0)
     adata (abfd).line_buf = buf = NULL;
