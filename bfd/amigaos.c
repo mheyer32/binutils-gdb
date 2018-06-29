@@ -971,7 +971,7 @@ amiga_read_unit (
   return TRUE;
 }
 
-#ifdef __GCC__
+#ifdef __GNUC__
 #pragma GCC diagnostic ignored "-Wstack-usage="
 #endif
 /* Read a load file */
