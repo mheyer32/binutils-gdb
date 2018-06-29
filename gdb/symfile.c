@@ -2732,12 +2732,30 @@ allocate_compunit_symtab (struct objfile *objfile, const char *name)
 }
 
 /* Hook CU to the objfile it comes from.  */
+#if (DEFAULT_BFD_VEC == amiga_vec)
+extern CORE_ADDR text_offset;
+#endif
 
 void
 add_compunit_symtab_to_objfile (struct compunit_symtab *cu)
 {
   cu->next = cu->objfile->compunit_symtabs;
   cu->objfile->compunit_symtabs = cu;
+#if (DEFAULT_BFD_VEC == amiga_vec)
+  if (text_offset)
+    {
+      struct symtab *s;
+      struct linetable *l;
+      int i;
+
+      ALL_COMPUNIT_FILETABS (cu, s)
+      {
+	l = SYMTAB_LINETABLE (s);
+	for (i = 0; i < l->nitems; ++i)
+		    l->item[i].pc += text_offset;
+      }
+    }
+#endif
 }
 
 
