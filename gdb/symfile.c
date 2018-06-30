@@ -2751,6 +2751,7 @@ add_compunit_symtab_to_objfile (struct compunit_symtab *cu)
       ALL_COMPUNIT_FILETABS (cu, s)
       {
 	l = SYMTAB_LINETABLE (s);
+	if (l)
 	for (i = 0; i < l->nitems; ++i)
 		    l->item[i].pc += text_offset;
       }
