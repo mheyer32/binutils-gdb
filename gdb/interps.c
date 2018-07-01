@@ -39,6 +39,11 @@
 #include "top.h"		/* For command_loop.  */
 #include "continuations.h"
 
+#ifdef __CYGWIN__
+#include <setjmp.h>
+extern jmp_buf pseudo;
+#endif
+
 /* Each UI has its own independent set of interpreters.  */
 
 struct ui_interp_info
@@ -332,13 +337,27 @@ interp_supports_command_editing (struct interp *interp)
 struct gdb_exception
 interp_exec (struct interp *interp, const char *command_str)
 {
+#ifdef __CYGWIN__
+  jmp_buf tmp;
+  memcpy(&tmp, &pseudo, sizeof(tmp));
+  int r = 0;
+#endif
+{
   struct ui_interp_info *ui_interp = get_current_interp_info ();
 
   /* See `command_interp' for why we do this.  */
   scoped_restore save_command_interp
     = make_scoped_restore (&ui_interp->command_interpreter, interp);
 
+#ifdef __CYGWIN__
+  r = setjmp(pseudo);
+  if (!r)
+#endif
   return interp->exec (command_str);
+}
+#ifdef __CYGWIN__
+  longjmp(tmp, r);
+#endif
 }
 
 /* A convenience routine that nulls out all the common command hooks.

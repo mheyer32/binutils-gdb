@@ -65,6 +65,12 @@
 #include <set>
 #include <map>
 
+#ifdef __CYGWIN__
+#include <setjmp.h>
+extern jmp_buf pseudo;
+extern gdb_exception_RETURN_MASK_ERROR ex;
+#endif
+
 enum
   {
     FROM_TTY = 0
@@ -1941,16 +1947,27 @@ mi_execute_command (const char *cmd, int from_tty)
 
   target_log_command (cmd);
 
+#ifdef __CYGWIN__
+  command = NULL;
+  token = NULL;
+  int result = setjmp(pseudo);
+  if (result == 0) {
+    command = mi_parse (cmd, &token);
+  } else
+#else
   TRY
     {
       command = mi_parse (cmd, &token);
     }
-  CATCH (exception, RETURN_MASK_ALL)
+  CATCH (ex, RETURN_MASK_ALL)
+#endif
     {
-      mi_print_exception (token, exception);
+      mi_print_exception (token, ex);
       xfree (token);
     }
+#ifndef __CYGWIN__
   END_CATCH
+#endif
 
   if (command != NULL)
     {
@@ -1969,12 +1986,23 @@ mi_execute_command (const char *cmd, int from_tty)
 	  timestamp (command->cmd_start);
 	}
 
+#ifdef __CYGWIN__
+  ui_out *tmpuiout = current_uiout;
+//  struct interp * inter = command_interp();
+  int result = setjmp(pseudo);
+  if (result == 0) {
+      captured_mi_execute_command (current_uiout, command.get ());
+  } else {
+	  current_uiout = tmpuiout;
+//	  interp_set (inter, 0);
+#else
       TRY
 	{
 	  captured_mi_execute_command (current_uiout, command.get ());
 	}
-      CATCH (result, RETURN_MASK_ALL)
-	{
+      CATCH (ex, RETURN_MASK_ALL)
+  	{
+#endif
 	  /* Like in start_event_loop, enable input and force display
 	     of the prompt.  Otherwise, any command that calls
 	     async_disable_stdin, and then throws, will leave input
@@ -1984,10 +2012,12 @@ mi_execute_command (const char *cmd, int from_tty)
 
 	  /* The command execution failed and error() was called
 	     somewhere.  */
-	  mi_print_exception (command->token, result);
+	  mi_print_exception (command->token, ex);
 	  mi_out_rewind (current_uiout);
 	}
+#ifndef __CYGWIN__
       END_CATCH
+#endif
 
       bpstat_do_actions ();
 
