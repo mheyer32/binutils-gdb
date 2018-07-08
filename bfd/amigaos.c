@@ -1112,7 +1112,7 @@ amiga_handle_cdb_hunk (
 /* If hunk_size==-1, then we are digesting a HUNK_UNIT */
 {
   sec_ptr current_section;
-  char *sec_name,*current_name=NULL;
+  char *sec_name = "",*current_name=NULL;
   unsigned long len,tmp;
   int secflags,is_load=(hunk_size!=(unsigned long)-1);
 
