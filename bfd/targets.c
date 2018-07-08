@@ -922,16 +922,11 @@ static const bfd_target * const _bfd_target_vector[] =
 
 	&am33_elf32_linux_vec,
 
-<<<<<<< HEAD
 	&amiga_vec,
 	&aout_amiga_vec,
-
-	&aout0_be_vec,
 #ifdef BFD64
 	&aout64_vec,	/* Only compiled if host has long-long support.  */
 #endif
-=======
->>>>>>> origin/master
 #if 0
 	/* Since a.out files lack decent magic numbers, no way to recognize
 	   which kind of a.out file it is.  */
