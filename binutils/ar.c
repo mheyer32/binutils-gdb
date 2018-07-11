@@ -36,6 +36,7 @@
 #include "plugin-api.h"
 #include "plugin.h"
 
+
 #ifdef __GO32___
 #define EXT_NAME_LEN 3		/* Bufflen of addition to name if it's MS-DOS.  */
 #else
@@ -676,16 +677,20 @@ ranlib_main (int argc, char **argv)
   xexit (status);
 }
 
-int main (int, char **);
+int is_ranlib;
+
+int armain (int, char **,int);
 
 int
-main (int argc, char **argv)
+armain (int argc, char **argv, int isran)
 {
   int arg_index;
   char **files;
   int file_count;
   char *inarch_filename;
   int i;
+
+  is_ranlib = isran;
 
 #if defined (HAVE_SETLOCALE) && defined (HAVE_LC_MESSAGES)
   setlocale (LC_MESSAGES, "");

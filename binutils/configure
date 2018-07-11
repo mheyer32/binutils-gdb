@@ -14637,6 +14637,11 @@ cat >>confdefs.h <<_ACEOF
 #define TARGET "${target}"
 _ACEOF
 
+if test "x${target}" = "xm68k-unknown-amigaos"; then
+cat >>confdefs.h <<_ACEOF
+#define TARGET_AMIGA 1
+_ACEOF
+fi
 
 targ=$target
 . $srcdir/../bfd/config.bfd

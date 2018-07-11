@@ -1286,7 +1286,6 @@ static const bfd_target * const _bfd_target_vector[] =
 	&z80_coff_vec,
 
 	&z8k_coff_vec,
-#endif /* not SELECT_VECS */
 
 /* Always support S-records, for convenience.  */
 	&srec_vec,
@@ -1299,6 +1298,8 @@ static const bfd_target * const _bfd_target_vector[] =
 	&binary_vec,
 /* Likewise for ihex.  */
 	&ihex_vec,
+
+#endif /* not SELECT_VECS */
 
 /* Add any required traditional-core-file-handler.  */
 

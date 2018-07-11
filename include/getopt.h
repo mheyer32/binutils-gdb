@@ -22,6 +22,8 @@
 #ifndef _GETOPT_H
 #define _GETOPT_H 1
 
+#include "libiberty.h"
+
 #ifdef	__cplusplus
 extern "C" {
 #endif
@@ -32,7 +34,7 @@ extern "C" {
    Also, when `ordering' is RETURN_IN_ORDER,
    each non-option ARGV-element is returned here.  */
 
-extern char *optarg;
+extern LIBIBERTYDECL char *optarg;
 
 /* Index in ARGV of the next element to be scanned.
    This is used for communication to and from the caller
@@ -46,12 +48,12 @@ extern char *optarg;
    Otherwise, `optind' communicates from one call to the next
    how much of ARGV has been scanned so far.  */
 
-extern int optind;
+extern LIBIBERTYDECL int optind;
 
 /* Callers store zero here to inhibit the error message `getopt' prints
    for unrecognized options.  */
 
-extern int opterr;
+extern LIBIBERTYDECL int opterr;
 
 /* Set to an option character which was unrecognized.  */
 

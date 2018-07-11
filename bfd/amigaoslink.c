@@ -92,16 +92,16 @@ error_print (const char *fmt, ...)
 
 /* This one is used by the linker and tells us, if a debug hunk should be
    written out */
-int write_debug_hunk = 1;
+BFDDECL int write_debug_hunk = 1;
 
 /* This is also used by the linker to set the attribute of sections */
-int amiga_attribute = 0;
+BFDDECL int amiga_attribute = 0;
 
 /* This one is used to indicate base-relative linking */
-int amiga_base_relative = 0;
+BFDDECL int amiga_base_relative = 0;
 
 /* This one is used to indicate -resident linking */
-int amiga_resident = 0;
+BFDDECL int amiga_resident = 0;
 
 bfd_boolean
 default_indirect_link_order PARAMS ((bfd *, struct bfd_link_info *,

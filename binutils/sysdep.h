@@ -20,6 +20,13 @@
 #ifndef _BIN_SYSDEP_H
 #define _BIN_SYSDEP_H
 
+#ifndef BINUTILSDECL
+#define BINUTILSDECL
+#endif
+#ifndef BFDDECL
+#define BFDDECL
+#endif
+
 #include "alloca-conf.h"
 #include "ansidecl.h"
 #include <stdio.h>

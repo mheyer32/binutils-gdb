@@ -60,7 +60,7 @@ off_t get_file_size (const char *);
 
 bfd_boolean is_valid_archive_path (char const *);
 
-extern char *program_name;
+extern BINUTILSDECL char *program_name;
 
 /* In filemode.c.  */
 void mode_string (unsigned long, char *);

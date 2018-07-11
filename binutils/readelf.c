@@ -211,7 +211,7 @@ typedef struct filedata
   unsigned int         num_dump_sects;
 } Filedata;
 
-char * program_name = "readelf";
+BINUTILSDECL char * program_name = "readelf";
 
 static unsigned long archive_file_offset;
 static unsigned long archive_file_size;
@@ -13198,7 +13198,7 @@ uncompress_section_contents (unsigned char **   buffer,
   strm.next_in = (Bytef *) compressed_buffer;
   strm.avail_out = uncompressed_size;
   uncompressed_buffer = (unsigned char *) xmalloc (uncompressed_size);
-
+#ifndef _MSC_VER
   rc = inflateInit (& strm);
   while (strm.avail_in > 0)
     {
@@ -13222,6 +13222,7 @@ uncompress_section_contents (unsigned char **   buffer,
 
  fail:
   free (uncompressed_buffer);
+#endif
   /* Indicate decompression failure.  */
   *buffer = NULL;
   return FALSE;

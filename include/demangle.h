@@ -76,7 +76,7 @@ extern "C" {
    for operator "->", even though the first is lucid style and the second
    is ARM style. (FIXME?) */
 
-extern enum demangling_styles
+extern LIBIBERTYDECL enum demangling_styles
 {
   no_demangling = -1,
   unknown_demangling = 0,

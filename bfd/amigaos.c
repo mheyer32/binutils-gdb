@@ -385,16 +385,16 @@ howto_for_reloc (unsigned long type)
 
 /* This one is used by the linker and tells us, if a debug hunk should
    be written out. */
-extern int write_debug_hunk;
+extern BFDDECL int write_debug_hunk;
 
 /* This is also used by the linker to set the attribute of sections. */
-extern int amiga_attribute;
+extern BFDDECL int amiga_attribute;
 
 /* used with base-relative linking */
-extern int amiga_base_relative;
+extern BFDDECL int amiga_base_relative;
 
 /* used with -resident linking */
-extern int amiga_resident;
+extern BFDDECL int amiga_resident;
 
 static bfd_boolean
 get_long (bfd * abfd, unsigned long *n)

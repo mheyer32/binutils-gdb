@@ -235,6 +235,9 @@
 /* Configured target name. */
 #undef TARGET
 
+/* Is Amiga target. */
+#undef TARGET_AMIGA
+
 /* Define to 1 if user symbol names have a leading underscore, 0 if not. */
 #undef TARGET_PREPENDS_UNDERSCORE
 
@@ -285,3 +288,4 @@
 
 /* Define to 1 if you need to in order for `stat' and other things to work. */
 #undef _POSIX_SOURCE
+

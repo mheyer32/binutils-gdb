@@ -452,6 +452,10 @@ AC_SUBST(OBJDUMP_PRIVATE_OFILES)
 
 AC_DEFINE_UNQUOTED(TARGET, "${target}", [Configured target name.])
 
+if test "x${target}" = "xm68k-unknown-amigaos"; then
+AC_DEFINE_UNQUOTED(TARGET_AMIGA, 1, [Configured target is Amiga.])
+fi
+
 targ=$target
 . $srcdir/../bfd/config.bfd
 if test "x$targ_underscore" = "xyes"; then

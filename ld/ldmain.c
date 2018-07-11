@@ -933,8 +933,8 @@ multiple_definition (struct bfd_link_info *info,
 		     bfd_vma nval)
 {
   const char *name;
-  bfd *obfd;
-  asection *osec;
+  bfd *obfd = NULL;
+  asection *osec = NULL;
   bfd_vma oval;
 
   if (info->allow_multiple_definition)

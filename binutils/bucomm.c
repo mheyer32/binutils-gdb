@@ -38,7 +38,7 @@ typedef long time_t;
 
 /* Error reporting.  */
 
-char *program_name;
+BINUTILSDECL char *program_name;
 
 void
 bfd_nonfatal (const char *string)

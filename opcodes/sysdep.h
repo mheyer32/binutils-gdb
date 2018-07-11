@@ -33,6 +33,10 @@
 
 #include "config.h"
 
+#ifndef LIBIBERTYDECL
+#define LIBIBERTYDECL
+#endif
+
 #include "ansidecl.h"
 
 #ifdef HAVE_STDLIB_H

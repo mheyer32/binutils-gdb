@@ -22,6 +22,10 @@
 #ifndef BFD_SYSDEP_H
 #define BFD_SYSDEP_H
 
+#ifndef BFDDECL
+#define BFDDECL
+#endif
+
 #ifdef PACKAGE
 #error sysdep.h must be included in lieu of config.h
 #endif

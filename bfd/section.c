@@ -762,7 +762,7 @@ static const asymbol global_syms[] =
 #define STD_SECTION(NAME, IDX, FLAGS) \
   BFD_FAKE_SECTION(_bfd_std_section[IDX], &global_syms[IDX], NAME, IDX, FLAGS)
 
-asection _bfd_std_section[] = {
+BFDDECL asection _bfd_std_section[] = {
   STD_SECTION (BFD_COM_SECTION_NAME, 0, SEC_IS_COMMON),
   STD_SECTION (BFD_UND_SECTION_NAME, 1, 0),
   STD_SECTION (BFD_ABS_SECTION_NAME, 2, 0),

@@ -129,12 +129,12 @@ static const char digs[] = "0123456789ABCDEF";
 /* The number of data bytes we actually fit onto a line on output.
    This variable can be modified by objcopy's --srec-len parameter.
    For a 0x75 byte record you should set --srec-len=0x70.  */
-unsigned int _bfd_srec_len = DEFAULT_CHUNK;
+BFDDECL unsigned int _bfd_srec_len = DEFAULT_CHUNK;
 
 /* The type of srec output (free or forced to S3).
    This variable can be modified by objcopy's --srec-forceS3
    parameter.  */
-bfd_boolean _bfd_srec_forceS3 = FALSE;
+BFDDECL bfd_boolean _bfd_srec_forceS3 = FALSE;
 
 /* When writing an S-record file, the S-records can not be output as
    they are seen.  This structure is used to hold them in memory.  */

@@ -37,6 +37,10 @@
 #include "coff/i386.h"
 #include "coff/pe.h"
 
+int
+obmain(int argc, char *argv[], int _iss);
+
+
 static bfd_vma pe_file_alignment = (bfd_vma) -1;
 static bfd_vma pe_heap_commit = (bfd_vma) -1;
 static bfd_vma pe_heap_reserve = (bfd_vma) -1;
@@ -500,16 +504,16 @@ extern char *program_name;
 /* This flag distinguishes between strip and objcopy:
    1 means this is 'strip'; 0 means this is 'objcopy'.
    -1 means if we should use argv[0] to decide.  */
-extern int is_strip;
+int is_strip;
 
 /* The maximum length of an S record.  This variable is defined in srec.c
    and can be modified by the --srec-len parameter.  */
-extern unsigned int _bfd_srec_len;
+extern BFDDECL unsigned int _bfd_srec_len;
 
 /* Restrict the generation of Srecords to type S3 only.
    This variable is defined in bfd/srec.c and can be toggled
    on by the --srec-forceS3 command line switch.  */
-extern bfd_boolean _bfd_srec_forceS3;
+extern BFDDECL bfd_boolean _bfd_srec_forceS3;
 
 /* Forward declarations.  */
 static void setup_section (bfd *, asection *, void *);
@@ -2486,10 +2490,8 @@ copy_object (bfd *ibfd, bfd *obfd, const bfd_arch_info_type *input_arch)
       flags |= bfd_flags_to_set;
       flags &= ~bfd_flags_to_clear;
       flags &= bfd_applicable_file_flags (obfd);
-
       if (strip_symbols == STRIP_ALL)
 	flags &= ~HAS_RELOC;
-
       if (!bfd_set_start_address (obfd, start)
 	  || !bfd_set_file_flags (obfd, flags))
 	{
@@ -3993,7 +3995,11 @@ copy_relocations_in_section (bfd *ibfd, sec_ptr isection, void *obfdarg)
 	      if (relpp[i]->sym_ptr_ptr
 		  /* PR 20096 */
 		  && * relpp[i]->sym_ptr_ptr)
-		if (is_specified_symbol (bfd_asymbol_name (*relpp[i]->sym_ptr_ptr),
+		if (
+#ifdef TARGET_AMIGA
+			1 ||
+#endif
+			is_specified_symbol (bfd_asymbol_name (*relpp[i]->sym_ptr_ptr),
 					 keep_specific_htab))
 		  temp_relpp [temp_relcount++] = relpp [i];
 	    }
@@ -5539,8 +5545,9 @@ copy_main (int argc, char *argv[])
 }
 
 int
-main (int argc, char *argv[])
+obmain (int argc, char *argv[], int _iss)
 {
+	is_strip = _iss;
 #if defined (HAVE_SETLOCALE) && defined (HAVE_LC_MESSAGES)
   setlocale (LC_MESSAGES, "");
 #endif

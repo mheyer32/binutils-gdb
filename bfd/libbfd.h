@@ -934,7 +934,7 @@ struct bfd_iovec
                   int prot, int flags, file_ptr offset,
                   void **map_addr, bfd_size_type *map_len);
 };
-extern const struct bfd_iovec _bfd_memory_iovec;
+extern BFDDECL const struct bfd_iovec _bfd_memory_iovec;
 /* Extracted from bfdwin.c.  */
 struct _bfd_window_internal {
   struct _bfd_window_internal *next;
@@ -3257,7 +3257,7 @@ bfd_boolean _bfd_unrecognized_reloc
     unsigned int r_type);
 
 /* Extracted from archures.c.  */
-extern const bfd_arch_info_type bfd_default_arch_struct;
+extern BFDDECL const bfd_arch_info_type bfd_default_arch_struct;
 const bfd_arch_info_type *bfd_default_compatible
    (const bfd_arch_info_type *a, const bfd_arch_info_type *b);
 
