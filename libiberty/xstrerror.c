@@ -34,6 +34,7 @@ extern char *strerror (int,...);
 
 
 #ifndef DONT_DECLARE_STRERROR
+#ifndef _MSC_VER
 #  ifdef __cplusplus
 extern "C" {
 #  endif /* __cplusplus */
@@ -41,6 +42,7 @@ extern char *strerror (int);
 #  ifdef __cplusplus
 }
 #  endif /* __cplusplus */
+#endif
 #endif
 
 /* If strerror returns NULL, we'll format the number into a static buffer.  */

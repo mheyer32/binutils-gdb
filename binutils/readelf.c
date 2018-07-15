@@ -19217,7 +19217,7 @@ db_task_printsym (unsigned int addr)
 #endif
 
 int
-main (int argc, char ** argv)
+readelfmain (int argc, char ** argv)
 {
   int err;
 

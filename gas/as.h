@@ -34,6 +34,7 @@
   	COMMON as "".
    If TEST is #defined, then we are testing a module: #define COMMON as "".  */
 
+#include "config.h"
 #include "alloca-conf.h"
 
 /* Now, tend to the rest of the configuration.  */
@@ -641,6 +642,11 @@ COMMON int flag_sectname_subst;
 #endif
 #if OCTETS_PER_BYTE != (1<<OCTETS_PER_BYTE_POWER)
  #error "Octets per byte conflicts with its power-of-two definition!"
+#endif
+
+#if defined(_MSC_VER)
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
 #endif
 
 #endif /* GAS */

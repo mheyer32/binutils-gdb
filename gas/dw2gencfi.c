@@ -24,6 +24,9 @@
 #include "subsegs.h"
 #include "dwarf2dbg.h"
 
+int
+ffs(register int valu);
+
 #ifdef TARGET_USE_CFIPOP
 
 /* By default, use difference expressions if DIFF_EXPR_OK is defined.  */

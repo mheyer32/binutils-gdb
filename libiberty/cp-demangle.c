@@ -4627,7 +4627,7 @@ d_print_comp_inner (struct d_print_info *dpi, int options,
 
   /* Variable used to store the current templates while a previously
      captured scope is used.  */
-  struct d_print_template *saved_templates;
+  struct d_print_template *saved_templates = NULL;
 
   /* Nonzero if templates have been stored in the above variable.  */
   int need_template_restore = 0;
@@ -5774,7 +5774,7 @@ d_print_java_identifier (struct d_print_info *dpi, const char *name, int len)
 	     to deal with it here.  FIXME.  */
 	  if (q < end && *q == '_' && c < 256)
 	    {
-	      d_append_char (dpi, c);
+	      d_append_char (dpi, (char)c);
 	      p = q;
 	      continue;
 	    }

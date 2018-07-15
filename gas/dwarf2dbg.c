@@ -171,7 +171,12 @@ struct line_entry
 
 /* Don't change the offset of next in line_entry.  set_or_check_view
    calls in dwarf2_gen_line_info_1 depend on it.  */
+#ifdef _MSC_VER
+#define unused __gunused
+static char unused[1];
+#else
 static char unused[offsetof(struct line_entry, next) ? -1 : 1]
+#endif
 ATTRIBUTE_UNUSED;
 
 struct line_subseg
