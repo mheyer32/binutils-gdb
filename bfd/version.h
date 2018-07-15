@@ -1,4 +1,4 @@
-#define BFD_VERSION_DATE 20180711-212747
+#define BFD_VERSION_DATE 20180715-165159
 #define BFD_VERSION @bfd_version@
 #define BFD_VERSION_STRING @bfd_version_package@ @bfd_version_string@
 #define REPORT_BUGS_TO @report_bugs_to@
