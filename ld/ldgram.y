@@ -124,7 +124,7 @@ static int error_index;
 %right UNARY
 %token END
 %left <token> '('
-%token <token> ALIGN_K BLOCK BIND QUAD SQUAD LONG SHORT BYTE
+%token <token> ALIGN_K BLOCK BIND QUAD SQUAD xLONG xSHORT xBYTE
 %token SECTIONS PHDRS INSERT_K AFTER BEFORE
 %token DATA_SEGMENT_ALIGN DATA_SEGMENT_RELRO_END DATA_SEGMENT_END
 %token SORT_BY_NAME SORT_BY_ALIGNMENT SORT_NONE
@@ -141,7 +141,7 @@ static int error_index;
 %token DEFINED TARGET_K SEARCH_DIR MAP ENTRY
 %token <integer> NEXT
 %token SIZEOF ALIGNOF ADDR LOADADDR MAX_K MIN_K
-%token STARTUP HLL SYSLIB FLOAT NOFLOAT NOCROSSREFS NOCROSSREFS_TO
+%token STARTUP HLL SYSLIB xFLOAT NOFLOAT NOCROSSREFS NOCROSSREFS_TO
 %token ORIGIN FILL
 %token LENGTH CREATE_OBJECT_SYMBOLS INPUT GROUP OUTPUT CONSTRUCTORS
 %token ALIGNMOD AT SUBALIGN HIDDEN PROVIDE PROVIDE_HIDDEN AS_NEEDED
@@ -151,7 +151,7 @@ static int error_index;
 %token LOG2CEIL FORMAT PUBLIC DEFSYMEND BASE ALIAS TRUNCATE REL
 %token INPUT_SCRIPT INPUT_MRI_SCRIPT INPUT_DEFSYM CASE EXTERN START
 %token <name> VERS_TAG VERS_IDENTIFIER
-%token GLOBAL LOCAL VERSIONK INPUT_VERSION_SCRIPT
+%token xGLOBAL LOCAL VERSIONK INPUT_VERSION_SCRIPT
 %token KEEP ONLY_IF_RO ONLY_IF_RW SPECIAL INPUT_SECTION_FLAGS ALIGN_WITH_INPUT
 %token EXCLUDE_FILE
 %token CONSTANT
@@ -715,11 +715,11 @@ length:
 			{ $$ = $1; }
 	|	SQUAD
 			{ $$ = $1; }
-	|	LONG
+	|	xLONG
 			{ $$ = $1; }
-	|	SHORT
+	|	xSHORT
 			{ $$ = $1; }
-	|	BYTE
+	|	xBYTE
 			{ $$ = $1; }
 	;
 
@@ -876,7 +876,7 @@ low_level_library:
 	;
 
 floating_point_support:
-		FLOAT
+		xFLOAT
 			{ lang_float(TRUE); }
 	|	NOFLOAT
 			{ lang_float(FALSE); }
@@ -1383,7 +1383,7 @@ vers_tag:
 		{
 		  $$ = lang_new_vers_node ($1, NULL);
 		}
-	|	GLOBAL ':' vers_defns ';'
+	|	xGLOBAL ':' vers_defns ';'
 		{
 		  $$ = lang_new_vers_node ($3, NULL);
 		}
@@ -1391,7 +1391,7 @@ vers_tag:
 		{
 		  $$ = lang_new_vers_node (NULL, $3);
 		}
-	|	GLOBAL ':' vers_defns ';' LOCAL ':' vers_defns ';'
+	|	xGLOBAL ':' vers_defns ';' LOCAL ':' vers_defns ';'
 		{
 		  $$ = lang_new_vers_node ($3, $7);
 		}
@@ -1437,11 +1437,11 @@ vers_defns:
 			  $$ = $5;
 			  ldgram_vers_current_lang = $<name>4;
 			}
-	|	GLOBAL
+	|	xGLOBAL
 		{
 		  $$ = lang_new_vers_pattern (NULL, "global", ldgram_vers_current_lang, FALSE);
 		}
-	|	vers_defns ';' GLOBAL
+	|	vers_defns ';' xGLOBAL
 		{
 		  $$ = lang_new_vers_pattern ($1, "global", ldgram_vers_current_lang, FALSE);
 		}
