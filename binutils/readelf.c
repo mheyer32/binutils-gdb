@@ -74,6 +74,9 @@
 #include "elf/h8.h"
 #undef _ELF_H8_H
 
+int
+readelfmain (int argc, char ** argv);
+
 /* Undo the effects of #including reloc-macros.h.  */
 
 #undef START_RELOC_NUMBERS
