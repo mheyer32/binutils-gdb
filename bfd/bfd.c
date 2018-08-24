@@ -74,8 +74,9 @@ CODE_FRAGMENT
 .     least-recently-used list of BFDs.  *}
 .  struct bfd *lru_prev, *lru_next;
 .
-.  {* When a file is closed by the caching routines, BFD retains
-.     state information on the file here...  *}
+.  {* Track current file position (or current buffer offset for
+.     in-memory BFDs).  When a file is closed by the caching routines,
+.     BFD retains state information on the file here.  *}
 .  ufile_ptr where;
 .
 .  {* File modified time, if mtime_set is TRUE.  *}
@@ -304,21 +305,15 @@ CODE_FRAGMENT
 .    {
 .      struct aout_data_struct *aout_data;
 .      struct artdata *aout_ar_data;
-.      struct _oasys_data *oasys_obj_data;
-.      struct _oasys_ar_data *oasys_ar_data;
 .      struct coff_tdata *coff_obj_data;
 .      struct pe_tdata *pe_obj_data;
 .      struct xcoff_tdata *xcoff_obj_data;
 .      struct ecoff_tdata *ecoff_obj_data;
-.      struct ieee_data_struct *ieee_data;
-.      struct ieee_ar_data_struct *ieee_ar_data;
 .      struct srec_data_struct *srec_data;
 .      struct verilog_data_struct *verilog_data;
 .      struct ihex_data_struct *ihex_data;
 .      struct tekhex_data_struct *tekhex_data;
 .      struct elf_obj_tdata *elf_obj_data;
-.      struct nlm_obj_tdata *nlm_obj_data;
-.      struct bout_data_struct *bout_data;
 .      struct mmo_data_struct *mmo_data;
 .      struct sun_core_struct *sun_core_data;
 .      struct sco5_core_struct *sco5_core_data;
@@ -1093,14 +1088,6 @@ _bfd_doprnt_scan (const char *format, union _bfd_doprnt_args *args)
   return arg_count;
 }
 
-/* This is the default routine to handle BFD error messages.
-   Like fprintf (stderr, ...), but also handles some extra format specifiers.
-
-   %pA section name from section.  For group components, prints group name too.
-   %pB file name from bfd.  For archive components, prints archive too.
-
-   Beware: Only supports a maximum of 9 format arguments.  */
-
 static void
 error_handler_internal (const char *fmt, va_list ap)
 {
@@ -1161,6 +1148,26 @@ error_handler_internal (const char *fmt, va_list ap)
    the messages and deal with them itself.  */
 
 static bfd_error_handler_type _bfd_error_internal = error_handler_internal;
+
+/*
+FUNCTION
+	_bfd_error_handler
+
+SYNOPSIS
+	void _bfd_error_handler (const char *fmt, ...) ATTRIBUTE_PRINTF_1;
+
+DESCRIPTION
+	This is the default routine to handle BFD error messages.
+	Like fprintf (stderr, ...), but also handles some extra format
+	specifiers.
+
+	%pA section name from section.  For group components, prints
+	group name too.
+	%pB file name from bfd.  For archive components, prints
+	archive too.
+
+	Beware: Only supports a maximum of 9 format arguments.
+*/
 
 void
 _bfd_error_handler (const char *fmt, ...)
@@ -2138,7 +2145,7 @@ FUNCTION
 	bfd_emul_get_commonpagesize
 
 SYNOPSIS
-	bfd_vma bfd_emul_get_commonpagesize (const char *);
+	bfd_vma bfd_emul_get_commonpagesize (const char *, bfd_boolean);
 
 DESCRIPTION
 	Returns the common page size, in bytes, as determined by
@@ -2149,15 +2156,22 @@ RETURNS
 */
 
 bfd_vma
-bfd_emul_get_commonpagesize (const char *emul)
+bfd_emul_get_commonpagesize (const char *emul, bfd_boolean relro)
 {
   const bfd_target *target;
 
   target = bfd_find_target (emul, NULL);
   if (target != NULL
       && target->flavour == bfd_target_elf_flavour)
-    return xvec_get_elf_backend_data (target)->commonpagesize;
+    {
+      const struct elf_backend_data *bed;
 
+      bed = xvec_get_elf_backend_data (target);
+      if (relro)
+	return bed->relropagesize;
+      else
+	return bed->commonpagesize;
+    }
   return 0;
 }
 

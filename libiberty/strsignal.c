@@ -404,7 +404,7 @@ call to @code{strsignal}.
 
 #ifndef HAVE_STRSIGNAL
 
-char *
+const char *
 strsignal (int signo)
 {
   char *msg;

@@ -224,16 +224,6 @@ ppc_floating_point_unit_p (struct gdbarch *gdbarch)
 }
 
 /* Return non-zero if the architecture described by GDBARCH has
-   VSX registers (vsr0 --- vsr63).  */
-static int
-ppc_vsx_support_p (struct gdbarch *gdbarch)
-{
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-
-  return tdep->ppc_vsr0_regnum >= 0;
-}
-
-/* Return non-zero if the architecture described by GDBARCH has
    Altivec registers (vr0 --- vr31, vrsave and vscr).  */
 int
 ppc_altivec_support_p (struct gdbarch *gdbarch)
@@ -399,7 +389,7 @@ ppc_supply_reg (struct regcache *regcache, int regnum,
 	      && gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
 	    offset += regsize - gdb_regsize;
 	}
-      regcache_raw_supply (regcache, regnum, regs + offset);
+      regcache->raw_supply (regnum, regs + offset);
     }
 }
 
@@ -428,7 +418,7 @@ ppc_collect_reg (const struct regcache *regcache, int regnum,
 			regsize - gdb_regsize);
 	    }
 	}
-      regcache_raw_collect (regcache, regnum, regs + offset);
+      regcache->raw_collect (regnum, regs + offset);
     }
 }
     
@@ -481,24 +471,6 @@ ppc_fpreg_offset (struct gdbarch_tdep *tdep,
 
   if (regnum == tdep->ppc_fpscr_regnum)
     return offsets->fpscr_offset;
-
-  return -1;
-}
-
-static int
-ppc_vrreg_offset (struct gdbarch_tdep *tdep,
-		  const struct ppc_reg_offsets *offsets,
-		  int regnum)
-{
-  if (regnum >= tdep->ppc_vr0_regnum
-      && regnum < tdep->ppc_vr0_regnum + ppc_num_vrs)
-    return offsets->vr0_offset + (regnum - tdep->ppc_vr0_regnum) * 16;
-
-  if (regnum == tdep->ppc_vrsave_regnum - 1)
-    return offsets->vscr_offset;
-
-  if (regnum == tdep->ppc_vrsave_regnum)
-    return offsets->vrsave_offset;
 
   return -1;
 }
@@ -591,81 +563,6 @@ ppc_supply_fpregset (const struct regset *regset, struct regcache *regcache,
 		  regnum == tdep->ppc_fpscr_regnum ? offsets->fpscr_size : 8);
 }
 
-/* Supply register REGNUM in the VSX register set REGSET
-   from the buffer specified by VSXREGS and LEN to register cache
-   REGCACHE.  If REGNUM is -1, do this for all registers in REGSET.  */
-
-void
-ppc_supply_vsxregset (const struct regset *regset, struct regcache *regcache,
-		     int regnum, const void *vsxregs, size_t len)
-{
-  struct gdbarch *gdbarch = regcache->arch ();
-  struct gdbarch_tdep *tdep;
-
-  if (!ppc_vsx_support_p (gdbarch))
-    return;
-
-  tdep = gdbarch_tdep (gdbarch);
-
-  if (regnum == -1)
-    {
-      int i;
-
-      for (i = tdep->ppc_vsr0_upper_regnum;
-	   i < tdep->ppc_vsr0_upper_regnum + 32;
-	   i++)
-	ppc_supply_reg (regcache, i, (const gdb_byte *) vsxregs, 0, 8);
-
-      return;
-    }
-  else
-    ppc_supply_reg (regcache, regnum, (const gdb_byte *) vsxregs, 0, 8);
-}
-
-/* Supply register REGNUM in the Altivec register set REGSET
-   from the buffer specified by VRREGS and LEN to register cache
-   REGCACHE.  If REGNUM is -1, do this for all registers in REGSET.  */
-
-void
-ppc_supply_vrregset (const struct regset *regset, struct regcache *regcache,
-		     int regnum, const void *vrregs, size_t len)
-{
-  struct gdbarch *gdbarch = regcache->arch ();
-  struct gdbarch_tdep *tdep;
-  const struct ppc_reg_offsets *offsets;
-  size_t offset;
-
-  if (!ppc_altivec_support_p (gdbarch))
-    return;
-
-  tdep = gdbarch_tdep (gdbarch);
-  offsets = (const struct ppc_reg_offsets *) regset->regmap;
-  if (regnum == -1)
-    {
-      int i;
-
-      for (i = tdep->ppc_vr0_regnum, offset = offsets->vr0_offset;
-	   i < tdep->ppc_vr0_regnum + ppc_num_vrs;
-	   i++, offset += 16)
-        ppc_supply_reg (regcache, i, (const gdb_byte *) vrregs, offset, 16);
-
-      ppc_supply_reg (regcache, (tdep->ppc_vrsave_regnum - 1),
-		      (const gdb_byte *) vrregs, offsets->vscr_offset, 4);
-
-      ppc_supply_reg (regcache, tdep->ppc_vrsave_regnum,
-		      (const gdb_byte *) vrregs, offsets->vrsave_offset, 4);
-      return;
-    }
-
-  offset = ppc_vrreg_offset (tdep, offsets, regnum);
-  if (regnum != tdep->ppc_vrsave_regnum
-      && regnum != tdep->ppc_vrsave_regnum - 1)
-    ppc_supply_reg (regcache, regnum, (const gdb_byte *) vrregs, offset, 16);
-  else
-    ppc_supply_reg (regcache, regnum,
-		    (const gdb_byte *) vrregs, offset, 4);
-}
-
 /* Collect register REGNUM in the general-purpose register set
    REGSET from register cache REGCACHE into the buffer specified by
    GREGS and LEN.  If REGNUM is -1, do this for all registers in
@@ -756,87 +653,6 @@ ppc_collect_fpregset (const struct regset *regset,
   ppc_collect_reg (regcache, regnum, (gdb_byte *) fpregs, offset,
 		   regnum == tdep->ppc_fpscr_regnum ? offsets->fpscr_size : 8);
 }
-
-/* Collect register REGNUM in the VSX register set
-   REGSET from register cache REGCACHE into the buffer specified by
-   VSXREGS and LEN.  If REGNUM is -1, do this for all registers in
-   REGSET.  */
-
-void
-ppc_collect_vsxregset (const struct regset *regset,
-		      const struct regcache *regcache,
-		      int regnum, void *vsxregs, size_t len)
-{
-  struct gdbarch *gdbarch = regcache->arch ();
-  struct gdbarch_tdep *tdep;
-
-  if (!ppc_vsx_support_p (gdbarch))
-    return;
-
-  tdep = gdbarch_tdep (gdbarch);
-
-  if (regnum == -1)
-    {
-      int i;
-
-      for (i = tdep->ppc_vsr0_upper_regnum;
-	   i < tdep->ppc_vsr0_upper_regnum + 32;
-	   i++)
-	ppc_collect_reg (regcache, i, (gdb_byte *) vsxregs, 0, 8);
-
-      return;
-    }
-  else
-    ppc_collect_reg (regcache, regnum, (gdb_byte *) vsxregs, 0, 8);
-}
-
-
-/* Collect register REGNUM in the Altivec register set
-   REGSET from register cache REGCACHE into the buffer specified by
-   VRREGS and LEN.  If REGNUM is -1, do this for all registers in
-   REGSET.  */
-
-void
-ppc_collect_vrregset (const struct regset *regset,
-		      const struct regcache *regcache,
-		      int regnum, void *vrregs, size_t len)
-{
-  struct gdbarch *gdbarch = regcache->arch ();
-  struct gdbarch_tdep *tdep;
-  const struct ppc_reg_offsets *offsets;
-  size_t offset;
-
-  if (!ppc_altivec_support_p (gdbarch))
-    return;
-
-  tdep = gdbarch_tdep (gdbarch);
-  offsets = (const struct ppc_reg_offsets *) regset->regmap;
-  if (regnum == -1)
-    {
-      int i;
-
-      for (i = tdep->ppc_vr0_regnum, offset = offsets->vr0_offset;
-	   i < tdep->ppc_vr0_regnum + ppc_num_vrs;
-	   i++, offset += 16)
-	ppc_collect_reg (regcache, i, (gdb_byte *) vrregs, offset, 16);
-
-      ppc_collect_reg (regcache, (tdep->ppc_vrsave_regnum - 1),
-		       (gdb_byte *) vrregs, offsets->vscr_offset, 4);
-
-      ppc_collect_reg (regcache, tdep->ppc_vrsave_regnum,
-		       (gdb_byte *) vrregs, offsets->vrsave_offset, 4);
-      return;
-    }
-
-  offset = ppc_vrreg_offset (tdep, offsets, regnum);
-  if (regnum != tdep->ppc_vrsave_regnum
-      && regnum != tdep->ppc_vrsave_regnum - 1)
-    ppc_collect_reg (regcache, regnum, (gdb_byte *) vrregs, offset, 16);
-  else
-    ppc_collect_reg (regcache, regnum,
-		    (gdb_byte *) vrregs, offset, 4);
-}
-
 
 static int
 insn_changes_sp_or_jumps (unsigned long insn)
@@ -1357,6 +1173,39 @@ bl_to_blrl_insn_p (CORE_ADDR pc, int insn, enum bfd_endian byte_order)
   return 0;
 }
 
+/* Return true if OP is a stw or std instruction with
+   register operands RS and RA and any immediate offset.
+
+   If WITH_UPDATE is true, also return true if OP is
+   a stwu or stdu instruction with the same operands.
+
+   Return false otherwise.
+   */
+static bool
+store_insn_p (unsigned long op, unsigned long rs,
+	      unsigned long ra, bool with_update)
+{
+  rs = rs << 21;
+  ra = ra << 16;
+
+  if (/* std RS, SIMM(RA) */
+      ((op & 0xffff0003) == (rs | ra | 0xf8000000)) ||
+      /* stw RS, SIMM(RA) */
+      ((op & 0xffff0000) == (rs | ra | 0x90000000)))
+    return true;
+
+  if (with_update)
+    {
+      if (/* stdu RS, SIMM(RA) */
+	  ((op & 0xffff0003) == (rs | ra | 0xf8000001)) ||
+	  /* stwu RS, SIMM(RA) */
+	  ((op & 0xffff0000) == (rs | ra | 0x94000000)))
+	return true;
+    }
+
+  return false;
+}
+
 /* Masks for decoding a branch-and-link (bl) instruction.
 
    BL_MASK and BL_INSTRUCTION are used in combination with each other.
@@ -1583,6 +1432,7 @@ skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc, CORE_ADDR lim_pc,
   gdb_byte buf[4];
   unsigned long op;
   long offset = 0;
+  long alloca_reg_offset = 0;
   long vr_saved_offset = 0;
   int lr_reg = -1;
   int cr_reg = -1;
@@ -1654,14 +1504,14 @@ skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc, CORE_ADDR lim_pc,
 	     remember just the first one, but skip over additional
 	     ones.  */
 	  if (lr_reg == -1)
-	    lr_reg = (op & 0x03e00000);
+	    lr_reg = (op & 0x03e00000) >> 21;
           if (lr_reg == 0)
             r0_contains_arg = 0;
 	  continue;
 	}
       else if ((op & 0xfc1fffff) == 0x7c000026)
 	{			/* mfcr Rx */
-	  cr_reg = (op & 0x03e00000);
+	  cr_reg = (op & 0x03e00000) >> 21;
           if (cr_reg == 0)
             r0_contains_arg = 0;
 	  continue;
@@ -1738,14 +1588,17 @@ skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc, CORE_ADDR lim_pc,
 
 	}
       else if (lr_reg >= 0 &&
-	       /* std Rx, NUM(r1) || stdu Rx, NUM(r1) */
-	       (((op & 0xffff0000) == (lr_reg | 0xf8010000)) ||
-		/* stw Rx, NUM(r1) */
-		((op & 0xffff0000) == (lr_reg | 0x90010000)) ||
-		/* stwu Rx, NUM(r1) */
-		((op & 0xffff0000) == (lr_reg | 0x94010000))))
-	{	/* where Rx == lr */
-	  fdata->lr_offset = offset;
+	       ((store_insn_p (op, lr_reg, 1, true)) ||
+		(framep &&
+		 (store_insn_p (op, lr_reg,
+				fdata->alloca_reg - tdep->ppc_gp0_regnum,
+				false)))))
+	{
+	  if (store_insn_p (op, lr_reg, 1, true))
+	    fdata->lr_offset = offset;
+	  else /* LR save through frame pointer. */
+	    fdata->lr_offset = alloca_reg_offset;
+
 	  fdata->nosavedpc = 0;
 	  /* Invalidate lr_reg, but don't set it to -1.
 	     That would mean that it had never been set.  */
@@ -1760,13 +1613,8 @@ skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc, CORE_ADDR lim_pc,
 
 	}
       else if (cr_reg >= 0 &&
-	       /* std Rx, NUM(r1) || stdu Rx, NUM(r1) */
-	       (((op & 0xffff0000) == (cr_reg | 0xf8010000)) ||
-		/* stw Rx, NUM(r1) */
-		((op & 0xffff0000) == (cr_reg | 0x90010000)) ||
-		/* stwu Rx, NUM(r1) */
-		((op & 0xffff0000) == (cr_reg | 0x94010000))))
-	{	/* where Rx == cr */
+	       (store_insn_p (op, cr_reg, 1, true)))
+	{
 	  fdata->cr_offset = offset;
 	  /* Invalidate cr_reg, but don't set it to -1.
 	     That would mean that it had never been set.  */
@@ -1857,8 +1705,8 @@ skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc, CORE_ADDR lim_pc,
 	  offset = fdata->offset;
 	  continue;
 	}
-      else if ((op & 0xfc1f016e) == 0x7c01016e)
-	{			/* stwux rX,r1,rY */
+      else if ((op & 0xfc1f07fa) == 0x7c01016a)
+	{		/* stwux rX,r1,rY  || stdux rX,r1,rY */
 	  /* No way to figure out what r1 is going to be.  */
 	  fdata->frameless = 0;
 	  offset = fdata->offset;
@@ -1868,13 +1716,6 @@ skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc, CORE_ADDR lim_pc,
 	{			/* stdu rX,NUM(r1) */
 	  fdata->frameless = 0;
 	  fdata->offset = SIGNED_SHORT (op & ~3UL);
-	  offset = fdata->offset;
-	  continue;
-	}
-      else if ((op & 0xfc1f016a) == 0x7c01016a)
-	{			/* stdux rX,r1,rY */
-	  /* No way to figure out what r1 is going to be.  */
-	  fdata->frameless = 0;
 	  offset = fdata->offset;
 	  continue;
 	}
@@ -1920,6 +1761,7 @@ skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc, CORE_ADDR lim_pc,
 	  fdata->frameless = 0;
 	  framep = 1;
 	  fdata->alloca_reg = (tdep->ppc_gp0_regnum + 29);
+	  alloca_reg_offset = offset;
 	  continue;
 
 	  /* Another way to set up the frame pointer.  */
@@ -1930,6 +1772,7 @@ skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc, CORE_ADDR lim_pc,
 	  fdata->frameless = 0;
 	  framep = 1;
 	  fdata->alloca_reg = (tdep->ppc_gp0_regnum + 31);
+	  alloca_reg_offset = offset;
 	  continue;
 
 	  /* Another way to set up the frame pointer.  */
@@ -1940,6 +1783,7 @@ skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc, CORE_ADDR lim_pc,
 	  framep = 1;
 	  fdata->alloca_reg = (tdep->ppc_gp0_regnum
 			       + ((op & ~0x38010000) >> 21));
+	  alloca_reg_offset = offset;
 	  continue;
 	}
       /* AltiVec related instructions.  */
@@ -2180,7 +2024,7 @@ skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc, CORE_ADDR lim_pc,
 #endif /* 0 */
 
   if (pc == lim_pc && lr_reg >= 0)
-    fdata->lr_register = lr_reg >> 21;
+    fdata->lr_register = lr_reg;
 
   fdata->offset = -fdata->offset;
   return last_prologue_pc;
@@ -2708,7 +2552,7 @@ e500_move_ev_register (move_ev_register_func move,
 static enum register_status
 do_regcache_raw_write (struct regcache *regcache, int regnum, void *buffer)
 {
-  regcache_raw_write (regcache, regnum, (const gdb_byte *) buffer);
+  regcache->raw_write (regnum, (const gdb_byte *) buffer);
 
   return REG_VALID;
 }
@@ -2796,16 +2640,16 @@ dfp_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
     {
       /* Write each half of the dl register into a separate
       FP register.  */
-      regcache_raw_write (regcache, tdep->ppc_fp0_regnum +
+      regcache->raw_write (tdep->ppc_fp0_regnum +
 			  2 * reg_index, buffer);
-      regcache_raw_write (regcache, tdep->ppc_fp0_regnum +
+      regcache->raw_write (tdep->ppc_fp0_regnum +
 			  2 * reg_index + 1, buffer + 8);
     }
   else
     {
-      regcache_raw_write (regcache, tdep->ppc_fp0_regnum +
+      regcache->raw_write (tdep->ppc_fp0_regnum +
 			  2 * reg_index + 1, buffer);
-      regcache_raw_write (regcache, tdep->ppc_fp0_regnum +
+      regcache->raw_write (tdep->ppc_fp0_regnum +
 			  2 * reg_index, buffer + 8);
     }
 }
@@ -2855,22 +2699,22 @@ vsx_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
 
   /* Write the portion that overlaps the VMX registers.  */
   if (reg_index > 31)
-    regcache_raw_write (regcache, tdep->ppc_vr0_regnum +
+    regcache->raw_write (tdep->ppc_vr0_regnum +
 			reg_index - 32, buffer);
   else
     /* Write the portion that overlaps the FPR registers.  */
     if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
       {
-	regcache_raw_write (regcache, tdep->ppc_fp0_regnum +
+	regcache->raw_write (tdep->ppc_fp0_regnum +
 			reg_index, buffer);
-	regcache_raw_write (regcache, tdep->ppc_vsr0_upper_regnum +
+	regcache->raw_write (tdep->ppc_vsr0_upper_regnum +
 			reg_index, buffer + 8);
       }
     else
       {
-	regcache_raw_write (regcache, tdep->ppc_fp0_regnum +
+	regcache->raw_write (tdep->ppc_fp0_regnum +
 			reg_index, buffer + 8);
-	regcache_raw_write (regcache, tdep->ppc_vsr0_upper_regnum +
+	regcache->raw_write (tdep->ppc_vsr0_upper_regnum +
 			reg_index, buffer);
       }
 }
@@ -2900,9 +2744,8 @@ efpr_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
   int offset = gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG ? 0 : 8;
 
   /* Write the portion that overlaps the VMX register.  */
-  regcache_raw_write_part (regcache, tdep->ppc_vr0_regnum + reg_index,
-			   offset, register_size (gdbarch, reg_nr),
-			   buffer);
+  regcache->raw_write_part (tdep->ppc_vr0_regnum + reg_index, offset,
+			    register_size (gdbarch, reg_nr), buffer);
 }
 
 static enum register_status
@@ -3941,6 +3784,7 @@ ppc_process_record_op4 (struct gdbarch *gdbarch, struct regcache *regcache,
 	  && vra != 7	/* Decimal Convert From National */
 	  && vra != 31)	/* Decimal Set Sign */
 	break;
+      /* Fall through.  */
 			/* 5.16 Decimal Integer Arithmetic Instructions */
     case 1:		/* Decimal Add Modulo */
     case 65:		/* Decimal Subtract Modulo */
@@ -4857,7 +4701,7 @@ ppc_process_record_op31 (struct gdbarch *gdbarch, struct regcache *regcache,
       return 0;
 
     case 1014:		/* Data Cache Block set to Zero */
-      if (target_auxv_search (&current_target, AT_DCACHEBSIZE, &at_dcsz) <= 0
+      if (target_auxv_search (current_top_target (), AT_DCACHEBSIZE, &at_dcsz) <= 0
 	  || at_dcsz == 0)
 	at_dcsz = 128; /* Assume 128-byte cache line size (POWER8)  */
 
@@ -5537,6 +5381,7 @@ ppc_process_record_op63 (struct gdbarch *gdbarch, struct regcache *regcache,
 	  case 22:	/* Move From FPSCR Control & set RN */
 	  case 23:	/* Move From FPSCR Control & set RN Immediate */
 	    record_full_arch_list_add_reg (regcache, tdep->ppc_fpscr_regnum);
+	    /* Fall through.  */
 	  case 0:	/* Move From FPSCR */
 	  case 24:	/* Move From FPSCR Lightweight */
 	    if (PPC_FIELD (insn, 11, 5) == 0 && PPC_RC (insn))
@@ -6135,13 +5980,15 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 	      return NULL;
 	    }
 	  have_fpu = 1;
+
+	  /* The fpscr register was expanded in isa 2.05 to 64 bits
+	     along with the addition of the decimal floating point
+	     facility.  */
+	  if (tdesc_register_size (feature, "fpscr") > 32)
+	    have_dfp = 1;
 	}
       else
 	have_fpu = 0;
-
-      /* The DFP pseudo-registers will be available when there are floating
-         point registers.  */
-      have_dfp = have_fpu;
 
       feature = tdesc_find_feature (tdesc,
 				    "org.gnu.gdb.power.altivec");

@@ -2482,6 +2482,7 @@ disassemble_data (bfd *abfd)
   free (sorted_syms);
 }
 
+#ifndef _MSC_VER
 static bfd_boolean
 load_specific_debug_section (enum dwarf_section_display_enum debug,
 			     asection *sec, void *file)
@@ -2772,7 +2773,7 @@ dump_dwarf (bfd *abfd)
 
   free_debug_memory ();
 }
-
+#endif
 /* Read ABFD's stabs section STABSECT_NAME, and return a pointer to
    it.  Return NULL on failure.   */
 
@@ -3582,7 +3583,7 @@ dump_bfd (bfd *abfd)
     printf (_("\n%s:     file format %s\n"), bfd_get_filename (abfd),
 	    abfd->xvec->name);
   if (dump_ar_hdrs)
-    print_arelt_descr (stdout, abfd, TRUE);
+    print_arelt_descr (stdout, abfd, TRUE, FALSE);
   if (dump_file_header)
     dump_bfd_header (abfd);
   if (dump_private_headers)
@@ -3596,7 +3597,10 @@ dump_bfd (bfd *abfd)
       || dump_reloc_info
       || disassemble
       || dump_debugging
-      || dump_dwarf_section_info)
+#ifndef _MSC_VER      
+      || dump_dwarf_section_info
+#endif
+      )
     syms = slurp_symtab (abfd);
 
   if (dump_section_headers)
@@ -3617,8 +3621,10 @@ dump_bfd (bfd *abfd)
     dump_symbols (abfd, FALSE);
   if (dump_dynamic_symtab)
     dump_symbols (abfd, TRUE);
+#ifndef _MSC_VER
   if (dump_dwarf_section_info)
     dump_dwarf (abfd);
+#endif    
   if (dump_stab_section_info)
     dump_stabs (abfd);
   if (dump_reloc_info && ! disassemble)
@@ -3646,13 +3652,15 @@ dump_bfd (bfd *abfd)
 	      exit_status = 1;
 	    }
 	}
-      /* PR 6483: If there was no STABS or IEEE debug
-	 info in the file, try DWARF instead.  */
+#ifndef _MSC_VER
+      /* PR 6483: If there was no STABS debug info in the file, try
+	 DWARF instead.  */
       else if (! dump_dwarf_section_info)
 	{
 	  dwarf_select_sections_all ();
 	  dump_dwarf (abfd);
 	}
+#endif
     }
 
   if (syms)
@@ -3890,7 +3898,10 @@ main (int argc, char **argv)
 	    }
 	  break;
 	case 'w':
-	  do_wide = wide_output = TRUE;
+#ifndef _MSC_VER
+	  do_wide = 
+#endif
+		  wide_output = TRUE;
 	  break;
 	case OPTION_ADJUST_VMA:
 	  adjust_section_vma = parse_vma (optarg, "--adjust-vma");
@@ -4012,6 +4023,7 @@ main (int argc, char **argv)
 	  do_demangle = TRUE;
 	  seenflag = TRUE;
 	  break;
+#ifndef _MSC_VER	  
 	case 'W':
 	  dump_dwarf_section_info = TRUE;
 	  seenflag = TRUE;
@@ -4041,6 +4053,7 @@ main (int argc, char **argv)
 	    suppress_bfd_header = 1;
 	  }
 	  break;
+#endif	  
 	case OPTION_DWARF_CHECK:
 	  dwarf_check = TRUE;
 	  break;

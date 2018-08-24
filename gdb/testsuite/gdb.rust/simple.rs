@@ -80,6 +80,11 @@ struct ParametrizedStruct<T> {
     value: T
 }
 
+union Union {
+    f1: i8,
+    f2: u8,
+}
+
 fn main () {
     let a = ();
     let b : [i32; 0] = [];
@@ -111,6 +116,10 @@ fn main () {
     let x = (23, 25.5);
     let y = HiBob {field1: 7, field2: 8};
     let z = ByeBob(7, 8);
+
+    let field1 = 77;
+    let field2 = 88;
+    let y0 = HiBob { field1, field2 };
 
     let univariant = Univariant::Foo {a : 1};
     let univariant_anon = UnivariantAnon::Foo(1);
@@ -148,6 +157,8 @@ fn main () {
         },
         value: 0,
     };
+
+    let u = Union { f2: 255 };
 
     println!("{}, {}", x.0, x.1);        // set breakpoint here
     println!("{}", diff2(92, 45));

@@ -100,6 +100,20 @@ AC_ARG_ENABLE(elf_stt_common,
   yes)  ac_default_elf_stt_common=1 ;;
 esac])dnl
 
+
+# Decide if the ELF assembler should default to generating
+# GNU Build notes if none are provided by the input.
+ac_default_generate_build_notes=0
+# Provide a configuration option to override the default.
+AC_ARG_ENABLE(generate_build_notes,
+	      AS_HELP_STRING([--enable-generate-build-notes],
+	      [generate GNU Build notes if none are provided by the input]),
+[case "${enableval}" in
+  yes)  ac_default_generate_build_notes=1 ;;
+  no)   ac_default_generate_build_notes=0 ;;
+esac])dnl
+
+
 using_cgen=no
 
 AM_BINUTILS_WARNINGS
@@ -141,7 +155,7 @@ case "${host}" in
 esac
 AC_SUBST(GDBINIT)
 
-#We need this for the host.  BOUT header is in host order.
+#We need this for the host.
 AC_C_BIGENDIAN
 
 te_file=generic
@@ -190,12 +204,6 @@ for this_target in $target $canon_targets ; do
 
     generic_target=${cpu_type}-${target_vendor}-${target_os}
     case ${generic_target} in
-      i386-*-sco3.2v5*)
-	if test ${this_target} = $target; then
-	  AC_DEFINE(SCO_ELF, 1, [Define if defaulting to ELF on SCO 5.])
-	fi
-	;;
-
       i386-*-msdosdjgpp* \
       | i386-*-go32* \
       | i386-go32-rtems*)
@@ -211,10 +219,6 @@ for this_target in $target $canon_targets ; do
 	   && test ${ac_default_x86_relax_relocations} = unset; then
 	  ac_default_x86_relax_relocations=0
 	fi
-	;;
-
-      i860-*-*)
-	AC_MSG_WARN(GAS support for ${generic_target} is preliminary and a work in progress)
 	;;
 
       microblaze*)
@@ -234,10 +238,6 @@ changequote([,])dnl
 	if test x${endian} = xbig; then
 	  AC_MSG_ERROR(Solaris must be configured little endian)
 	fi
-	;;
-
-      sh*-*-symbianelf*)
-	AC_DEFINE(TARGET_SYMBIAN, 1, [Define if target is Symbian OS.])
 	;;
     esac
 
@@ -610,6 +610,11 @@ AC_DEFINE_UNQUOTED(DEFAULT_GENERATE_ELF_STT_COMMON,
   [Define to 1 if you want to generate ELF common symbols with the
    STT_COMMON type by default.])
 
+AC_DEFINE_UNQUOTED(DEFAULT_GENERATE_BUILD_NOTES,
+  $ac_default_generate_build_notes,
+  [Define to 1 if you want to generate GNU Build attribute notes
+   by default, if none are contained in the input.])
+
 if test x$ac_default_compressed_debug_sections = xyes ; then
   AC_DEFINE(DEFAULT_FLAG_COMPRESS_DEBUG, 1, [Define if you want compressed debug sections by default.])
 fi
@@ -692,8 +697,6 @@ case ${obj_format} in
   coff)
     case ${target_cpu_type} in
       i386) AC_DEFINE(I386COFF, 1, [Using i386 COFF?]) ;;
-      m68k) AC_DEFINE(M68KCOFF, 1, [Using m68k COFF?]) ;;
-      m88k) AC_DEFINE(M88KCOFF, 1, [Using m88k COFF?]) ;;
       x86_64) AC_DEFINE(I386COFF, 1, [Using i386 COFF?]) ;;
     esac
     ;;
@@ -737,7 +740,6 @@ if test `set . $formats ; shift ; echo $#` -gt 1 ; then
   for fmt in $formats ; do
     case $fmt in
       aout)	AC_DEFINE(OBJ_MAYBE_AOUT, 1,    [a.out support?])   ;;
-      bout)	AC_DEFINE(OBJ_MAYBE_BOUT, 1,    [b.out support?])   ;;
       coff)	AC_DEFINE(OBJ_MAYBE_COFF, 1,    [COFF support?])    ;;
       ecoff)	AC_DEFINE(OBJ_MAYBE_ECOFF, 1,   [ECOFF support?])   ;;
       elf)	AC_DEFINE(OBJ_MAYBE_ELF, 1,     [ELF support?])     ;;

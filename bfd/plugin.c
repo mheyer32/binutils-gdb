@@ -105,6 +105,7 @@ dlerror (void)
 #define bfd_plugin_bfd_discard_group		      bfd_generic_discard_group
 #define bfd_plugin_section_already_linked	      _bfd_generic_section_already_linked
 #define bfd_plugin_bfd_define_common_symbol	      bfd_generic_define_common_symbol
+#define bfd_plugin_bfd_link_hide_symbol		      _bfd_generic_link_hide_symbol
 #define bfd_plugin_bfd_define_start_stop	      bfd_generic_define_start_stop
 #define bfd_plugin_bfd_copy_link_hash_symbol_type     _bfd_generic_copy_link_hash_symbol_type
 #define bfd_plugin_bfd_link_check_relocs	      _bfd_generic_link_check_relocs
@@ -165,14 +166,22 @@ bfd_plugin_open_input (bfd *ibfd, struct ld_plugin_input_file *file)
   bfd *iobfd;
 
   iobfd = ibfd;
-  if (ibfd->my_archive && !bfd_is_thin_archive (ibfd->my_archive))
-    iobfd = ibfd->my_archive;
+  while (iobfd->my_archive
+	 && !bfd_is_thin_archive (iobfd->my_archive))
+    iobfd = iobfd->my_archive;
   file->name = iobfd->filename;
 
   if (!iobfd->iostream && !bfd_open_file (iobfd))
     return 0;
 
-  file->fd = fileno ((FILE *) iobfd->iostream);
+  /* The plugin API expects that the file descriptor won't be closed
+     and reused as done by the bfd file cache.  So open it again.
+     dup isn't good enough.  plugin IO uses lseek/read while BFD uses
+     fseek/fread.  It isn't wise to mix the unistd and stdio calls on
+     the same underlying file descriptor.  */
+  file->fd = open (file->name, O_RDONLY | O_BINARY);
+  if (file->fd < 0)
+    return 0;
 
   if (iobfd == ibfd)
     {
@@ -196,12 +205,12 @@ try_claim (bfd *abfd)
   int claimed = 0;
   struct ld_plugin_input_file file;
 
+  file.handle = abfd;
   if (!bfd_plugin_open_input (abfd, &file))
     return 0;
-  file.handle = abfd;
-  off_t cur_offset = lseek (file.fd, 0, SEEK_CUR);
   claim_file (&file, &claimed);
-  lseek (file.fd, cur_offset, SEEK_SET);
+  if (!claimed)
+    close (file.fd);
   return claimed;
 }
 

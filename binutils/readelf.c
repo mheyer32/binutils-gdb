@@ -74,6 +74,9 @@
 #include "elf/h8.h"
 #undef _ELF_H8_H
 
+int
+readelfmain (int argc, char ** argv);
+
 /* Undo the effects of #including reloc-macros.h.  */
 
 #undef START_RELOC_NUMBERS
@@ -119,6 +122,7 @@
 #include "elf/m32r.h"
 #include "elf/m68k.h"
 #include "elf/m68hc11.h"
+#include "elf/s12z.h"
 #include "elf/mcore.h"
 #include "elf/mep.h"
 #include "elf/metag.h"
@@ -131,6 +135,7 @@
 #include "elf/mt.h"
 #include "elf/msp430.h"
 #include "elf/nds32.h"
+#include "elf/nfp.h"
 #include "elf/nios2.h"
 #include "elf/or1k.h"
 #include "elf/pj.h"
@@ -209,7 +214,7 @@ typedef struct filedata
   unsigned int         num_dump_sects;
 } Filedata;
 
-char * program_name = "readelf";
+BINUTILSDECL char * program_name = "readelf";
 
 static unsigned long archive_file_offset;
 static unsigned long archive_file_size;
@@ -515,7 +520,8 @@ print_symbol (signed int width, const char *symbol)
       width = - width;
       extra_padding = TRUE;
     }
-  assert (width != 0);
+  else if (width == 0)
+    return 0;
 
   if (do_wide)
     /* Set the remaining width to a very large value.
@@ -775,6 +781,7 @@ guess_is_rela (unsigned int e_machine)
     case EM_CYGNUS_M32R:
     case EM_SCORE:
     case EM_XGATE:
+    case EM_NFP:
       return FALSE;
 
       /* Targets that use RELA relocations.  */
@@ -1271,6 +1278,10 @@ dump_relocations (Filedata *          filedata,
 	  rtype = elf_m68hc11_reloc_type (type);
 	  break;
 
+	case EM_S12Z:
+	  rtype = elf_s12z_reloc_type (type);
+	  break;
+
 	case EM_68K:
 	  rtype = elf_m68k_reloc_type (type);
 	  break;
@@ -1558,6 +1569,13 @@ dump_relocations (Filedata *          filedata,
 
 	case EM_TI_PRU:
 	  rtype = elf_pru_reloc_type (type);
+	  break;
+
+	case EM_NFP:
+	  if (EF_NFP_MACH (filedata->file_header.e_flags) == E_NFP_MACH_3200)
+	    rtype = elf_nfp3200_reloc_type (type);
+	  else
+	    rtype = elf_nfp_reloc_type (type);
 	  break;
 	}
 
@@ -2273,7 +2291,7 @@ get_machine_name (unsigned e_machine)
     case EM_PARISC:		return "HPPA";
     case EM_VPP550:		return "Fujitsu VPP500";
     case EM_SPARC32PLUS:	return "Sparc v8+" ;
-    case EM_960:		return "Intel 90860";
+    case EM_960:		return "Intel 80960";
     case EM_PPC:		return "PowerPC";
       /* 20 */
     case EM_PPC64:		return "PowerPC64";
@@ -2471,6 +2489,7 @@ get_machine_name (unsigned e_machine)
     case EM_RISCV: 	 	return "RISC-V";
     case EM_LANAI:		return "Lanai 32-bit processor";
     case EM_BPF:		return "Linux BPF";
+    case EM_NFP:		return "Netronome Flow Processor";
 
       /* Large numbers...  */
     case EM_MT:                 return "Morpho Techologies MT processor";
@@ -2484,6 +2503,7 @@ get_machine_name (unsigned e_machine)
     case EM_CYGNUS_MEP:         return "Toshiba MeP Media Engine";
     case EM_ADAPTEVA_EPIPHANY:	return "Adapteva EPIPHANY";
     case EM_CYGNUS_FRV:		return "Fujitsu FR-V";
+    case EM_S12Z:               return "Freescale S12Z";
 
     default:
       snprintf (buff, sizeof (buff), _("<unknown>: 0x%x"), e_machine);
@@ -2575,6 +2595,12 @@ decode_ARM_machine_flags (unsigned e_flags, char buf[])
     {
       strcat (buf, ", relocatable executable");
       e_flags &= ~ EF_ARM_RELEXEC;
+    }
+
+  if (e_flags & EF_ARM_PIC)
+    {
+      strcat (buf, ", position independent");
+      e_flags &= ~ EF_ARM_PIC;
     }
 
   /* Now handle EABI specific flags.  */
@@ -3433,9 +3459,24 @@ get_machine_flags (Filedata * filedata, unsigned e_flags, unsigned e_machine)
 	  decode_NDS32_machine_flags (e_flags, buf, sizeof buf);
 	  break;
 
+	case EM_NFP:
+	  switch (EF_NFP_MACH (e_flags))
+	    {
+	    case E_NFP_MACH_3200:
+	      strcat (buf, ", NFP-32xx");
+	      break;
+	    case E_NFP_MACH_6000:
+	      strcat (buf, ", NFP-6xxx");
+	      break;
+	    }
+	  break;
+
 	case EM_RISCV:
 	  if (e_flags & EF_RISCV_RVC)
 	    strcat (buf, ", RVC");
+
+	  if (e_flags & EF_RISCV_RVE)
+	    strcat (buf, ", RVE");
 
 	  switch (e_flags & EF_RISCV_FLOAT_ABI)
 	    {
@@ -3717,6 +3758,7 @@ get_osabi_name (Filedata * filedata, unsigned int osabi)
 	    switch (osabi)
 	      {
 	      case ELFOSABI_ARM:	return "ARM";
+	      case ELFOSABI_ARM_FDPIC:	return "ARM FDPIC";
 	      default:
 		break;
 	      }
@@ -4128,6 +4170,18 @@ get_msp430x_section_type_name (unsigned int sh_type)
 }
 
 static const char *
+get_nfp_section_type_name (unsigned int sh_type)
+{
+  switch (sh_type)
+    {
+    case SHT_NFP_MECONFIG:	return "NFP_MECONFIG";
+    case SHT_NFP_INITREG:	return "NFP_INITREG";
+    case SHT_NFP_UDEBUG:	return "NFP_UDEBUG";
+    default:			return NULL;
+    }
+}
+
+static const char *
 get_v850_section_type_name (unsigned int sh_type)
 {
   switch (sh_type)
@@ -4212,6 +4266,9 @@ get_section_type_name (Filedata * filedata, unsigned int sh_type)
 	      break;
 	    case EM_MSP430:
 	      result = get_msp430x_section_type_name (sh_type);
+	      break;
+	    case EM_NFP:
+	      result = get_nfp_section_type_name (sh_type);
 	      break;
 	    case EM_V800:
 	    case EM_V850:
@@ -9653,7 +9710,7 @@ process_dynamic_section (Filedata * filedata)
 	  if (archive_file_offset != 0)
 	    str_tab_len = archive_file_size - offset;
 	  else
-	    str_tab_len = filedata->file_size;
+	    str_tab_len = filedata->file_size - offset;
 
 	  if (str_tab_len < 1)
 	    {
@@ -10008,6 +10065,21 @@ process_dynamic_section (Filedata * filedata)
 		    {
 		      printf (" PIE");
 		      val ^= DF_1_PIE;
+		    }
+		  if (val & DF_1_KMOD)
+		    {
+		      printf (" KMOD");
+		      val ^= DF_1_KMOD;
+		    }
+		  if (val & DF_1_WEAKFILTER)
+		    {
+		      printf (" WEAKFILTER");
+		      val ^= DF_1_WEAKFILTER;
+		    }
+		  if (val & DF_1_NOCOMMON)
+		    {
+		      printf (" NOCOMMON");
+		      val ^= DF_1_NOCOMMON;
 		    }
 		  if (val != 0)
 		    printf (" %lx", val);
@@ -11197,7 +11269,7 @@ get_symbol_version_string (Filedata *                   filedata,
 
   vers_data = byte_get (data, 2);
 
-  if ((vers_data & VERSYM_HIDDEN) == 0 && vers_data <= 1)
+  if ((vers_data & VERSYM_HIDDEN) == 0 && vers_data == 0)
     return NULL;
 
   /* Usually we'd only see verdef for defined symbols, and verneed for
@@ -11232,12 +11304,14 @@ get_symbol_version_string (Filedata *                   filedata,
 	      ivd.vd_ndx = 0;
 	      ivd.vd_aux = 0;
 	      ivd.vd_next = 0;
+	      ivd.vd_flags = 0;
 	    }
 	  else
 	    {
 	      ivd.vd_ndx = BYTE_GET (evd.vd_ndx);
 	      ivd.vd_aux = BYTE_GET (evd.vd_aux);
 	      ivd.vd_next = BYTE_GET (evd.vd_next);
+	      ivd.vd_flags = BYTE_GET (evd.vd_flags);
 	    }
 
 	  off += ivd.vd_next;
@@ -11246,6 +11320,9 @@ get_symbol_version_string (Filedata *                   filedata,
 
       if (ivd.vd_ndx == (vers_data & VERSYM_VERSION))
 	{
+	  if (ivd.vd_ndx == 1 && ivd.vd_flags == VER_FLG_BASE) 
+	    return NULL;
+
 	  off -= ivd.vd_next;
 	  off += ivd.vd_aux;
 
@@ -12248,6 +12325,8 @@ is_32bit_abs_reloc (Filedata * filedata, unsigned int reloc_type)
     case EM_68HC11:
     case EM_68HC12:
       return reloc_type == 6; /* R_M68HC11_32.  */
+    case EM_S12Z:
+      return reloc_type == 6; /* R_S12Z_EXT32.  */
     case EM_MCORE:
       return reloc_type == 1; /* R_MCORE_ADDR32.  */
     case EM_CYGNUS_MEP:
@@ -12282,7 +12361,8 @@ is_32bit_abs_reloc (Filedata * filedata, unsigned int reloc_type)
     case EM_OR1K:
       return reloc_type == 1; /* R_OR1K_32.  */
     case EM_PARISC:
-      return (reloc_type == 1 /* R_PARISC_DIR32.  */
+      return (reloc_type == 1 /* R_PARISC_DIR32.  */	      
+	      || reloc_type == 2 /* R_PARISC_DIR21L.  */
 	      || reloc_type == 41); /* R_PARISC_SECREL32.  */
     case EM_PJ:
     case EM_PJ_OLD:
@@ -13121,7 +13201,7 @@ uncompress_section_contents (unsigned char **   buffer,
   strm.next_in = (Bytef *) compressed_buffer;
   strm.avail_out = uncompressed_size;
   uncompressed_buffer = (unsigned char *) xmalloc (uncompressed_size);
-
+#ifndef _MSC_VER
   rc = inflateInit (& strm);
   while (strm.avail_in > 0)
     {
@@ -13145,6 +13225,7 @@ uncompress_section_contents (unsigned char **   buffer,
 
  fail:
   free (uncompressed_buffer);
+#endif
   /* Indicate decompression failure.  */
   *buffer = NULL;
   return FALSE;
@@ -15432,6 +15513,10 @@ print_mips_ases (unsigned int mask)
     fputs ("\n\tXPA ASE", stdout);
   if (mask & AFL_ASE_MIPS16E2)
     fputs ("\n\tMIPS16e2 ASE", stdout);
+  if (mask & AFL_ASE_CRC)
+    fputs ("\n\tCRC ASE", stdout);
+  if (mask & AFL_ASE_GINV)
+    fputs ("\n\tGINV ASE", stdout);
   if (mask == 0)
     fprintf (stdout, "\n\t%s", _("None"));
   else if ((mask & ~AFL_ASE_MASK) != 0)
@@ -17487,6 +17572,13 @@ get_symbol_for_build_attribute (Filedata *       filedata,
 	if (strtab[sym->st_name] == 0)
 	  continue;
 
+	/* The AArch64 and ARM architectures define mapping symbols
+	   (eg $d, $x, $t) which we want to ignore.  */
+	if (strtab[sym->st_name] == '$'
+	    && strtab[sym->st_name + 1] != 0
+	    && strtab[sym->st_name + 2] == 0)
+	  continue;
+
 	if (is_open_attr)
 	  {
 	    /* For OPEN attributes we prefer GLOBAL over LOCAL symbols
@@ -17615,6 +17707,12 @@ print_gnu_build_attribute_description (Elf_Internal_Note *  pnote,
 
   name = NULL;
   sym = get_symbol_for_build_attribute (filedata, start, is_open_attr, & name);
+  /* As of version 5 of the annobin plugin, filename symbols are biased by 2
+     in order to avoid them being confused with the start address of the
+     first function in the file...  */
+  if (sym == NULL && is_open_attr)
+    sym = get_symbol_for_build_attribute (filedata, start + 2, is_open_attr,
+					  & name);
 
   if (end == 0 && sym != NULL && sym->st_size > 0)
     end = start + sym->st_size;
@@ -19122,7 +19220,7 @@ db_task_printsym (unsigned int addr)
 #endif
 
 int
-main (int argc, char ** argv)
+readelfmain (int argc, char ** argv)
 {
   int err;
 

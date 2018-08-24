@@ -84,9 +84,14 @@ function will be called to print an error message and terminate execution.
 #    ifdef __cplusplus
 extern "C" {
 #    endif /* __cplusplus */
+
+;
+#ifndef _MSC_VER
 void *malloc (size_t);
 void *realloc (void *, size_t);
 void *calloc (size_t, size_t);
+#endif
+
 void *sbrk (ptrdiff_t);
 #    ifdef __cplusplus
 }

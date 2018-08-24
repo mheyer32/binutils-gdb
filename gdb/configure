@@ -4534,9 +4534,9 @@ else
 fi
 
   if test "$plugins" = "yes"; then
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing dlopen" >&5
-$as_echo_n "checking for library containing dlopen... " >&6; }
-if ${ac_cv_search_dlopen+:} false; then :
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing dlsym" >&5
+$as_echo_n "checking for library containing dlsym... " >&6; }
+if test "${ac_cv_search_dlsym+set}" = set; then :
   $as_echo_n "(cached) " >&6
 else
   ac_func_search_save_LIBS=$LIBS
@@ -4549,11 +4549,11 @@ cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 #ifdef __cplusplus
 extern "C"
 #endif
-char dlopen ();
+char dlsym ();
 int
 main ()
 {
-return dlopen ();
+return dlsym ();
   ;
   return 0;
 }
@@ -4566,25 +4566,25 @@ for ac_lib in '' dl; do
     LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
   fi
   if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_search_dlopen=$ac_res
+  ac_cv_search_dlsym=$ac_res
 fi
 rm -f core conftest.err conftest.$ac_objext \
     conftest$ac_exeext
-  if ${ac_cv_search_dlopen+:} false; then :
+  if test "${ac_cv_search_dlsym+set}" = set; then :
   break
 fi
 done
-if ${ac_cv_search_dlopen+:} false; then :
+if test "${ac_cv_search_dlsym+set}" = set; then :
 
 else
-  ac_cv_search_dlopen=no
+  ac_cv_search_dlsym=no
 fi
 rm conftest.$ac_ext
 LIBS=$ac_func_search_save_LIBS
 fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_dlopen" >&5
-$as_echo "$ac_cv_search_dlopen" >&6; }
-ac_res=$ac_cv_search_dlopen
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_dlsym" >&5
+$as_echo "$ac_cv_search_dlsym" >&6; }
+ac_res=$ac_cv_search_dlsym
 if test "$ac_res" != no; then :
   test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
 
@@ -5046,7 +5046,7 @@ program_transform_name=`$as_echo "$program_transform_name" | sed "$ac_script"`
 # We require a C++11 compiler.  Check if one is available, and if
 # necessary, set CXX_DIALECT to some -std=xxx switch.
 
-      ax_cxx_compile_cxx11_required=true
+  ax_cxx_compile_alternatives="11 0x"    ax_cxx_compile_cxx11_required=true
   ac_ext=cpp
 ac_cpp='$CXXCPP $CPPFLAGS'
 ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
@@ -5362,7 +5362,8 @@ $as_echo "$ax_cv_cxx_compile_cxx11" >&6; }
   fi
 
     if test x$ac_success = xno; then
-    for switch in -std=gnu++11 -std=gnu++0x; do
+    for alternative in ${ax_cxx_compile_alternatives}; do
+      switch="-std=gnu++${alternative}"
       cachevar=`$as_echo "ax_cv_cxx_compile_cxx11_$switch" | $as_tr_sh`
       { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether $CXX supports C++11 features with $switch" >&5
 $as_echo_n "checking whether $CXX supports C++11 features with $switch... " >&6; }
@@ -5680,16 +5681,17 @@ $as_echo "$ac_res" >&6; }
   fi
 
     if test x$ac_success = xno; then
-                for switch in -std=c++11 -std=c++0x +std=c++11 "-h std=c++11"; do
-      cachevar=`$as_echo "ax_cv_cxx_compile_cxx11_$switch" | $as_tr_sh`
-      { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether $CXX supports C++11 features with $switch" >&5
+                for alternative in ${ax_cxx_compile_alternatives}; do
+      for switch in -std=c++${alternative} +std=c++${alternative} "-h std=c++${alternative}"; do
+        cachevar=`$as_echo "ax_cv_cxx_compile_cxx11_$switch" | $as_tr_sh`
+        { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether $CXX supports C++11 features with $switch" >&5
 $as_echo_n "checking whether $CXX supports C++11 features with $switch... " >&6; }
 if eval \${$cachevar+:} false; then :
   $as_echo_n "(cached) " >&6
 else
   ac_save_CXX="$CXX"
-         CXX="$CXX $switch"
-         cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+           CXX="$CXX $switch"
+           cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
 
@@ -5984,14 +5986,18 @@ else
   eval $cachevar=no
 fi
 rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-         CXX="$ac_save_CXX"
+           CXX="$ac_save_CXX"
 fi
 eval ac_res=\$$cachevar
 	       { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_res" >&5
 $as_echo "$ac_res" >&6; }
-      if eval test x\$$cachevar = xyes; then
-        CXX_DIALECT="$switch"
-        ac_success=yes
+        if eval test x\$$cachevar = xyes; then
+          CXX_DIALECT="$switch"
+          ac_success=yes
+          break
+        fi
+      done
+      if test x$ac_success = xyes; then
         break
       fi
     done
@@ -10509,7 +10515,7 @@ $as_echo_n "checking for ${version}... " >&6; }
   save_CPPFLAGS=$CPPFLAGS
   save_LIBS=$LIBS
   CPPFLAGS="$CPPFLAGS $new_CPPFLAGS"
-  LIBS="$LIBS $new_LIBS"
+  LIBS="$new_LIBS $LIBS"
   found_usable_python=no
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
@@ -10546,13 +10552,13 @@ $as_echo "${found_usable_python}" >&6; }
   version=python2.7
 
   new_CPPFLAGS=${python_includes}
-  new_LIBS="${python_libs} -lpython2.7"
+  new_LIBS="-lpython2.7 ${python_libs}"
   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for ${version}" >&5
 $as_echo_n "checking for ${version}... " >&6; }
   save_CPPFLAGS=$CPPFLAGS
   save_LIBS=$LIBS
   CPPFLAGS="$CPPFLAGS $new_CPPFLAGS"
-  LIBS="$LIBS $new_LIBS"
+  LIBS="$new_LIBS $LIBS"
   found_usable_python=no
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
@@ -10584,13 +10590,13 @@ $as_echo "${found_usable_python}" >&6; }
   version=python2.6
 
   new_CPPFLAGS=${python_includes}
-  new_LIBS="${python_libs} -lpython2.6"
+  new_LIBS="-lpython2.6 ${python_libs}"
   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for ${version}" >&5
 $as_echo_n "checking for ${version}... " >&6; }
   save_CPPFLAGS=$CPPFLAGS
   save_LIBS=$LIBS
   CPPFLAGS="$CPPFLAGS $new_CPPFLAGS"
-  LIBS="$LIBS $new_LIBS"
+  LIBS="$new_LIBS $LIBS"
   found_usable_python=no
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
@@ -10622,13 +10628,13 @@ $as_echo "${found_usable_python}" >&6; }
   version=python2.5
 
   new_CPPFLAGS=${python_includes}
-  new_LIBS="${python_libs} -lpython2.5"
+  new_LIBS="-lpython2.5 ${python_libs}"
   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for ${version}" >&5
 $as_echo_n "checking for ${version}... " >&6; }
   save_CPPFLAGS=$CPPFLAGS
   save_LIBS=$LIBS
   CPPFLAGS="$CPPFLAGS $new_CPPFLAGS"
-  LIBS="$LIBS $new_LIBS"
+  LIBS="$new_LIBS $LIBS"
   found_usable_python=no
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
@@ -10660,13 +10666,13 @@ $as_echo "${found_usable_python}" >&6; }
   version=python2.4
 
   new_CPPFLAGS=${python_includes}
-  new_LIBS="${python_libs} -lpython2.4"
+  new_LIBS="-lpython2.4 ${python_libs}"
   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for ${version}" >&5
 $as_echo_n "checking for ${version}... " >&6; }
   save_CPPFLAGS=$CPPFLAGS
   save_LIBS=$LIBS
   CPPFLAGS="$CPPFLAGS $new_CPPFLAGS"
-  LIBS="$LIBS $new_LIBS"
+  LIBS="$new_LIBS $LIBS"
   found_usable_python=no
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
@@ -15453,7 +15459,11 @@ build_warnings="-Wall -Wpointer-arith \
 -Wno-switch -Wno-char-subscripts \
 -Wempty-body -Wunused-but-set-parameter -Wunused-but-set-variable \
 -Wno-sign-compare -Wno-narrowing -Wno-error=maybe-uninitialized \
--Wno-mismatched-tags"
+-Wno-mismatched-tags \
+-Wno-error=deprecated-register \
+-Wsuggest-override \
+-Wimplicit-fallthrough=3 \
+-Wduplicated-cond"
 
 case "${host}" in
   *-*-mingw32*)

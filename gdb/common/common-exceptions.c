@@ -19,6 +19,11 @@
 
 #include "common-defs.h"
 #include "common-exceptions.h"
+#ifdef __CYGWIN__
+#include <setjmp.h>
+extern jmp_buf pseudo;
+extern gdb_exception_RETURN_MASK_ERROR ex;
+#endif
 
 const struct gdb_exception exception_none = { (enum return_reason) 0, GDB_NO_ERROR, NULL };
 
@@ -290,17 +295,27 @@ throw_exception_cxx (struct gdb_exception exception)
 
   if (exception.reason == RETURN_QUIT)
     {
+#ifdef __CYGWIN__
+      gdb_exception_sliced_copy (&ex, &exception);
+      longjmp(pseudo, -1);
+#else
       gdb_exception_RETURN_MASK_QUIT ex;
 
       gdb_exception_sliced_copy (&ex, &exception);
       throw ex;
+#endif
     }
   else if (exception.reason == RETURN_ERROR)
     {
+#ifdef __CYGWIN__
+      gdb_exception_sliced_copy (&ex, &exception);
+      longjmp(pseudo, 1);
+#else
       gdb_exception_RETURN_MASK_ERROR ex;
 
       gdb_exception_sliced_copy (&ex, &exception);
       throw ex;
+#endif
     }
   else
     gdb_assert_not_reached ("invalid return reason");

@@ -849,6 +849,54 @@ _bfd_x86_elf_compare_relocs (const void *ap, const void *bp)
     return 0;
 }
 
+/* Mark symbol, NAME, as locally defined by linker if it is referenced
+   and not defined in a relocatable object file.  */
+
+static void
+elf_x86_linker_defined (struct bfd_link_info *info, const char *name)
+{
+  struct elf_link_hash_entry *h;
+
+  h = elf_link_hash_lookup (elf_hash_table (info), name,
+			    FALSE, FALSE, FALSE);
+  if (h == NULL)
+    return;
+
+  while (h->root.type == bfd_link_hash_indirect)
+    h = (struct elf_link_hash_entry *) h->root.u.i.link;
+
+  if (h->root.type == bfd_link_hash_new
+      || h->root.type == bfd_link_hash_undefined
+      || h->root.type == bfd_link_hash_undefweak
+      || h->root.type == bfd_link_hash_common
+      || (!h->def_regular && h->def_dynamic))
+    {
+      elf_x86_hash_entry (h)->local_ref = 2;
+      elf_x86_hash_entry (h)->linker_def = 1;
+    }
+}
+
+/* Hide a linker-defined symbol, NAME, with hidden visibility.  */
+
+static void
+elf_x86_hide_linker_defined (struct bfd_link_info *info,
+			     const char *name)
+{
+  struct elf_link_hash_entry *h;
+
+  h = elf_link_hash_lookup (elf_hash_table (info), name,
+			    FALSE, FALSE, FALSE);
+  if (h == NULL)
+    return;
+
+  while (h->root.type == bfd_link_hash_indirect)
+    h = (struct elf_link_hash_entry *) h->root.u.i.link;
+
+  if (ELF_ST_VISIBILITY (h->other) == STV_INTERNAL
+      || ELF_ST_VISIBILITY (h->other) == STV_HIDDEN)
+    _bfd_elf_link_hash_hide_symbol (info, h, TRUE);
+}
+
 bfd_boolean
 _bfd_x86_elf_link_check_relocs (bfd *abfd, struct bfd_link_info *info)
 {
@@ -879,17 +927,23 @@ _bfd_x86_elf_link_check_relocs (bfd *abfd, struct bfd_link_info *info)
 
 	  /* "__ehdr_start" will be defined by linker as a hidden symbol
 	     later if it is referenced and not defined.  */
-	  h = elf_link_hash_lookup (elf_hash_table (info),
-				    "__ehdr_start",
-				    FALSE, FALSE, FALSE);
-	  if (h != NULL
-	      && (h->root.type == bfd_link_hash_new
-		  || h->root.type == bfd_link_hash_undefined
-		  || h->root.type == bfd_link_hash_undefweak
-		  || h->root.type == bfd_link_hash_common))
+	  elf_x86_linker_defined (info, "__ehdr_start");
+
+	  if (bfd_link_executable (info))
 	    {
-	      elf_x86_hash_entry (h)->local_ref = 2;
-	      elf_x86_hash_entry (h)->linker_def = 1;
+	      /* References to __bss_start, _end and _edata should be
+		 locally resolved within executables.  */
+	      elf_x86_linker_defined (info, "__bss_start");
+	      elf_x86_linker_defined (info, "_end");
+	      elf_x86_linker_defined (info, "_edata");
+	    }
+	  else
+	    {
+	      /* Hide hidden __bss_start, _end and _edata in shared
+		 libraries.  */
+	      elf_x86_hide_linker_defined (info, "__bss_start");
+	      elf_x86_hide_linker_defined (info, "_end");
+	      elf_x86_hide_linker_defined (info, "_edata");
 	    }
 	}
     }
@@ -1705,6 +1759,52 @@ _bfd_x86_elf_fixup_symbol (struct bfd_link_info *info,
   return TRUE;
 }
 
+/* Change the STT_GNU_IFUNC symbol defined in position-dependent
+   executable into the normal function symbol and set its address
+   to its PLT entry, which should be resolved by R_*_IRELATIVE at
+   run-time.  */
+
+void
+_bfd_x86_elf_link_fixup_ifunc_symbol (struct bfd_link_info *info,
+				      struct elf_x86_link_hash_table *htab,
+				      struct elf_link_hash_entry *h,
+				      Elf_Internal_Sym *sym)
+{
+  if (bfd_link_pde (info)
+      && h->def_regular
+      && h->dynindx != -1
+      && h->plt.offset != (bfd_vma) -1
+      && h->type == STT_GNU_IFUNC
+      && h->pointer_equality_needed)
+    {
+      asection *plt_s;
+      bfd_vma plt_offset;
+      bfd *output_bfd = info->output_bfd;
+
+      if (htab->plt_second)
+	{
+	  struct elf_x86_link_hash_entry *eh
+	    = (struct elf_x86_link_hash_entry *) h;
+
+	  plt_s = htab->plt_second;
+	  plt_offset = eh->plt_second.offset;
+	}
+      else
+	{
+	  plt_s = htab->elf.splt;
+	  plt_offset = h->plt.offset;
+	}
+
+      sym->st_size = 0;
+      sym->st_info = ELF_ST_INFO (ELF_ST_BIND (sym->st_info), STT_FUNC);
+      sym->st_shndx
+	= _bfd_elf_section_from_bfd_section (output_bfd,
+					     plt_s->output_section);
+      sym->st_value = (plt_s->output_section->vma
+		       + plt_s->output_offset + plt_offset);
+    }
+}
+
 /* Return TRUE if symbol should be hashed in the `.gnu.hash' section.  */
 
 bfd_boolean
@@ -1967,10 +2067,8 @@ _bfd_x86_elf_link_symbol_references_local (struct bfd_link_info *info,
 		  && htab->interp == NULL)
 	      || info->dynamic_undefined_weak == 0))
       || ((h->def_regular || ELF_COMMON_DEF_P (h))
-	  && h->versioned == unversioned
 	  && info->version_info != NULL
-	  && bfd_hide_sym_by_version (info->version_info,
-				      h->root.root.string)))
+	  && _bfd_elf_link_hide_sym_by_version (info, h)))
     {
       eh->local_ref = 2;
       return TRUE;
@@ -2518,7 +2616,9 @@ error_alignment:
 	       abfd = abfd->link.next)
 	    if (bfd_get_flavour (abfd) == bfd_target_elf_flavour
 		&& (abfd->flags
-		    & (DYNAMIC | BFD_LINKER_CREATED | BFD_PLUGIN)) == 0)
+		    & (DYNAMIC | BFD_LINKER_CREATED | BFD_PLUGIN)) == 0
+		&& bed->relocs_compatible (abfd->xvec,
+					   info->output_bfd->xvec))
 	      {
 		htab->elf.dynobj = abfd;
 		dynobj = abfd;

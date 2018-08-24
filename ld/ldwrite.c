@@ -120,15 +120,15 @@ build_link_order (lang_statement_union_type *statement)
 			break;
 		      }
 		    /* Fall through.  */
-		  case LONG:
+		  case xLONG:
 		    bfd_putl32 (value, buffer);
 		    value = bfd_getb32 (buffer);
 		    break;
-		  case SHORT:
+		  case xSHORT:
 		    bfd_putl16 (value, buffer);
 		    value = bfd_getb16 (buffer);
 		    break;
-		  case BYTE:
+		  case xBYTE:
 		    break;
 		  default:
 		    abort ();
@@ -163,17 +163,17 @@ build_link_order (lang_statement_union_type *statement)
 	      }
 	    link_order->size = QUAD_SIZE;
 	    break;
-	  case LONG:
+	  case xLONG:
 	    bfd_put_32 (link_info.output_bfd, value,
 			link_order->u.data.contents);
 	    link_order->size = LONG_SIZE;
 	    break;
-	  case SHORT:
+	  case xSHORT:
 	    bfd_put_16 (link_info.output_bfd, value,
 			link_order->u.data.contents);
 	    link_order->size = SHORT_SIZE;
 	    break;
-	  case BYTE:
+	  case xBYTE:
 	    bfd_put_8 (link_info.output_bfd, value,
 		       link_order->u.data.contents);
 	    link_order->size = BYTE_SIZE;

@@ -49,7 +49,7 @@ void list_supported_architectures (const char *, FILE *);
 
 int display_info (void);
 
-void print_arelt_descr (FILE *, bfd *, bfd_boolean);
+void print_arelt_descr (FILE *, bfd *, bfd_boolean, bfd_boolean);
 
 char *make_tempname (char *);
 char *make_tempdir (char *);
@@ -60,7 +60,7 @@ off_t get_file_size (const char *);
 
 bfd_boolean is_valid_archive_path (char const *);
 
-extern char *program_name;
+extern BINUTILSDECL char *program_name;
 
 /* In filemode.c.  */
 void mode_string (unsigned long, char *);

@@ -3945,9 +3945,7 @@ strip_excluded_output_sections (void)
 }
 
 /* Called from ldwrite to clear out asection.map_head and
-   asection.map_tail for use as link_orders in ldwrite.
-   FIXME: Except for sh64elf.em which starts creating link_orders in
-   its after_allocation routine so needs to call it early.  */
+   asection.map_tail for use as link_orders in ldwrite.  */
 
 void
 lang_clear_os_map (void)
@@ -4296,17 +4294,17 @@ print_data_statement (lang_data_statement_type *data)
     {
     default:
       abort ();
-    case BYTE:
+    case xBYTE:
       size = BYTE_SIZE;
-      name = "BYTE";
+      name = "xBYTE";
       break;
-    case SHORT:
+    case xSHORT:
       size = SHORT_SIZE;
-      name = "SHORT";
+      name = "xSHORT";
       break;
-    case LONG:
+    case xLONG:
       size = LONG_SIZE;
-      name = "LONG";
+      name = "xLONG";
       break;
     case QUAD:
       size = QUAD_SIZE;
@@ -5371,13 +5369,13 @@ lang_size_sections_1
 	      case SQUAD:
 		size = QUAD_SIZE;
 		break;
-	      case LONG:
+	      case xLONG:
 		size = LONG_SIZE;
 		break;
-	      case SHORT:
+	      case xSHORT:
 		size = SHORT_SIZE;
 		break;
-	      case BYTE:
+	      case xBYTE:
 		size = BYTE_SIZE;
 		break;
 	      }
@@ -5827,13 +5825,13 @@ lang_do_assignments_1 (lang_statement_union_type *s,
 	      case SQUAD:
 		size = QUAD_SIZE;
 		break;
-	      case LONG:
+	      case xLONG:
 		size = LONG_SIZE;
 		break;
-	      case SHORT:
+	      case xSHORT:
 		size = SHORT_SIZE;
 		break;
-	      case BYTE:
+	      case xBYTE:
 		size = BYTE_SIZE;
 		break;
 	      }

@@ -24,46 +24,13 @@ struct fix;
 
 #define TARGET_BYTES_BIG_ENDIAN 1
 
-#ifdef OBJ_AOUT
-#ifdef TE_SUN3
-#define TARGET_FORMAT "a.out-sunos-big"
-#endif
-#ifdef TE_NetBSD
-#define TARGET_FORMAT "a.out-m68k-netbsd"
-#endif
-#ifdef TE_LINUX
-#define TARGET_FORMAT "a.out-m68k-linux"
-#endif
-#ifndef TARGET_FORMAT
-#define TARGET_FORMAT "a.out-zero-big"
-#endif
-#endif
-
-#ifdef OBJ_ELF
+#ifdef OBJ_AMIGAHUNK
+#undef TARGET_FORMAT
+#define TARGET_FORMAT "amiga"
+#else
 #define TARGET_FORMAT "elf32-m68k"
 #endif
 
-#ifdef OBJ_AMIGAHUNK
-#define TARGET_FORMAT "amiga"
-#endif
-
-
-#ifdef TE_APOLLO
-#define COFF_MAGIC		APOLLOM68KMAGIC
-#define COFF_AOUTHDR_MAGIC	APOLLO_COFF_VERSION_NUMBER
-#undef OBJ_COFF_OMIT_OPTIONAL_HEADER
-#endif
-
-#ifdef TE_AUX
-#define TARGET_FORMAT		"coff-m68k-aux"
-#endif
-#ifdef TE_DELTA
-#define TARGET_FORMAT		"coff-m68k-sysv"
-#endif
-
-#ifndef COFF_MAGIC
-#define COFF_MAGIC MC68MAGIC
-#endif
 #define TARGET_ARCH bfd_arch_m68k
 
 #define tc_comment_chars m68k_comment_chars
@@ -79,23 +46,13 @@ extern const char *m68k_comment_chars;
 #define REGISTER_PREFIX '%'
 #endif
 
-#if !defined (REGISTER_PREFIX_OPTIONAL)
-#if defined (M68KCOFF) || defined (OBJ_ELF)
-#define REGISTER_PREFIX_OPTIONAL 0
-#else /* ! (COFF || ELF) */
+#ifdef OBJ_AMIGAHUNK
+#undef REGISTER_PREFIX_OPTIONAL 
 #define REGISTER_PREFIX_OPTIONAL 1
-#endif /* ! (COFF || ELF) */
-#endif /* not def REGISTER_PREFIX and not def OPTIONAL_REGISTER_PREFIX */
-
-#ifdef TE_DELTA
-/* On the Delta, `%' can occur within a label name, but not as the
-   initial character.  */
-#define LEX_PCT LEX_NAME
-/* On the Delta, `~' can start a label name, but is converted to '.'.  */
-#define LEX_TILDE LEX_BEGIN_NAME
-#define tc_canonicalize_symbol_name(s) ((*(s) == '~' ? *(s) = '.' : '.'), s)
-/* On the Delta, dots are not required before pseudo-ops.  */
-#define NO_PSEUDO_DOT 1
+#else
+#ifndef REGISTER_PREFIX_OPTIONAL
+#define REGISTER_PREFIX_OPTIONAL 0
+#endif
 #endif
 
 extern void m68k_mri_mode_change (int);

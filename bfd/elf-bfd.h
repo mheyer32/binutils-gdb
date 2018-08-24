@@ -543,6 +543,9 @@ struct elf_link_hash_table
      when linking against or generating a shared object.  */
   bfd_boolean dynamic_sections_created;
 
+  /* Whether dynamic relocations are present.  */
+  bfd_boolean dynamic_relocs;
+
   /* True if this target has relocatable executables, so needs dynamic
      section symbols.  */
   bfd_boolean is_relocatable_executable;
@@ -863,6 +866,9 @@ struct elf_backend_data
 
   /* The common page size for this backend.  */
   bfd_vma commonpagesize;
+
+  /* The value of commonpagesize to use when -z relro for this backend.  */
+  bfd_vma relropagesize;
 
   /* The BFD flags applied to sections created for dynamic linking.  */
   flagword dynamic_sec_flags;
@@ -1668,6 +1674,7 @@ struct bfd_elf_section_data
 #define elf_linked_to_section(sec) (elf_section_data(sec)->linked_to)
 #define elf_section_type(sec)	(elf_section_data(sec)->this_hdr.sh_type)
 #define elf_section_flags(sec)	(elf_section_data(sec)->this_hdr.sh_flags)
+#define elf_section_info(sec)	(elf_section_data(sec)->this_hdr.sh_info)
 #define elf_group_name(sec)	(elf_section_data(sec)->group.name)
 #define elf_group_id(sec)	(elf_section_data(sec)->group.id)
 #define elf_next_in_group(sec)	(elf_section_data(sec)->next_in_group)
@@ -2082,6 +2089,8 @@ extern void _bfd_elf_link_hash_copy_indirect
    struct elf_link_hash_entry *);
 extern void _bfd_elf_link_hash_hide_symbol
   (struct bfd_link_info *, struct elf_link_hash_entry *, bfd_boolean);
+extern void _bfd_elf_link_hide_symbol
+  (bfd *, struct bfd_link_info *, struct bfd_link_hash_entry *);
 extern bfd_boolean _bfd_elf_link_hash_fixup_symbol
   (struct bfd_link_info *, struct elf_link_hash_entry *);
 extern bfd_boolean _bfd_elf_link_hash_table_init
@@ -2179,6 +2188,9 @@ extern const struct bfd_elf_special_section *_bfd_elf_get_special_section
   (const char *, const struct bfd_elf_special_section *, unsigned int);
 extern const struct bfd_elf_special_section *_bfd_elf_get_sec_type_attr
   (bfd *, asection *);
+
+extern bfd_boolean _bfd_elf_link_hide_sym_by_version
+  (struct bfd_link_info *, struct elf_link_hash_entry *);
 
 /* If the target doesn't have reloc handling written yet:  */
 extern bfd_boolean _bfd_elf_no_info_to_howto

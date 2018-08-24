@@ -232,7 +232,8 @@ extern const char *ada_decode (const char*);
 extern enum language ada_update_initial_language (enum language);
 
 extern int ada_lookup_symbol_list (const char *, const struct block *,
-                                   domain_enum, struct block_symbol**);
+                                   domain_enum,
+				   std::vector<struct block_symbol> *);
 
 extern char *ada_fold_name (const char *);
 
@@ -377,7 +378,7 @@ extern char *ada_main_name (void);
 
 extern void create_ada_exception_catchpoint
   (struct gdbarch *gdbarch, enum ada_exception_catchpoint_kind ex_kind,
-   char *excep_string, const std::string &cond_string, int tempflag,
+   const std::string &excep_string, const std::string &cond_string, int tempflag,
    int disabled, int from_tty);
 
 /* Some information about a given Ada exception.  */

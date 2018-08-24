@@ -111,7 +111,8 @@ static const struct rust_op *ast_string (struct stoken str);
 static const struct rust_op *ast_struct (const struct rust_op *name,
 					 rust_set_vector *fields);
 static const struct rust_op *ast_range (const struct rust_op *lhs,
-					const struct rust_op *rhs);
+					const struct rust_op *rhs,
+					bool inclusive);
 static const struct rust_op *ast_array_type (const struct rust_op *lhs,
 					     struct typed_val_int val);
 static const struct rust_op *ast_slice_type (const struct rust_op *type);
@@ -300,6 +301,9 @@ struct rust_op
      name occurred at the end of the expression and is eligible for
      completion.  */
   unsigned int completing : 1;
+  /* For OP_RANGE, indicates whether the range is inclusive or
+     exclusive.  */
+  unsigned int inclusive : 1;
   /* Operands of expression.  Which one is used and how depends on the
      particular opcode.  */
   RUSTSTYPE left;
@@ -333,6 +337,7 @@ struct rust_op
 
 /* Operator tokens.  */
 %token <voidval> DOTDOT
+%token <voidval> DOTDOTEQ
 %token <voidval> OROR
 %token <voidval> ANDAND
 %token <voidval> EQEQ
@@ -382,7 +387,7 @@ struct rust_op
 %type <one_field_init> struct_expr_tail
 
 /* Precedence.  */
-%nonassoc DOTDOT
+%nonassoc DOTDOT DOTDOTEQ
 %right '=' COMPOUND_ASSIGN
 %left OROR
 %left ANDAND
@@ -481,6 +486,14 @@ struct_expr_tail:
 		  sf.init = $3;
 		  $$ = sf;
 		}
+|	IDENT
+		{
+		  struct set_field sf;
+
+		  sf.name = $1;
+		  sf.init = ast_path ($1, NULL);
+		  $$ = sf;
+		}
 ;
 
 struct_expr_list:
@@ -503,6 +516,15 @@ struct_expr_list:
 		  $5->push_back (sf);
 		  $$ = $5;
 		}
+|	IDENT ',' struct_expr_list
+		{
+		  struct set_field sf;
+
+		  sf.name = $1;
+		  sf.init = ast_path ($1, NULL);
+		  $3->push_back (sf);
+		  $$ = $3;
+		}
 ;
 
 array_expr:
@@ -518,13 +540,17 @@ array_expr:
 
 range_expr:
 	expr DOTDOT
-		{ $$ = ast_range ($1, NULL); }
+		{ $$ = ast_range ($1, NULL, false); }
 |	expr DOTDOT expr
-		{ $$ = ast_range ($1, $3); }
+		{ $$ = ast_range ($1, $3, false); }
+|	expr DOTDOTEQ expr
+		{ $$ = ast_range ($1, $3, true); }
 |	DOTDOT expr
-		{ $$ = ast_range (NULL, $2); }
+		{ $$ = ast_range (NULL, $2, false); }
+|	DOTDOTEQ expr
+		{ $$ = ast_range (NULL, $2, true); }
 |	DOTDOT
-		{ $$ = ast_range (NULL, NULL); }
+		{ $$ = ast_range (NULL, NULL, false); }
 ;
 
 literal:
@@ -939,6 +965,7 @@ static const struct token_info operator_tokens[] =
   { "&=", COMPOUND_ASSIGN, BINOP_BITWISE_AND },
   { "|=", COMPOUND_ASSIGN, BINOP_BITWISE_IOR },
   { "^=", COMPOUND_ASSIGN, BINOP_BITWISE_XOR },
+  { "..=", DOTDOTEQ, OP_NULL },
 
   { "::", COLONCOLON, OP_NULL },
   { "..", DOTDOT, OP_NULL },
@@ -1824,11 +1851,13 @@ ast_structop_anonymous (const struct rust_op *left,
 /* Make a range operation.  */
 
 static const struct rust_op *
-ast_range (const struct rust_op *lhs, const struct rust_op *rhs)
+ast_range (const struct rust_op *lhs, const struct rust_op *rhs,
+	   bool inclusive)
 {
   struct rust_op *result = OBSTACK_ZALLOC (work_obstack, struct rust_op);
 
   result->opcode = OP_RANGE;
+  result->inclusive = inclusive;
   result->left.op = lhs;
   result->right.op = rhs;
 
@@ -1990,8 +2019,11 @@ convert_params_to_types (struct parser_state *state, rust_op_vector *params)
 {
   std::vector<struct type *> result;
 
-  for (const rust_op *op : *params)
-    result.push_back (convert_ast_to_type (state, op));
+  if (params != nullptr)
+    {
+      for (const rust_op *op : *params)
+        result.push_back (convert_ast_to_type (state, op));
+    }
 
   return result;
 }
@@ -2456,13 +2488,22 @@ convert_ast_to_expression (struct parser_state *state,
 	  {
 	    convert_ast_to_expression (state, operation->right.op, top);
 	    if (kind == BOTH_BOUND_DEFAULT)
-	      kind = LOW_BOUND_DEFAULT;
+	      kind = (operation->inclusive
+		      ? LOW_BOUND_DEFAULT : LOW_BOUND_DEFAULT_EXCLUSIVE);
 	    else
 	      {
 		gdb_assert (kind == HIGH_BOUND_DEFAULT);
-		kind = NONE_BOUND_DEFAULT;
+		kind = (operation->inclusive
+			? NONE_BOUND_DEFAULT : NONE_BOUND_DEFAULT_EXCLUSIVE);
 	      }
 	  }
+	else
+	  {
+	    /* Nothing should make an inclusive range without an upper
+	       bound.  */
+	    gdb_assert (!operation->inclusive);
+	  }
+
 	write_exp_elt_opcode (state, OP_RANGE);
 	write_exp_elt_longcst (state, kind);
 	write_exp_elt_opcode (state, OP_RANGE);

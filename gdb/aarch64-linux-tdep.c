@@ -233,7 +233,8 @@ aarch64_linux_iterate_over_regset_sections (struct gdbarch *gdbarch,
       NULL, cb_data);
 }
 
-/* Implement the "core_read_description" gdbarch method.  */
+/* Implement the "core_read_description" gdbarch method.  SVE not yet
+   supported.  */
 
 static const struct target_desc *
 aarch64_linux_core_read_description (struct gdbarch *gdbarch,
@@ -244,7 +245,7 @@ aarch64_linux_core_read_description (struct gdbarch *gdbarch,
   if (target_auxv_search (target, AT_HWCAP, &aarch64_hwcap) != 1)
     return NULL;
 
-  return aarch64_read_description ();
+  return aarch64_read_description (0);
 }
 
 /* Implementation of `gdbarch_stap_is_single_operand', as defined in
@@ -376,7 +377,7 @@ aarch64_linux_get_syscall_number (struct gdbarch *gdbarch,
   LONGEST ret;
 
   /* Getting the system call number from the register x8.  */
-  regcache_cooked_read (regs, AARCH64_DWARF_X0 + 8, buf);
+  regs->cooked_read (AARCH64_DWARF_X0 + 8, buf);
 
   ret = extract_signed_integer (buf, X_REGISTER_SIZE, byte_order);
 
@@ -1061,6 +1062,11 @@ aarch64_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_gdbarch_process_record (gdbarch, aarch64_process_record);
   /* Syscall record.  */
   tdep->aarch64_syscall_record = aarch64_linux_syscall_record;
+
+  /* The top byte of a user space address known as the "tag",
+     is ignored by the kernel and can be regarded as additional
+     data associated with the address.  */
+  set_gdbarch_significant_addr_bit (gdbarch, 56);
 
   /* Initialize the aarch64_linux_record_tdep.  */
   /* These values are the size of the type that will be used in a system

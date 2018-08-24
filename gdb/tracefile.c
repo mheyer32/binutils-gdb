@@ -36,16 +36,21 @@
 #define TRACE_WRITE_V_BLOCK(writer, num, val)	\
   writer->ops->frame_ops->write_v_block ((writer), (num), (val))
 
-/* Free trace file writer.  */
+/* A unique pointer policy class for trace_file_writer.  */
 
-static void
-trace_file_writer_xfree (void *arg)
+struct trace_file_writer_deleter
 {
-  struct trace_file_writer *writer = (struct trace_file_writer *) arg;
+  void operator() (struct trace_file_writer *writer)
+  {
+    writer->ops->dtor (writer);
+    xfree (writer);
+  }
+};
 
-  writer->ops->dtor (writer);
-  xfree (writer);
-}
+/* A unique_ptr specialization for trace_file_writer.  */
+
+typedef std::unique_ptr<trace_file_writer, trace_file_writer_deleter>
+    trace_file_writer_up;
 
 /* Save tracepoint data to file named FILENAME through WRITER.  WRITER
    determines the trace file format.  If TARGET_DOES_SAVE is non-zero,
@@ -311,9 +316,7 @@ tsave_command (const char *args, int from_tty)
   int target_does_save = 0;
   char **argv;
   char *filename = NULL;
-  struct cleanup *back_to;
   int generate_ctf = 0;
-  struct trace_file_writer *writer = NULL;
 
   if (args == NULL)
     error_no_arg (_("file in which to save trace data"));
@@ -337,19 +340,13 @@ tsave_command (const char *args, int from_tty)
     error_no_arg (_("file in which to save trace data"));
 
   if (generate_ctf)
-    writer = ctf_trace_file_writer_new ();
+    trace_save_ctf (filename, target_does_save);
   else
-    writer = tfile_trace_file_writer_new ();
-
-  back_to = make_cleanup (trace_file_writer_xfree, writer);
-
-  trace_save (filename, writer, target_does_save);
+    trace_save_tfile (filename, target_does_save);
 
   if (from_tty)
     printf_filtered (_("Trace data saved to %s '%s'.\n"),
 		     generate_ctf ? "directory" : "file", filename);
-
-  do_cleanups (back_to);
 }
 
 /* Save the trace data to file FILENAME of tfile format.  */
@@ -357,13 +354,8 @@ tsave_command (const char *args, int from_tty)
 void
 trace_save_tfile (const char *filename, int target_does_save)
 {
-  struct trace_file_writer *writer;
-  struct cleanup *back_to;
-
-  writer = tfile_trace_file_writer_new ();
-  back_to = make_cleanup (trace_file_writer_xfree, writer);
-  trace_save (filename, writer, target_does_save);
-  do_cleanups (back_to);
+  trace_file_writer_up writer (tfile_trace_file_writer_new ());
+  trace_save (filename, writer.get (), target_does_save);
 }
 
 /* Save the trace data to dir DIRNAME of ctf format.  */
@@ -371,14 +363,8 @@ trace_save_tfile (const char *filename, int target_does_save)
 void
 trace_save_ctf (const char *dirname, int target_does_save)
 {
-  struct trace_file_writer *writer;
-  struct cleanup *back_to;
-
-  writer = ctf_trace_file_writer_new ();
-  back_to = make_cleanup (trace_file_writer_xfree, writer);
-
-  trace_save (dirname, writer, target_does_save);
-  do_cleanups (back_to);
+  trace_file_writer_up writer (ctf_trace_file_writer_new ());
+  trace_save (dirname, writer.get (), target_does_save);
 }
 
 /* Fetch register data from tracefile, shared for both tfile and
@@ -394,7 +380,7 @@ tracefile_fetch_registers (struct regcache *regcache, int regno)
   /* We get here if no register data has been found.  Mark registers
      as unavailable.  */
   for (regn = 0; regn < gdbarch_num_regs (gdbarch); regn++)
-    regcache_raw_supply (regcache, regn, NULL);
+    regcache->raw_supply (regn, NULL);
 
   /* We can often usefully guess that the PC is going to be the same
      as the address of the tracepoint.  */
@@ -425,16 +411,16 @@ tracefile_fetch_registers (struct regcache *regcache, int regno)
 
 /* This is the implementation of target_ops method to_has_all_memory.  */
 
-static int
-tracefile_has_all_memory (struct target_ops *ops)
+bool
+tracefile_target::has_all_memory ()
 {
   return 1;
 }
 
 /* This is the implementation of target_ops method to_has_memory.  */
 
-static int
-tracefile_has_memory (struct target_ops *ops)
+bool
+tracefile_target::has_memory ()
 {
   return 1;
 }
@@ -443,8 +429,8 @@ tracefile_has_memory (struct target_ops *ops)
    The target has a stack when GDB has already selected one trace
    frame.  */
 
-static int
-tracefile_has_stack (struct target_ops *ops)
+bool
+tracefile_target::has_stack ()
 {
   return get_traceframe_number () != -1;
 }
@@ -453,8 +439,8 @@ tracefile_has_stack (struct target_ops *ops)
    The target has registers when GDB has already selected one trace
    frame.  */
 
-static int
-tracefile_has_registers (struct target_ops *ops)
+bool
+tracefile_target::has_registers ()
 {
   return get_traceframe_number () != -1;
 }
@@ -462,8 +448,8 @@ tracefile_has_registers (struct target_ops *ops)
 /* This is the implementation of target_ops method to_thread_alive.
    tracefile has one thread faked by GDB.  */
 
-static int
-tracefile_thread_alive (struct target_ops *ops, ptid_t ptid)
+bool
+tracefile_target::thread_alive (ptid_t ptid)
 {
   return 1;
 }
@@ -471,8 +457,8 @@ tracefile_thread_alive (struct target_ops *ops, ptid_t ptid)
 /* This is the implementation of target_ops method to_get_trace_status.
    The trace status for a file is that tracing can never be run.  */
 
-static int
-tracefile_get_trace_status (struct target_ops *self, struct trace_status *ts)
+int
+tracefile_target::get_trace_status (struct trace_status *ts)
 {
   /* Other bits of trace status were collected as part of opening the
      trace files, so nothing to do here.  */
@@ -480,19 +466,9 @@ tracefile_get_trace_status (struct target_ops *self, struct trace_status *ts)
   return -1;
 }
 
-/* Initialize OPS for tracefile related targets.  */
-
-void
-init_tracefile_ops (struct target_ops *ops)
+tracefile_target::tracefile_target ()
 {
-  ops->to_stratum = process_stratum;
-  ops->to_get_trace_status = tracefile_get_trace_status;
-  ops->to_has_all_memory = tracefile_has_all_memory;
-  ops->to_has_memory = tracefile_has_memory;
-  ops->to_has_stack = tracefile_has_stack;
-  ops->to_has_registers = tracefile_has_registers;
-  ops->to_thread_alive = tracefile_thread_alive;
-  ops->to_magic = OPS_MAGIC;
+  this->to_stratum = process_stratum;
 }
 
 void

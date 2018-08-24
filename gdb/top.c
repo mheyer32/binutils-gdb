@@ -46,7 +46,7 @@
 #include "gdbthread.h"
 #include "extension.h"
 #include "interps.h"
-#include "observer.h"
+#include "observable.h"
 #include "maint.h"
 #include "filenames.h"
 #include "frame.h"
@@ -571,7 +571,7 @@ execute_command (const char *p, int from_tty)
       line = p;
 
       /* If trace-commands is set then this will print this command.  */
-      print_command_trace (p);
+      print_command_trace ("%s", p);
 
       c = lookup_cmd (&cmd, cmdlist, "", 0, 1);
       p = cmd;
@@ -642,7 +642,12 @@ execute_command (const char *p, int from_tty)
 	}
     }
 
-  check_frame_language_change ();
+  /* Only perform the frame-language-change check if the command
+     we just finished executing did not resume the inferior's execution.
+     If it did resume the inferior, we will do that check after
+     the inferior stopped.  */
+  if (has_stack_frames () && !is_running (inferior_ptid))
+    check_frame_language_change ();
 
   discard_cleanups (cleanup_if_error);
 }
@@ -917,76 +922,72 @@ gdb_readline_wrapper_line (char *line)
     gdb_rl_callback_handler_remove ();
 }
 
-struct gdb_readline_wrapper_cleanup
-  {
-    void (*handler_orig) (char *);
-    int already_prompted_orig;
-
-    /* Whether the target was async.  */
-    int target_is_async_orig;
-  };
-
-static void
-gdb_readline_wrapper_cleanup (void *arg)
+class gdb_readline_wrapper_cleanup
 {
-  struct ui *ui = current_ui;
-  struct gdb_readline_wrapper_cleanup *cleanup
-    = (struct gdb_readline_wrapper_cleanup *) arg;
+public:
+  gdb_readline_wrapper_cleanup ()
+    : m_handler_orig (current_ui->input_handler),
+      m_already_prompted_orig (current_ui->command_editing
+			       ? rl_already_prompted : 0),
+      m_target_is_async_orig (target_is_async_p ()),
+      m_save_ui (&current_ui)
+  {
+    current_ui->input_handler = gdb_readline_wrapper_line;
+    current_ui->secondary_prompt_depth++;
 
-  if (ui->command_editing)
-    rl_already_prompted = cleanup->already_prompted_orig;
+    if (m_target_is_async_orig)
+      target_async (0);
+  }
 
-  gdb_assert (ui->input_handler == gdb_readline_wrapper_line);
-  ui->input_handler = cleanup->handler_orig;
+  ~gdb_readline_wrapper_cleanup ()
+  {
+    struct ui *ui = current_ui;
 
-  /* Don't restore our input handler in readline yet.  That would make
-     readline prep the terminal (putting it in raw mode), while the
-     line we just read may trigger execution of a command that expects
-     the terminal in the default cooked/canonical mode, such as e.g.,
-     running Python's interactive online help utility.  See
-     gdb_readline_wrapper_line for when we'll reinstall it.  */
+    if (ui->command_editing)
+      rl_already_prompted = m_already_prompted_orig;
 
-  gdb_readline_wrapper_result = NULL;
-  gdb_readline_wrapper_done = 0;
-  ui->secondary_prompt_depth--;
-  gdb_assert (ui->secondary_prompt_depth >= 0);
+    gdb_assert (ui->input_handler == gdb_readline_wrapper_line);
+    ui->input_handler = m_handler_orig;
 
-  after_char_processing_hook = saved_after_char_processing_hook;
-  saved_after_char_processing_hook = NULL;
+    /* Don't restore our input handler in readline yet.  That would make
+       readline prep the terminal (putting it in raw mode), while the
+       line we just read may trigger execution of a command that expects
+       the terminal in the default cooked/canonical mode, such as e.g.,
+       running Python's interactive online help utility.  See
+       gdb_readline_wrapper_line for when we'll reinstall it.  */
 
-  if (cleanup->target_is_async_orig)
-    target_async (1);
+    gdb_readline_wrapper_result = NULL;
+    gdb_readline_wrapper_done = 0;
+    ui->secondary_prompt_depth--;
+    gdb_assert (ui->secondary_prompt_depth >= 0);
 
-  xfree (cleanup);
-}
+    after_char_processing_hook = saved_after_char_processing_hook;
+    saved_after_char_processing_hook = NULL;
+
+    if (m_target_is_async_orig)
+      target_async (1);
+  }
+
+  DISABLE_COPY_AND_ASSIGN (gdb_readline_wrapper_cleanup);
+
+private:
+
+  void (*m_handler_orig) (char *);
+  int m_already_prompted_orig;
+
+  /* Whether the target was async.  */
+  int m_target_is_async_orig;
+
+  /* Processing events may change the current UI.  */
+  scoped_restore_tmpl<struct ui *> m_save_ui;
+};
 
 char *
 gdb_readline_wrapper (const char *prompt)
 {
   struct ui *ui = current_ui;
-  struct cleanup *back_to;
-  struct gdb_readline_wrapper_cleanup *cleanup;
-  char *retval;
 
-  cleanup = XNEW (struct gdb_readline_wrapper_cleanup);
-  cleanup->handler_orig = ui->input_handler;
-  ui->input_handler = gdb_readline_wrapper_line;
-
-  if (ui->command_editing)
-    cleanup->already_prompted_orig = rl_already_prompted;
-  else
-    cleanup->already_prompted_orig = 0;
-
-  cleanup->target_is_async_orig = target_is_async_p ();
-
-  ui->secondary_prompt_depth++;
-  back_to = make_cleanup (gdb_readline_wrapper_cleanup, cleanup);
-
-  /* Processing events may change the current UI.  */
-  scoped_restore save_ui = make_scoped_restore (&current_ui);
-
-  if (cleanup->target_is_async_orig)
-    target_async (0);
+  gdb_readline_wrapper_cleanup cleanup;
 
   /* Display our prompt and prevent double prompt display.  Don't pass
      down a NULL prompt, since that has special meaning for
@@ -1004,9 +1005,7 @@ gdb_readline_wrapper (const char *prompt)
     if (gdb_readline_wrapper_done)
       break;
 
-  retval = gdb_readline_wrapper_result;
-  do_cleanups (back_to);
-  return retval;
+  return gdb_readline_wrapper_result;
 }
 
 
@@ -1279,9 +1278,9 @@ command_line_input (const char *prompt_arg, int repeat,
   return cmd;
 }
 
-/* Print the GDB banner.  */
+/* See top.h.  */
 void
-print_gdb_version (struct ui_file *stream)
+print_gdb_version (struct ui_file *stream, bool interactive)
 {
   /* From GNU coding standards, first line is meant to be easy for a
      program to parse, and is just canonical program name and version
@@ -1302,8 +1301,13 @@ print_gdb_version (struct ui_file *stream)
   fprintf_filtered (stream, "\
 License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>\
 \nThis is free software: you are free to change and redistribute it.\n\
-There is NO WARRANTY, to the extent permitted by law.  Type \"show copying\"\n\
-and \"show warranty\" for details.\n");
+There is NO WARRANTY, to the extent permitted by law.");
+
+  if (!interactive)
+    return;
+
+  fprintf_filtered (stream, ("\nType \"show copying\" and "
+			     "\"show warranty\" for details.\n"));
 
   /* After the required info we print the configuration information.  */
 
@@ -1317,18 +1321,21 @@ and \"show warranty\" for details.\n");
     {
       fprintf_filtered (stream, "%s", host_name);
     }
-  fprintf_filtered (stream, "\".\n\
-Type \"show configuration\" for configuration details.");
+  fprintf_filtered (stream, "\".\n");
+
+  fprintf_filtered (stream, _("Type \"show configuration\" "
+			      "for configuration details.\n"));
 
   if (REPORT_BUGS_TO[0])
     {
       fprintf_filtered (stream,
-			_("\nFor bug reporting instructions, please see:\n"));
+			_("For bug reporting instructions, please see:\n"));
       fprintf_filtered (stream, "%s.\n", REPORT_BUGS_TO);
     }
   fprintf_filtered (stream,
 		    _("Find the GDB manual and other documentation \
-resources online at:\n<http://www.gnu.org/software/gdb/documentation/>.\n"));
+resources online at:\n    <http://www.gnu.org/software/gdb/documentation/>."));
+  fprintf_filtered (stream, "\n\n");
   fprintf_filtered (stream, _("For help, type \"help\".\n"));
   fprintf_filtered (stream, _("Type \"apropos word\" to search for \
 commands related to \"word\"."));
@@ -1959,7 +1966,7 @@ static void
 set_gdb_datadir (const char *args, int from_tty, struct cmd_list_element *c)
 {
   set_gdb_data_directory (staged_gdb_datadir);
-  observer_notify_gdb_datadir_changed ();
+  gdb::observers::gdb_datadir_changed.notify ();
 }
 
 /* "show" command for the gdb_datadir configuration variable.  */

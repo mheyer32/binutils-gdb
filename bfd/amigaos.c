@@ -385,16 +385,16 @@ howto_for_reloc (unsigned long type)
 
 /* This one is used by the linker and tells us, if a debug hunk should
    be written out. */
-extern int write_debug_hunk;
+extern BFDDECL int write_debug_hunk;
 
 /* This is also used by the linker to set the attribute of sections. */
-extern int amiga_attribute;
+extern BFDDECL int amiga_attribute;
 
 /* used with base-relative linking */
-extern int amiga_base_relative;
+extern BFDDECL int amiga_base_relative;
 
 /* used with -resident linking */
-extern int amiga_resident;
+extern BFDDECL int amiga_resident;
 
 static bfd_boolean
 get_long (bfd * abfd, unsigned long *n)
@@ -604,7 +604,7 @@ parse_archive_units (
   char * last_name = 0;
   bfd_vma stab_pos = 0;
   bfd_vma stabstr_pos = 0;
-  unsigned stab_size, stabstr_size;
+  unsigned stab_size = 0, stabstr_size = 0;
 
   *n_units = 0;
   while (get_long (abfd, &hunk_type))
@@ -971,7 +971,9 @@ amiga_read_unit (
   return TRUE;
 }
 
+#ifdef __GNUC__
 #pragma GCC diagnostic ignored "-Wstack-usage="
+#endif
 /* Read a load file */
 static bfd_boolean
 amiga_read_load (
@@ -1110,7 +1112,7 @@ amiga_handle_cdb_hunk (
 /* If hunk_size==-1, then we are digesting a HUNK_UNIT */
 {
   sec_ptr current_section;
-  char *sec_name,*current_name=NULL;
+  char *sec_name = "",*current_name=NULL;
   unsigned long len,tmp;
   int secflags,is_load=(hunk_size!=(unsigned long)-1);
 
@@ -3405,13 +3407,13 @@ amiga_load_stab_symbols (bfd *abfd)
       else
       if (0 == strcmp(".stab", s->name))
 	{
-	  amiga_data->symtab_size = s->rawsize;
+	  amiga_data->symtab_size = s->size;
 	  stab = s->contents;
 	}
       else
       if (0 == strcmp(".stabstr", s->name))
 	{
-	  amiga_data->stringtab_size = s->rawsize;
+	  amiga_data->stringtab_size = s->size;
 	  stabstr = s->contents;
 	}
     }
@@ -3859,6 +3861,7 @@ bfd_boolean amiga_final_link PARAMS ((bfd *, struct bfd_link_info *));
 #define amiga_bfd_discard_group                    bfd_generic_discard_group
 #define amiga_section_already_linked               _bfd_generic_section_already_linked
 #define amiga_bfd_define_common_symbol             bfd_generic_define_common_symbol
+#define amiga_bfd_link_hide_symbol _bfd_generic_link_hide_symbol
 #define amiga_bfd_define_start_stop                bfd_generic_define_start_stop
 
 

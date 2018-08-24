@@ -81,9 +81,9 @@ static const struct bfd_data *probe_key = NULL;
 static struct symfile_segment_data *
 amiga_symfile_segments (bfd *abfd)
 {
-  Elf_Internal_Phdr *phdrs, **segments;
+  Elf_Internal_Phdr *phdrs = 0, **segments;
 //  long phdrs_size;
-  int num_phdrs = 0, num_segments, num_sections, i;
+  int num_phdrs = -1, num_segments, num_sections, i;
   asection *sect;
   struct symfile_segment_data *data;
 
@@ -94,9 +94,9 @@ amiga_symfile_segments (bfd *abfd)
 
   phdrs = (Elf_Internal_Phdr *) alloca (phdrs_size);
   num_phdrs = bfd_get_amiga_phdrs (abfd, phdrs);
+#endif
   if (num_phdrs == -1)
     return NULL;
-#endif
 
   num_segments = 0;
   segments = XALLOCAVEC (Elf_Internal_Phdr *, num_phdrs);
@@ -429,7 +429,11 @@ amiga_symtab_read (minimal_symbol_reader &reader,
 	    {
 	      if (sym->flags & (BSF_GLOBAL | BSF_WEAK | BSF_GNU_UNIQUE))
 		{
-		  if (sym->section->flags & SEC_LOAD)
+		  if (sym->flags & BSF_GNU_INDIRECT_FUNCTION)
+		    {
+		      ms_type = mst_data_gnu_ifunc;
+		    }
+		  else if (sym->section->flags & SEC_LOAD)
 		    {
 		      ms_type = mst_data;
 		    }
@@ -544,79 +548,6 @@ static void
 amiga_rel_plt_read (minimal_symbol_reader &reader,
 		  struct objfile *objfile, asymbol **dyn_symbol_table)
 {
-  bfd *obfd = objfile->obfd;
-  const struct amiga_backend_data *bed = 0; //get_amiga_backend_data (obfd);
-  asection *plt, *relplt, *got_plt;
-//  int plt_amiga_idx;
-  bfd_size_type reloc_count, reloc;
-  struct gdbarch *gdbarch = get_objfile_arch (objfile);
-  struct type *ptr_type = builtin_type (gdbarch)->builtin_data_ptr;
-  size_t ptr_size = TYPE_LENGTH (ptr_type);
-
-  if (objfile->separate_debug_objfile_backlink)
-    return;
-
-  plt = bfd_get_section_by_name (obfd, ".plt");
-  if (plt == NULL)
-    return;
-//  plt_amiga_idx = 0; // amiga_section_data (plt)->this_idx;
-
-  got_plt = bfd_get_section_by_name (obfd, ".got.plt");
-  if (got_plt == NULL)
-    {
-      /* For platforms where there is no separate .got.plt.  */
-      got_plt = bfd_get_section_by_name (obfd, ".got");
-      if (got_plt == NULL)
-	return;
-    }
-#if 0
-  /* This search algorithm is from _bfd_amiga_canonicalize_dynamic_reloc.  */
-  for (relplt = obfd->sections; relplt != NULL; relplt = relplt->next)
-    if (amiga_section_data (relplt)->this_hdr.sh_info == plt_amiga_idx
-	&& (amiga_section_data (relplt)->this_hdr.sh_type == SHT_REL
-	    || amiga_section_data (relplt)->this_hdr.sh_type == SHT_RELA))
-      break;
-  if (relplt == NULL)
-    return;
-
-  if (! bed->s->slurp_reloc_table (obfd, relplt, dyn_symbol_table, TRUE))
-    return;
-
-  std::string string_buffer;
-
-  reloc_count = relplt->size / amiga_section_data (relplt)->this_hdr.sh_entsize;
-  for (reloc = 0; reloc < reloc_count; reloc++)
-    {
-      const char *name;
-      struct minimal_symbol *msym;
-      CORE_ADDR address;
-      const char *got_suffix = SYMBOL_GOT_PLT_SUFFIX;
-      const size_t got_suffix_len = strlen (SYMBOL_GOT_PLT_SUFFIX);
-
-      name = bfd_asymbol_name (*relplt->relocation[reloc].sym_ptr_ptr);
-      address = relplt->relocation[reloc].address;
-
-      /* Does the pointer reside in the .got.plt section?  */
-      if (!(bfd_get_section_vma (obfd, got_plt) <= address
-            && address < bfd_get_section_vma (obfd, got_plt)
-			 + bfd_get_section_size (got_plt)))
-	continue;
-
-      /* We cannot check if NAME is a reference to mst_text_gnu_ifunc as in
-	 OBJFILE the symbol is undefined and the objfile having NAME defined
-	 may not yet have been loaded.  */
-
-      string_buffer.assign (name);
-      string_buffer.append (got_suffix, got_suffix + got_suffix_len);
-
-      msym = record_minimal_symbol (reader, string_buffer.c_str (),
-				    string_buffer.size (),
-                                    true, address, mst_slot_got_plt, got_plt,
-				    objfile);
-      if (msym)
-	SET_MSYMBOL_SIZE (msym, ptr_size);
-    }
-#endif
 }
 
 /* The data pointer is htab_t for gnu_ifunc_record_cache_unchecked.  */
@@ -819,13 +750,15 @@ amiga_gnu_ifunc_resolve_by_got (const char *name, CORE_ADDR *addr_p)
 	continue;
       addr = extract_typed_address (buf, ptr_type);
       addr = gdbarch_convert_from_func_ptr_addr (gdbarch, addr,
-						 &current_target);
+						 current_top_target ());
       addr = gdbarch_addr_bits_remove (gdbarch, addr);
 
-      if (addr_p)
-	*addr_p = addr;
       if (amiga_gnu_ifunc_record_cache (name, addr))
-	return 1;
+        {
+          if (addr_p != NULL)
+		    *addr_p = addr;
+	      return 1;
+        }
     }
 
   return 0;
@@ -884,13 +817,12 @@ amiga_gnu_ifunc_resolve_addr (struct gdbarch *gdbarch, CORE_ADDR pc)
      parameter.  FUNCTION is the function entry address.  ADDRESS may be a
      function descriptor.  */
 
-  target_auxv_search (&current_target, AT_HWCAP, &hwcap);
+  target_auxv_search (current_top_target (), AT_HWCAP, &hwcap);
   hwcap_val = value_from_longest (builtin_type (gdbarch)
 				  ->builtin_unsigned_long, hwcap);
   address_val = call_function_by_hand (function, NULL, 1, &hwcap_val);
   address = value_as_address (address_val);
-  address = gdbarch_convert_from_func_ptr_addr (gdbarch, address,
-						&current_target);
+  address = gdbarch_convert_from_func_ptr_addr (gdbarch, address, current_top_target ());
   address = gdbarch_addr_bits_remove (gdbarch, address);
 
   if (name_at_pc)
@@ -997,7 +929,7 @@ amiga_gnu_ifunc_resolver_return_stop (struct breakpoint *b)
   resolved_address = value_as_address (value);
   resolved_pc = gdbarch_convert_from_func_ptr_addr (gdbarch,
 						    resolved_address,
-						    &current_target);
+						    current_top_target ());
   resolved_pc = gdbarch_addr_bits_remove (gdbarch, resolved_pc);
 
   gdb_assert (current_program_space == b->pspace || b->pspace == NULL);
@@ -1006,7 +938,8 @@ amiga_gnu_ifunc_resolver_return_stop (struct breakpoint *b)
 
   b->type = bp_breakpoint;
   update_breakpoint_locations (b, current_program_space,
-			       find_pc_line (resolved_pc, 0), {});
+			       find_function_start_sal (resolved_pc, NULL, true),
+			       {});
 }
 
 /* A helper function for amiga_symfile_read that reads the minimal

@@ -112,17 +112,19 @@ DEPMODE = @CCDEPMODE@
 DEPDIR = @DEPDIR@
 depcomp = $(SHELL) $(srcdir)/../depcomp
 
-# Note that these are overridden by GNU make-specific code below if
-# GNU make is used.  The overrides implement dependency tracking.
-COMPILE.pre = $(CXX) -x c++ $(CXX_DIALECT)
-COMPILE.post = -c -o $@
-COMPILE = $(COMPILE.pre) $(INTERNAL_CFLAGS) $(COMPILE.post)
-POSTCOMPILE = @true
-
 # Directory containing source files.
 srcdir = @srcdir@
 VPATH = @srcdir@
 top_srcdir = @top_srcdir@
+
+include $(srcdir)/silent-rules.mk
+
+# Note that these are overridden by GNU make-specific code below if
+# GNU make is used.  The overrides implement dependency tracking.
+COMPILE.pre = $(CXX) -x c++ $(CXX_DIALECT)
+COMPILE.post = -c -o $@
+COMPILE = $(ECHO_CXX) $(COMPILE.pre) $(INTERNAL_CFLAGS) $(COMPILE.post)
+POSTCOMPILE = @true
 
 YACC = @YACC@
 
@@ -416,18 +418,23 @@ SUBDIR_UNITTESTS_SRCS = \
 	unittests/array-view-selftests.c \
 	unittests/common-utils-selftests.c \
 	unittests/environ-selftests.c \
+	unittests/format_pieces-selftests.c \
 	unittests/function-view-selftests.c \
 	unittests/lookup_name_info-selftests.c \
 	unittests/memory-map-selftests.c \
 	unittests/memrange-selftests.c \
 	unittests/offset-type-selftests.c \
+	unittests/observable-selftests.c \
 	unittests/optional-selftests.c \
 	unittests/ptid-selftests.c \
 	unittests/rsp-low-selftests.c \
 	unittests/scoped_fd-selftests.c \
 	unittests/scoped_mmap-selftests.c \
 	unittests/scoped_restore-selftests.c \
+	unittests/string_view-selftests.c \
+	unittests/tracepoint-selftests.c \
 	unittests/unpack-selftests.c \
+	unittests/utils-selftests.c \
 	unittests/xml-utils-selftests.c
 
 SUBDIR_UNITTESTS_OBS = $(patsubst %.c,%.o,$(SUBDIR_UNITTESTS_SRCS))
@@ -672,6 +679,7 @@ ALL_TARGET_OBS = \
 	arch/arm-get-next-pcs.o \
 	arch/arm-linux.o \
 	arch/i386.o \
+	arch/ppc-linux-common.o \
 	arm-bsd-tdep.o \
 	arm-fbsd-tdep.o \
 	arm-linux-tdep.o \
@@ -723,7 +731,6 @@ ALL_TARGET_OBS = \
 	m68k-bsd-tdep.o \
 	m68k-linux-tdep.o \
 	m68k-tdep.o \
-	m88k-tdep.o \
 	mep-tdep.o \
 	microblaze-linux-tdep.o \
 	microblaze-tdep.o \
@@ -742,6 +749,7 @@ ALL_TARGET_OBS = \
 	nios2-tdep.o \
 	nto-tdep.o \
 	obsd-tdep.o \
+	or1k-tdep.o \
 	ppc-fbsd-tdep.o \
 	ppc-linux-tdep.o \
 	ppc-nbsd-tdep.o \
@@ -762,7 +770,6 @@ ALL_TARGET_OBS = \
 	sh-linux-tdep.o \
 	sh-nbsd-tdep.o \
 	sh-tdep.o \
-	sh64-tdep.o \
 	sol2-tdep.o \
 	solib-aix.o \
 	solib-darwin.o \
@@ -787,6 +794,7 @@ ALL_TARGET_OBS = \
 	vax-nbsd-tdep.o \
 	vax-tdep.o \
 	windows-tdep.o \
+	x86-tdep.o \
 	xcoffread.o \
 	xstormy16-tdep.o \
 	xtensa-config.o \
@@ -964,6 +972,7 @@ COMMON_SFILES = \
 	common/run-time-clock.c \
 	common/signals.c \
 	common/signals-state-save-restore.c \
+	common/tdesc.c \
 	common/vec.c \
 	common/xml-utils.c \
 	complaints.c \
@@ -988,6 +997,8 @@ COMMON_SFILES = \
 	disasm.c \
 	disasm-selftests.c \
 	dummy-frame.c \
+	dwarf-index-common.c \
+	dwarf-index-write.c \
 	dwarf2-frame.c \
 	dwarf2-frame-tailcall.c \
 	dwarf2expr.c \
@@ -1055,7 +1066,7 @@ COMMON_SFILES = \
 	namespace.c \
 	objc-lang.c \
 	objfiles.c \
-	observer.c \
+	observable.c \
 	opencl-lang.c \
 	osabi.c \
 	osdata.c \
@@ -1209,10 +1220,12 @@ HFILES_NO_SRCDIR = \
 	dictionary.h \
 	disasm.h \
 	dummy-frame.h \
+	dwarf-index-common.h \
 	dwarf2-frame.h \
 	dwarf2-frame-tailcall.h \
 	dwarf2expr.h \
 	dwarf2loc.h \
+	dwarf2read.h \
 	event-loop.h \
 	event-top.h \
 	exceptions.h \
@@ -1281,7 +1294,6 @@ HFILES_NO_SRCDIR = \
 	m2-lang.h \
 	m32r-tdep.h \
 	m68k-tdep.h \
-	m88k-tdep.h \
 	macroexp.h \
 	macroscope.h \
 	macrotab.h \
@@ -1347,7 +1359,6 @@ HFILES_NO_SRCDIR = \
 	ser-unix.h \
 	serial.h \
 	sh-tdep.h \
-	sh64-tdep.h \
 	sim-regno.h \
 	skip.h \
 	sol2-tdep.h \
@@ -1404,6 +1415,8 @@ HFILES_NO_SRCDIR = \
 	arch/aarch64-insn.h \
 	arch/arm.h \
 	arch/i386.h \
+	arch/ppc-linux-common.h \
+	arch/ppc-linux-tdesc.h \
 	cli/cli-cmds.h \
 	cli/cli-decode.h \
 	cli/cli-script.h \
@@ -1441,6 +1454,7 @@ HFILES_NO_SRCDIR = \
 	common/run-time-clock.h \
 	common/signals-state-save-restore.h \
 	common/symbol.h \
+	common/tdesc.h \
 	common/vec.h \
 	common/version.h \
 	common/x86-xstate.h \
@@ -1470,6 +1484,7 @@ HFILES_NO_SRCDIR = \
 	mi/mi-parse.h \
 	nat/aarch64-linux.h \
 	nat/aarch64-linux-hw-point.h \
+	nat/aarch64-sve-linux-ptrace.h \
 	nat/amd64-linux-siginfo.h \
 	nat/gdb_ptrace.h \
 	nat/gdb_thread_db.h \
@@ -1512,7 +1527,8 @@ HFILES_NO_SRCDIR = \
 	tui/tui-win.h \
 	tui/tui-windata.h \
 	tui/tui-wingeneral.h \
-	tui/tui-winsource.h
+	tui/tui-winsource.h \
+	x86-tdep.h
 
 # Header files that already have srcdir in them, or which are in objdir.
 
@@ -1529,8 +1545,7 @@ INFOFILES = gdb.info*
 # variables analogous to SER_HARDWIRE which get defaulted in this
 # Makefile.in
 
-DEPFILES = $(TARGET_OBS) $(SER_HARDWIRE) $(NATDEPFILES) \
-	   $(REMOTE_OBS) $(SIM_OBS)
+DEPFILES = $(TARGET_OBS) $(SER_HARDWIRE) $(NATDEPFILES) $(SIM_OBS)
 
 SOURCES = $(SFILES) $(ALLDEPFILES) $(YYFILES) $(CONFIG_SRCS)
 # Don't include YYFILES (*.c) because we already include *.y in SFILES,
@@ -1587,8 +1602,6 @@ generated_files = \
 	config.h \
 	gcore \
 	jit-reader.h \
-	observer.h \
-	observer.inc \
 	$(GNULIB_H) \
 	$(NAT_GENERATED_FILES)
 
@@ -1797,8 +1810,9 @@ test-cp-name-parser.o: cp-name-parser.c
 	$(POSTCOMPILE)
 
 test-cp-name-parser$(EXEEXT): test-cp-name-parser.o $(LIBIBERTY)
-	$(CC_LD) $(INTERNAL_LDFLAGS) -o test-cp-name-parser$(EXEEXT) \
-		test-cp-name-parser.o $(LIBIBERTY)
+	$(ECHO_CXXLD) $(CC_LD) $(INTERNAL_LDFLAGS) \
+		-o test-cp-name-parser$(EXEEXT) test-cp-name-parser.o \
+		$(LIBIBERTY)
 
 # We do this by grepping through sources.  If that turns out to be too slow,
 # maybe we could just require every .o file to have an initialization routine
@@ -1839,7 +1853,7 @@ test-cp-name-parser$(EXEEXT): test-cp-name-parser.o $(LIBIBERTY)
 
 INIT_FILES = $(COMMON_OBS) $(TSOBS) $(CONFIG_SRCS) $(SUBDIR_GCC_COMPILE_SRCS)
 init.c: $(INIT_FILES)
-	@echo Making init.c
+	@$(ECHO_INIT_C) echo "Making init.c"
 	@rm -f init.c-tmp init.l-tmp
 	@touch init.c-tmp
 	@echo gdbtypes > init.l-tmp
@@ -1899,8 +1913,8 @@ libgdb.a: $(LIBGDB_OBS)
 
 # Removing the old gdb first works better if it is running, at least on SunOS.
 gdb$(EXEEXT): gdb.o $(LIBGDB_OBS) $(ADD_DEPS) $(CDEPS) $(TDEPLIBS)
-	rm -f gdb$(EXEEXT)
-	$(CC_LD) $(INTERNAL_LDFLAGS) $(WIN32LDAPP) \
+	$(SILENCE) rm -f gdb$(EXEEXT)
+	$(ECHO_CXXLD) $(CC_LD) $(INTERNAL_LDFLAGS) $(WIN32LDAPP) \
 		-o gdb$(EXEEXT) gdb.o $(LIBGDB_OBS) \
 		$(TDEPLIBS) $(TUI_LIBRARY) $(CLIBS) $(LOADLIBES)
 
@@ -1947,7 +1961,7 @@ tags: TAGS
 clean mostlyclean: $(CONFIG_CLEAN)
 	@$(MAKE) $(FLAGS_TO_PASS) DO=clean "DODIRS=$(CLEANDIRS)" subdir_do
 	rm -f *.o *.a $(ADD_FILES) *~ init.c-tmp init.l-tmp version.c-tmp
-	rm -f init.c version.c observer.h observer.inc
+	rm -f init.c version.c
 	rm -f gdb$(EXEEXT) core make.log
 	rm -f gdb[0-9]$(EXEEXT)
 	rm -f test-cp-name-parser$(EXEEXT)
@@ -2055,7 +2069,7 @@ stamp-h: $(srcdir)/config.in config.status
 	  CONFIG_LINKS= \
 	  $(SHELL) config.status
 
-config.status: $(srcdir)/configure configure.tgt configure.host ../bfd/development.sh
+config.status: $(srcdir)/configure configure.nat configure.tgt configure.host ../bfd/development.sh
 	$(SHELL) config.status --recheck
 
 ACLOCAL = aclocal
@@ -2131,14 +2145,8 @@ $(srcdir)/copying.c: @MAINTAINER_MODE_TRUE@ $(srcdir)/../COPYING3 $(srcdir)/copy
 	mv $(srcdir)/copying.tmp $(srcdir)/copying.c
 
 version.c: Makefile version.in $(srcdir)/../bfd/version.h $(srcdir)/common/create-version.sh
-	$(SHELL) $(srcdir)/common/create-version.sh $(srcdir) \
+	$(ECHO_GEN) $(SHELL) $(srcdir)/common/create-version.sh $(srcdir) \
 	    $(host_alias) $(target_alias) version.c
-
-observer.h: observer.sh doc/observer.texi
-	${srcdir}/observer.sh h ${srcdir}/doc/observer.texi observer.h
-
-observer.inc: observer.sh doc/observer.texi
-	${srcdir}/observer.sh inc ${srcdir}/doc/observer.texi observer.inc
 
 lint: $(LINTFILES)
 	$(LINT) $(INCLUDE_CFLAGS) $(LINTFLAGS) $(LINTFILES) \
@@ -2267,8 +2275,6 @@ ALLDEPFILES = \
 	m68k-linux-nat.c \
 	m68k-linux-tdep.c \
 	m68k-tdep.c \
-	m88k-bsd-nat.c \
-	m88k-tdep.c \
 	microblaze-linux-tdep.c \
 	microblaze-tdep.c \
 	mingw-hdep.c \
@@ -2322,7 +2328,6 @@ ALLDEPFILES = \
 	sh-nbsd-nat.c \
 	sh-nbsd-tdep.c \
 	sh-tdep.c \
-	sh64-tdep.c \
 	sol2-tdep.c \
 	solib-aix.c \
 	solib-spu.c \
@@ -2361,6 +2366,7 @@ ALLDEPFILES = \
 	windows-nat.c \
 	windows-tdep.c \
 	x86-nat.c \
+	x86-tdep.c \
 	xcoffread.c \
 	xstormy16-tdep.c \
 	xtensa-config.c \
@@ -2377,14 +2383,16 @@ ALLDEPFILES = \
 # Do not try to build "printcmd.c" with -Wformat-nonliteral.  It manually
 # checks format strings.
 printcmd.o: $(srcdir)/printcmd.c
-	$(COMPILE.pre) $(INTERNAL_CFLAGS) $(GDB_WARN_CFLAGS_NO_FORMAT) \
-		$(COMPILE.post) $(srcdir)/printcmd.c
+	$(ECHO_CXX) $(COMPILE.pre) $(INTERNAL_CFLAGS) \
+		$(GDB_WARN_CFLAGS_NO_FORMAT) $(COMPILE.post) \
+		$(srcdir)/printcmd.c
 	$(POSTCOMPILE)
 
 # Same for "target-float.c".
 target-float.o: $(srcdir)/target-float.c
-	$(COMPILE.pre) $(INTERNAL_CFLAGS) $(GDB_WARN_CFLAGS_NO_FORMAT) \
-		$(COMPILE.post) $(srcdir)/target-float.c
+	$(ECHO_CXX) $(COMPILE.pre) $(INTERNAL_CFLAGS) \
+		$(GDB_WARN_CFLAGS_NO_FORMAT) $(COMPILE.post) \
+		$(srcdir)/target-float.c
 
 # ada-exp.c can appear in srcdir, for releases; or in ., for
 # development builds.
@@ -2393,8 +2401,8 @@ ADA_EXP_C = `if test -f ada-exp.c; then echo ada-exp.c; else echo $(srcdir)/ada-
 # Some versions of flex give output that triggers
 # -Wold-style-definition.
 ada-exp.o: ada-exp.c
-	$(COMPILE.pre) $(INTERNAL_CFLAGS) $(GDB_WARN_CFLAGS_NO_DEFS) \
-		$(COMPILE.post) $(ADA_EXP_C)
+	$(ECHO_CXX) $(COMPILE.pre) $(INTERNAL_CFLAGS) \
+		$(GDB_WARN_CFLAGS_NO_DEFS) $(COMPILE.post) $(ADA_EXP_C)
 	$(POSTCOMPILE)
 
 # Message files.  Based on code in gcc/Makefile.in.
@@ -2481,9 +2489,8 @@ po/$(PACKAGE).pot: force
 # Makefile.in, but that was a pretty big annoyance.
 
 %.c: %.y
-	rm -f $@ $@.tmp
-	$(SHELL) $(YLWRAP) $< y.tab.c $@ -- $(YACC) $(YFLAGS) && mv $@ $@.tmp \
-		|| (rm -f $@; false)
+	$(SHELL) $(YLWRAP) $< y.tab.c $@.tmp -- $(YACC) $(YFLAGS) \
+		|| (rm -f $@.tmp; false)
 	sed -e '/extern.*malloc/d' \
 	     -e '/extern.*realloc/d' \
 	     -e '/extern.*free/d' \
@@ -2494,13 +2501,13 @@ po/$(PACKAGE).pot: force
 	     -e 's/\([ \t;,(]\)free$$/\1xfree/g' \
 	     -e '/^#line.*y.tab.c/d' \
 	     -e 's/YY_NULL/YY_NULLPTR/g' \
-	  < $@.tmp > $@
-	rm -f $@.tmp
+	  < $@.tmp > $@.new && \
+	  rm -f $@.tmp && \
+	  mv $@.new $@
 %.c: %.l
 	if [ "$(FLEX)" ] && $(FLEX) --version >/dev/null 2>&1; then \
-	    $(FLEX) -o$@ $< && \
-	    rm -f $@.new && \
-	    sed -e '/extern.*malloc/d' \
+	    $(FLEX) -t $<  \
+	    | sed -e '/extern.*malloc/d' \
 	        -e '/extern.*realloc/d' \
 	        -e '/extern.*free/d' \
 	        -e '/include.*malloc.h/d' \
@@ -2509,8 +2516,7 @@ po/$(PACKAGE).pot: force
 	        -e 's/\([ \t;,(]\)free\([ \t]*[&(),]\)/\1xfree\2/g' \
 	        -e 's/\([ \t;,(]\)free$$/\1xfree/g' \
 		-e 's/yy_flex_xrealloc/yyxrealloc/g' \
-	      < $@ > $@.new && \
-	    rm -f $@ && \
+	      > $@.new && \
 	    mv $@.new $@; \
 	elif [ -f $@ ]; then \
 	    echo "Warning: $*.c older than $*.l and flex not available."; \
@@ -2525,12 +2531,12 @@ po/$(PACKAGE).pot: force
 
 xml-builtin.c: stamp-xml; @true
 stamp-xml: $(srcdir)/features/feature_to_c.sh Makefile $(XMLFILES)
-	rm -f xml-builtin.tmp
-	AWK="$(AWK)" \
+	$(SILENCE) rm -f xml-builtin.tmp
+	$(ECHO_GEN_XML_BUILTIN) AWK="$(AWK)" \
 	  $(SHELL) $(srcdir)/features/feature_to_c.sh \
 	  xml-builtin.tmp $(XMLFILES)
-	$(SHELL) $(srcdir)/../move-if-change xml-builtin.tmp xml-builtin.c
-	echo stamp > stamp-xml
+	$(SILENCE) $(SHELL) $(srcdir)/../move-if-change xml-builtin.tmp xml-builtin.c
+	$(SILENCE) echo stamp > stamp-xml
 
 .PRECIOUS: xml-builtin.c
 
@@ -2588,7 +2594,7 @@ clean-gdbtk:
 insight$(EXEEXT): gdbtk-main.o libgdb.a $(ADD_DEPS) \
 		$(CDEPS) $(TDEPLIBS)
 	rm -f insight$(EXEEXT)
-	$(CC_LD) $(INTERNAL_LDFLAGS) $(WIN32LDAPP) \
+	$(ECHO_CXXLD) $(CC_LD) $(INTERNAL_LDFLAGS) $(WIN32LDAPP) \
 		-o insight$(EXEEXT) gdbtk-main.o libgdb.a \
 		$(TDEPLIBS) $(TUI_LIBRARY) $(CLIBS) $(LOADLIBES)
 

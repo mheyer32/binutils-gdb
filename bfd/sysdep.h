@@ -22,6 +22,10 @@
 #ifndef BFD_SYSDEP_H
 #define BFD_SYSDEP_H
 
+#ifndef BFDDECL
+#define BFDDECL
+#endif
+
 #ifdef PACKAGE
 #error sysdep.h must be included in lieu of config.h
 #endif
@@ -107,6 +111,10 @@ extern char *strrchr ();
 #endif
 #ifndef O_ACCMODE
 #define O_ACCMODE (O_RDONLY | O_WRONLY | O_RDWR)
+#endif
+/* Systems that don't already define this, don't need it.  */
+#ifndef O_BINARY
+#define O_BINARY 0
 #endif
 
 #ifndef SEEK_SET

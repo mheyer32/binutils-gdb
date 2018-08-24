@@ -54,6 +54,23 @@ static int reg_offset[] =
 #define REG_ADDR(state, regnum) ((char *)(state) + reg_offset[regnum])
 
 
+
+/* The i386 GNU Hurd target.  */
+
+#ifdef i386_DEBUG_STATE
+using gnu_base_target = x86_nat_target<gnu_nat_target>;
+#else
+using gnu_base_target = gnu_nat_target;
+#endif
+
+struct i386_gnu_nat_target final : public gnu_base_target
+{
+  void fetch_registers (struct regcache *, int) override;
+  void store_registers (struct regcache *, int) override;
+};
+
+static i386_gnu_nat_target the_i386_gnu_nat_target;
+
 /* Get the whole floating-point state of THREAD and record the values
    of the corresponding (pseudo) registers.  */
 
@@ -91,7 +108,7 @@ gnu_fetch_registers (struct target_ops *ops,
 		     struct regcache *regcache, int regno)
 {
   struct proc *thread;
-  ptid_t ptid = regcache_get_ptid (regcache);
+  ptid_t ptid = regcache->ptid ();
 
   /* Make sure we know about new threads.  */
   inf_update_procs (gnu_current_inf);
@@ -121,7 +138,7 @@ gnu_fetch_registers (struct target_ops *ops,
 	  proc_debug (thread, "fetching all register");
 
 	  for (i = 0; i < I386_NUM_GREGS; i++)
-	    regcache_raw_supply (regcache, i, REG_ADDR (state, i));
+	    regcache->raw_supply (i, REG_ADDR (state, i));
 	  thread->fetched_regs = ~0;
 	}
       else
@@ -130,8 +147,7 @@ gnu_fetch_registers (struct target_ops *ops,
 		      gdbarch_register_name (regcache->arch (),
 					     regno));
 
-	  regcache_raw_supply (regcache, regno,
-			       REG_ADDR (state, regno));
+	  regcache->raw_supply (regno, REG_ADDR (state, regno));
 	  thread->fetched_regs |= (1 << regno);
 	}
     }
@@ -184,7 +200,7 @@ gnu_store_registers (struct target_ops *ops,
 {
   struct proc *thread;
   struct gdbarch *gdbarch = regcache->arch ();
-  ptid_t ptid = regcache_get_ptid (regcache);
+  ptid_t ptid = regcache->ptid ();
 
   /* Make sure we know about new threads.  */
   inf_update_procs (gnu_current_inf);
@@ -233,8 +249,8 @@ gnu_store_registers (struct target_ops *ops,
 			 gdbarch_register_name (gdbarch, check_regno));
 		if (regno >= 0 && regno != check_regno)
 		  /* Update GDB's copy of the register.  */
-		  regcache_raw_supply (regcache, check_regno,
-				       REG_ADDR (state, check_regno));
+		  regcache->raw_supply (check_regno,
+					REG_ADDR (state, check_regno));
 		else
 		  warning (_("... also writing this register!  "
 			     "Suspicious..."));
@@ -248,16 +264,16 @@ gnu_store_registers (struct target_ops *ops,
 	  proc_debug (thread, "storing all registers");
 
 	  for (i = 0; i < I386_NUM_GREGS; i++)
-	    if (REG_VALID == regcache_register_status (regcache, i))
-	      regcache_raw_collect (regcache, i, REG_ADDR (state, i));
+	    if (REG_VALID == regcache->get_register_status (i))
+	      regcache->raw_collect (i, REG_ADDR (state, i));
 	}
       else
 	{
 	  proc_debug (thread, "storing register %s",
 		      gdbarch_register_name (gdbarch, regno));
 
-	  gdb_assert (REG_VALID == regcache_register_status (regcache, regno));
-	  regcache_raw_collect (regcache, regno, REG_ADDR (state, regno));
+	  gdb_assert (REG_VALID == regcache->get_register_status (regno));
+	  regcache->raw_collect (regno, REG_ADDR (state, regno));
 	}
 
       /* Restore the T bit.  */
@@ -412,14 +428,7 @@ i386_gnu_dr_get_control (void)
 void
 _initialize_i386gnu_nat (void)
 {
-  struct target_ops *t;
-
-  /* Fill in the generic GNU/Hurd methods.  */
-  t = gnu_target ();
-
 #ifdef i386_DEBUG_STATE
-  x86_use_watchpoints (t);
-
   x86_dr_low.set_control = i386_gnu_dr_set_control;
   gdb_assert (DR_FIRSTADDR == 0 && DR_LASTADDR < i386_DEBUG_STATE_COUNT);
   x86_dr_low.set_addr = i386_gnu_dr_set_addr;
@@ -429,9 +438,6 @@ _initialize_i386gnu_nat (void)
   x86_set_debug_register_length (4);
 #endif /* i386_DEBUG_STATE */
 
-  t->to_fetch_registers = gnu_fetch_registers;
-  t->to_store_registers = gnu_store_registers;
-
   /* Register the target.  */
-  add_target (t);
+  add_inf_child_target (&the_i386_gnu_nat_target);
 }

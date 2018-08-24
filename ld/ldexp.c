@@ -106,9 +106,9 @@ exp_print_token (token_code_type code, int infix_p)
     { BLOCK, "BLOCK" },
     { QUAD, "QUAD" },
     { SQUAD, "SQUAD" },
-    { LONG, "LONG" },
-    { SHORT, "SHORT" },
-    { BYTE, "BYTE" },
+    { xLONG, "LONG" },
+    { xSHORT, "SHORT" },
+    { xBYTE, "BYTE" },
     { SECTIONS, "SECTIONS" },
     { SIZEOF_HEADERS, "SIZEOF_HEADERS" },
     { MEMORY, "MEMORY" },
@@ -1200,6 +1200,9 @@ exp_fold_tree_1 (etree_type *tree)
 		  h->u.def.section = expld.result.section;
 		  h->linker_def = ! tree->assign.type.lineno;
 		  h->ldscript_def = 1;
+		  if (tree->assign.hidden)
+		    bfd_link_hide_symbol (link_info.output_bfd,
+					  &link_info, h);
 
 		  /* Copy the symbol type if this is an expression only
 		     referencing a single symbol.  (If the expression

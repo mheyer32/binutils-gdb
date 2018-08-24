@@ -34,6 +34,7 @@
   	COMMON as "".
    If TEST is #defined, then we are testing a module: #define COMMON as "".  */
 
+#include "config.h"
 #include "alloca-conf.h"
 
 /* Now, tend to the rest of the configuration.  */
@@ -595,6 +596,10 @@ COMMON int flag_allow_nonconst_size;
 /* If we should generate ELF common symbols with the STT_COMMON type.  */
 extern int flag_use_elf_stt_common;
 
+/* TRUE iff GNU Build attribute notes should
+   be generated if none are in the input files.  */
+extern bfd_boolean flag_generate_build_notes;
+
 /* If section name substitution sequences should be honored */
 COMMON int flag_sectname_subst;
 #endif
@@ -637,6 +642,11 @@ COMMON int flag_sectname_subst;
 #endif
 #if OCTETS_PER_BYTE != (1<<OCTETS_PER_BYTE_POWER)
  #error "Octets per byte conflicts with its power-of-two definition!"
+#endif
+
+#if defined(_MSC_VER)
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
 #endif
 
 #endif /* GAS */

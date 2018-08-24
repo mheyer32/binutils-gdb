@@ -39,6 +39,9 @@ set old_ASFLAGS $ASFLAGS
 # This target requires extra GAS options when building code for shared
 # libraries.
 set AFLAGS_PIC ""
+if [istarget "nds32*-*"] {
+    append AFLAGS_PIC " -mpic"
+}
 if [istarget "tic6x-*-*"] {
     append AFLAGS_PIC " -mpic -mpid=near"
 }
@@ -418,7 +421,7 @@ run_ld_link_tests [list \
     [list "Build pr20995-2.so" \
 	"-shared -z relro" "" "$AFLAGS_PIC" \
 	{pr20995c.s} {{readelf {-l --wide} pr20995-2so.r}} "pr20995-2.so"] \
-] "tic6x-*-*" "arm*-*-eabi*" "hppa*64*-*-hpux*"
+] "tic6x-*-*" "arm*-*-eabi*" "hppa*64*-*-hpux*" "aarch64*-*-elf*"
 
 # These targets don't copy dynamic variables into .bss.
 setup_xfail "alpha-*-*" "bfin-*-*" "ia64-*-*" "xtensa-*-*"
@@ -433,7 +436,7 @@ run_ld_link_tests [list \
 # xfail on arm*-*-eabi* is particularly because of no support of GNU_RELRO.
 # Please see the link above for details.
 setup_xfail "alpha-*-*" "bfin-*-*" "ia64-*-*" "xtensa-*-*" "arm*-*-eabi*"
-setup_xfail "hppa*64*-*-hpux*"
+setup_xfail "hppa*64*-*-hpux*" "aarch64*-*-elf*"
 run_ld_link_tests [list \
     [list \
 	"pr20995-2" \
@@ -1346,3 +1349,123 @@ proc mix_pic_and_non_pic {xfails cflags ldflags exe} {
 
 mix_pic_and_non_pic [list "arm*-*-*" "aarch64*-*-*"] "" "" "pr19719"
 mix_pic_and_non_pic [] "-fPIE" "-pie" "pr19719pie"
+
+set AFLAGS_PIE ""
+if { [istarget "i?86-*-*"]
+     || [istarget "x86_64-*-*"] } {
+    set AFLAGS_PIE "-mrelax-relocations=yes"
+}
+
+if { ([istarget "*-*-linux*"]
+      || [istarget "*-*-nacl*"]
+      || [istarget "*-*-gnu*"])
+     && ![istarget "mips*-*-*"] } {
+    run_ld_link_tests [list \
+	[list \
+	    "Build libpr23162a.so" \
+	    "-shared" \
+	    "" \
+	    "$AFLAGS_PIC" \
+	    { pr23162a.c } \
+	    "" \
+	    "libpr23162a.so" \
+	    "-fPIC -O2" \
+	] \
+	[list \
+	    "Build pr23162a" \
+	    "-pie --no-as-needed tmpdir/libpr23162a.so" \
+	    "" \
+	    $AFLAGS_PIE \
+	    { pr23162b.c } \
+	    {{readelf {-rW} pr23162.rd}} \
+	    "pr23162a" \
+	    "-fPIC -O0" \
+	] \
+	[list \
+	    "Build libpr23162b.so" \
+	    "-shared --version-script=pr23162.map" \
+	    "" \
+	    "$AFLAGS_PIC" \
+	    { pr23162a.c } \
+	    "" \
+	    "libpr23162b.so" \
+	    "-fPIC -O2" \
+	] \
+	[list \
+	    "Build pr23162b" \
+	    "-pie --no-as-needed tmpdir/libpr23162b.so" \
+	    "" \
+	    $AFLAGS_PIE \
+	    { pr23162b.c } \
+	    {{readelf {-rW} pr23162.rd}} \
+	    "pr23162b" \
+	    "-fPIC -O0" \
+	] \
+	[list \
+	    "Build libpr23161a.so" \
+	    "-shared" \
+	    "" \
+	    "$AFLAGS_PIC" \
+	    { pr23161a.c } \
+	    {{readelf {--dyn-syms -rW} pr23161a.rd}} \
+	    "libpr23161a.so" \
+	    "-fPIC -O2" \
+	] \
+	[list \
+	    "Build pr23161a" \
+	    "-pie --no-as-needed tmpdir/libpr23161a.so" \
+	    "" \
+	    $AFLAGS_PIE \
+	    { pr23161b.c } \
+	    {{readelf {--dyn-syms -rW} pr23161b.rd}} \
+	    "pr23161a" \
+	    "-fPIC -O0" \
+	] \
+	[list \
+	    "Build libpr23161b.so" \
+	    "-shared --version-script=pr23161.map" \
+	    "" \
+	    "$AFLAGS_PIC" \
+	    { pr23161a.c } \
+	    {{readelf {--dyn-syms -rW} pr23161a.rd}} \
+	    "libpr23161b.so" \
+	    "-fPIC -O2" \
+	] \
+	[list \
+	    "Build pr23161b" \
+	    "-pie --no-as-needed tmpdir/libpr23161b.so" \
+	    "" \
+	    $AFLAGS_PIE \
+	    { pr23161b.c } \
+	    {{readelf {--dyn-syms -rW} pr23161b.rd}} \
+	    "pr23161b" \
+	    "-fPIC -O0" \
+	] \
+    ]
+}
+
+if { [istarget "i?86-*-*"]
+     || [istarget "x86_64-*-*"] } {
+    run_ld_link_tests [list \
+	[list \
+	    "Build libpr23161c.so" \
+	    "-shared" \
+	    "" \
+	    "$AFLAGS_PIC" \
+	    { pr23161c.c } \
+	    {{readelf {--dyn-syms -rW} pr23161c.rd}} \
+	    "libpr23161c.so" \
+	    "-fPIC -O2" \
+	] \
+	[list \
+	    "Build pr23161c" \
+	    "-pie --no-as-needed tmpdir/libpr23161c.so" \
+	    "" \
+	    $AFLAGS_PIE \
+	    { pr23161b.c } \
+	    {{readelf {--dyn-syms -rW} pr23161d.rd}} \
+	    "pr23161c" \
+	    "-fPIC -O0" \
+	] \
+    ]
+}

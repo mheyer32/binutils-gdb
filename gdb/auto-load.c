@@ -25,7 +25,7 @@
 #include "ui-out.h"
 #include "filenames.h"
 #include "command.h"
-#include "observer.h"
+#include "observable.h"
 #include "objfiles.h"
 #include "cli/cli-script.h"
 #include "gdbcmd.h"
@@ -197,20 +197,19 @@ auto_load_expand_dir_vars (const char *string)
 static void
 auto_load_safe_path_vec_update (void)
 {
-  unsigned len;
-  int ix;
-
   if (debug_auto_load)
     fprintf_unfiltered (gdb_stdlog,
 			_("auto-load: Updating directories of \"%s\".\n"),
 			auto_load_safe_path);
 
   auto_load_safe_path_vec = auto_load_expand_dir_vars (auto_load_safe_path);
+  size_t len = auto_load_safe_path_vec.size ();
 
   /* Apply tilde_expand and gdb_realpath to each AUTO_LOAD_SAFE_PATH_VEC
      element.  */
-  for (gdb::unique_xmalloc_ptr<char> &in_vec : auto_load_safe_path_vec)
+  for (size_t i = 0; i < len; i++)
     {
+      gdb::unique_xmalloc_ptr<char> &in_vec = auto_load_safe_path_vec[i];
       gdb::unique_xmalloc_ptr<char> expanded (tilde_expand (in_vec.get ()));
       gdb::unique_xmalloc_ptr<char> real_path = gdb_realpath (expanded.get ());
 
@@ -769,24 +768,19 @@ static int
 auto_load_objfile_script_1 (struct objfile *objfile, const char *realname,
 			    const struct extension_language_defn *language)
 {
-  char *filename, *debugfile;
-  int len, retval;
-  struct cleanup *cleanups;
+  const char *debugfile;
+  int retval;
   const char *suffix = ext_lang_auto_load_suffix (language);
 
-  len = strlen (realname);
-  filename = (char *) xmalloc (len + strlen (suffix) + 1);
-  memcpy (filename, realname, len);
-  strcpy (filename + len, suffix);
+  std::string filename = std::string (realname) + suffix;
 
-  cleanups = make_cleanup (xfree, filename);
-
-  gdb_file_up input = gdb_fopen_cloexec (filename, "r");
-  debugfile = filename;
+  gdb_file_up input = gdb_fopen_cloexec (filename.c_str (), "r");
+  debugfile = filename.c_str ();
   if (debug_auto_load)
     fprintf_unfiltered (gdb_stdlog, _("auto-load: Attempted file \"%s\" %s.\n"),
 			debugfile, input ? _("exists") : _("does not exist"));
 
+  std::string debugfile_holder;
   if (!input)
     {
       /* Also try the same file in a subdirectory of gdb's data
@@ -802,14 +796,10 @@ auto_load_objfile_script_1 (struct objfile *objfile, const char *realname,
 
       for (const gdb::unique_xmalloc_ptr<char> &dir : vec)
 	{
-	  debugfile = (char *) xmalloc (strlen (dir.get ())
-					+ strlen (filename) + 1);
-	  strcpy (debugfile, dir.get ());
-
 	  /* FILENAME is absolute, so we don't need a "/" here.  */
-	  strcat (debugfile, filename);
+	  debugfile_holder = dir.get () + filename;
+	  debugfile = debugfile_holder.c_str ();
 
-	  make_cleanup (xfree, debugfile);
 	  input = gdb_fopen_cloexec (debugfile, "r");
 	  if (debug_auto_load)
 	    fprintf_unfiltered (gdb_stdlog, _("auto-load: Attempted file "
@@ -862,7 +852,6 @@ auto_load_objfile_script_1 (struct objfile *objfile, const char *realname,
   else
     retval = 0;
 
-  do_cleanups (cleanups);
   return retval;
 }
 
@@ -1553,7 +1542,7 @@ _initialize_auto_load (void)
     = register_program_space_data_with_cleanup (NULL,
 						auto_load_pspace_data_cleanup);
 
-  observer_attach_new_objfile (auto_load_new_objfile);
+  gdb::observers::new_objfile.attach (auto_load_new_objfile);
 
   add_setshow_boolean_cmd ("gdb-scripts", class_support,
 			   &auto_load_gdb_scripts, _("\
@@ -1663,7 +1652,7 @@ This options has security implications for untrusted inferiors."),
 				     show_auto_load_safe_path,
 				     auto_load_set_cmdlist_get (),
 				     auto_load_show_cmdlist_get ());
-  observer_attach_gdb_datadir_changed (auto_load_gdb_datadir_changed);
+  gdb::observers::gdb_datadir_changed.attach (auto_load_gdb_datadir_changed);
 
   cmd = add_cmd ("add-auto-load-safe-path", class_support,
 		 add_auto_load_safe_path,

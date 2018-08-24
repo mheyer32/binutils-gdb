@@ -45,8 +45,10 @@ extern void plugin_load_plugins (void);
 /* Return name of plugin which caused an error in any of the above.  */
 extern const char *plugin_error_plugin (void);
 
+#ifndef _MSC_VER
 /* Call 'claim file' hook for all plugins.  */
 extern void plugin_maybe_claim (lang_input_statement_type *);
+#endif
 
 /* Call 'all symbols read' hook for all plugins.  */
 extern int plugin_call_all_symbols_read (void);

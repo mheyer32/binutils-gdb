@@ -37,8 +37,9 @@ case $targ in
     ;;
 esac
 
-i386_tobjs="i386-tdep.o arch/i386.o i387-tdep.o"
-amd64_tobjs="amd64-tdep.o arch/amd64.o"
+x86_tobjs="x86-tdep.o"
+i386_tobjs="i386-tdep.o arch/i386.o i387-tdep.o ${x86_tobjs}"
+amd64_tobjs="amd64-tdep.o arch/amd64.o ${x86_tobjs}"
 
 # Here are three sections to get a list of target specific object
 # files according to target triplet $TARG.
@@ -377,11 +378,6 @@ m68*-*-openbsd*)
 	gdb_target_obs="m68k-tdep.o m68k-bsd-tdep.o"
 	;;
 
-m88*-*-openbsd*)
-	# Target: OpenBSD/m88k
-	gdb_target_obs="m88k-tdep.o"
-	;;
-
 mep-*-*)
 	# Target: Toshiba Media Processor (MEP)
 	gdb_target_obs="mep-tdep.o"
@@ -501,7 +497,8 @@ powerpc*-*-linux*)
 			spu-multiarch.o \
 			glibc-tdep.o symfile-mem.o linux-tdep.o \
 			ravenscar-thread.o ppc-ravenscar-thread.o \
-			linux-record.o "
+			linux-record.o \
+			arch/ppc-linux-common.o"
 	gdb_sim=../sim/ppc/libsim.a
 	build_gdbserver=yes
 	;;
@@ -550,7 +547,7 @@ score-*-*)
 
 sh*-*-linux*)
 	# Target: GNU/Linux Super-H
-	gdb_target_obs="sh-tdep.o sh64-tdep.o sh-linux-tdep.o \
+	gdb_target_obs="sh-tdep.o sh-linux-tdep.o \
 			solib-svr4.o symfile-mem.o \
 			glibc-tdep.o linux-tdep.o"
 	gdb_sim=../sim/sh/libsim.a
@@ -563,16 +560,11 @@ sh*-*-netbsdelf* | sh*-*-knetbsd*-gnu)
 	;;
 sh*-*-openbsd*)
 	# Target: OpenBSD/sh
-	gdb_target_obs="sh-tdep.o sh64-tdep.o sh-nbsd-tdep.o"
-	;;
-sh64-*-elf*)
-	# Target: Renesas/Super-H 64 bit with simulator
-	gdb_target_obs="sh-tdep.o sh64-tdep.o"
-	gdb_sim=../sim/sh64/libsim.a
+	gdb_target_obs="sh-tdep.o sh-nbsd-tdep.o"
 	;;
 sh*)
 	# Target: Embedded Renesas Super-H processor
-	gdb_target_obs="sh-tdep.o sh64-tdep.o"
+	gdb_target_obs="sh-tdep.o"
 	gdb_sim=../sim/sh/libsim.a
 	;;
 
@@ -745,7 +737,7 @@ x86_64-*-openbsd*)
 x86_64-*-rtems*)
 	gdb_target_obs="${amd64_tobjs} ${i386_tobjs} i386-bsd-tdep.o"
 	;;
-xtensa*-*-linux*)	gdb_target=linux
+xtensa*-*-linux*)
 	# Target: GNU/Linux Xtensa
 	gdb_target_obs="xtensa-linux-tdep.o symfile-mem.o linux-tdep.o"
 	build_gdbserver=yes

@@ -54,7 +54,7 @@
 #include <ctype.h>
 #include "cp-abi.h"
 #include "cp-support.h"
-#include "observer.h"
+#include "observable.h"
 #include "solist.h"
 #include "macrotab.h"
 #include "macroscope.h"
@@ -528,7 +528,7 @@ gdb_mangle_name (struct type *type, int method_id, int signature_id)
   struct fn_field *method = &f[signature_id];
   const char *field_name = TYPE_FN_FIELDLIST_NAME (type, method_id);
   const char *physname = TYPE_FN_FIELD_PHYSNAME (f, signature_id);
-  const char *newname = type_name_no_tag (type);
+  const char *newname = TYPE_NAME (type);
 
   /* Does the form of physname indicate that it is the full mangled name
      of a constructor (not just the args)?  */
@@ -3046,8 +3046,6 @@ find_symbol_at_address (CORE_ADDR address)
    find the one whose first PC is closer than that of the next line in this
    symtab.  */
 
-/* If it's worth the effort, we could be using a binary search.  */
-
 struct symtab_and_line
 find_pc_sect_line (CORE_ADDR pc, struct obj_section *section, int notcurrent)
 {
@@ -3214,15 +3212,17 @@ find_pc_sect_line (CORE_ADDR pc, struct obj_section *section, int notcurrent)
       if (item->pc > pc && (!alt || item->pc < alt->pc))
 	alt = item;
 
-      for (i = 0; i < len; i++, item++)
-	{
-	  /* Leave prev pointing to the linetable entry for the last line
-	     that started at or before PC.  */
-	  if (item->pc > pc)
-	    break;
+      auto pc_compare = [](const CORE_ADDR & pc,
+			   const struct linetable_entry & lhs)->bool
+      {
+	return pc < lhs.pc;
+      };
 
-	  prev = item;
-	}
+      struct linetable_entry *first = item;
+      struct linetable_entry *last = item + len;
+      item = std::upper_bound (first, last, pc, pc_compare);
+      if (item != first)
+	prev = item - 1;		/* Found a matching item.  */
 
       /* At this point, prev points at the line whose start addr is <= pc, and
          item points at the next line.  If we ran off the end of the linetable
@@ -3245,10 +3245,10 @@ find_pc_sect_line (CORE_ADDR pc, struct obj_section *section, int notcurrent)
 	}
 
       /* If another line (denoted by ITEM) is in the linetable and its
-         PC is after BEST's PC, but before the current BEST_END, then
+	 PC is after BEST's PC, but before the current BEST_END, then
 	 use ITEM's PC as the new best_end.  */
-      if (best && i < len && item->pc > best->pc
-          && (best_end == 0 || best_end > item->pc))
+      if (best && item < last && item->pc > best->pc
+	  && (best_end == 0 || best_end > item->pc))
 	best_end = item->pc;
     }
 
@@ -3575,46 +3575,36 @@ find_pc_line_pc_range (CORE_ADDR pc, CORE_ADDR *startptr, CORE_ADDR *endptr)
   return sal.symtab != 0;
 }
 
-/* Given a function symbol SYM, find the symtab and line for the start
-   of the function.
-   If the argument FUNFIRSTLINE is nonzero, we want the first line
-   of real code inside the function.
-   This function should return SALs matching those from minsym_found,
-   otherwise false multiple-locations breakpoints could be placed.  */
+/* See symtab.h.  */
 
-struct symtab_and_line
-find_function_start_sal (struct symbol *sym, int funfirstline)
+symtab_and_line
+find_function_start_sal (CORE_ADDR func_addr, obj_section *section,
+			 bool funfirstline)
 {
-  fixup_symbol_section (sym, NULL);
-
-  obj_section *section = SYMBOL_OBJ_SECTION (symbol_objfile (sym), sym);
-  symtab_and_line sal
-    = find_pc_sect_line (BLOCK_START (SYMBOL_BLOCK_VALUE (sym)), section, 0);
-  sal.symbol = sym;
+  symtab_and_line sal = find_pc_sect_line (func_addr, section, 0);
 
   if (funfirstline && sal.symtab != NULL
       && (COMPUNIT_LOCATIONS_VALID (SYMTAB_COMPUNIT (sal.symtab))
 	  || SYMTAB_LANGUAGE (sal.symtab) == language_asm))
     {
-      struct gdbarch *gdbarch = symbol_arch (sym);
+      struct gdbarch *gdbarch = get_objfile_arch (SYMTAB_OBJFILE (sal.symtab));
 
-      sal.pc = BLOCK_START (SYMBOL_BLOCK_VALUE (sym));
+      sal.pc = func_addr;
       if (gdbarch_skip_entrypoint_p (gdbarch))
 	sal.pc = gdbarch_skip_entrypoint (gdbarch, sal.pc);
       return sal;
     }
 
   /* We always should have a line for the function start address.
-     If we don't, something is odd.  Create a plain SAL refering
+     If we don't, something is odd.  Create a plain SAL referring
      just the PC and hope that skip_prologue_sal (if requested)
      can find a line number for after the prologue.  */
-  if (sal.pc < BLOCK_START (SYMBOL_BLOCK_VALUE (sym)))
+  if (sal.pc < func_addr)
     {
       sal = {};
       sal.pspace = current_program_space;
-      sal.pc = BLOCK_START (SYMBOL_BLOCK_VALUE (sym));
+      sal.pc = func_addr;
       sal.section = section;
-      sal.symbol = sym;
     }
 
   if (funfirstline)
@@ -3622,6 +3612,21 @@ find_function_start_sal (struct symbol *sym, int funfirstline)
 
   return sal;
 }
+
+/* See symtab.h.  */
+
+symtab_and_line
+find_function_start_sal (symbol *sym, bool funfirstline)
+{
+  fixup_symbol_section (sym, NULL);
+  symtab_and_line sal
+    = find_function_start_sal (BLOCK_START (SYMBOL_BLOCK_VALUE (sym)),
+			       SYMBOL_OBJ_SECTION (symbol_objfile (sym), sym),
+			       funfirstline);
+  sal.symbol = sym;
+  return sal;
+}
+
 
 /* Given a function start address FUNC_ADDR and SYMTAB, find the first
    address for that function that has an entry in SYMTAB's line info
@@ -4500,7 +4505,9 @@ search_symbols (const char *regexp, enum search_domain kind,
 
 /* Helper function for symtab_symbol_info, this function uses
    the data returned from search_symbols() to print information
-   regarding the match to gdb_stdout.  */
+   regarding the match to gdb_stdout.  If LAST is not NULL,
+   print file and line number information for the symbol as
+   well.  Skip printing the filename if it matches LAST.  */
 
 static void
 print_symbol_info (enum search_domain kind,
@@ -4508,13 +4515,22 @@ print_symbol_info (enum search_domain kind,
 		   int block, const char *last)
 {
   struct symtab *s = symbol_symtab (sym);
-  const char *s_filename = symtab_to_filename_for_display (s);
 
-  if (last == NULL || filename_cmp (last, s_filename) != 0)
+  if (last != NULL)
     {
-      fputs_filtered ("\nFile ", gdb_stdout);
-      fputs_filtered (s_filename, gdb_stdout);
-      fputs_filtered (":\n", gdb_stdout);
+      const char *s_filename = symtab_to_filename_for_display (s);
+
+      if (filename_cmp (last, s_filename) != 0)
+	{
+	  fputs_filtered ("\nFile ", gdb_stdout);
+	  fputs_filtered (s_filename, gdb_stdout);
+	  fputs_filtered (":\n", gdb_stdout);
+	}
+
+      if (SYMBOL_LINE (sym) != 0)
+	printf_filtered ("%d:\t", SYMBOL_LINE (sym));
+      else
+	puts_filtered ("\t");
     }
 
   if (kind != TYPES_DOMAIN && block == STATIC_BLOCK)
@@ -4568,7 +4584,7 @@ symtab_symbol_info (const char *regexp, enum search_domain kind, int from_tty)
 {
   static const char * const classnames[] =
     {"variable", "function", "type"};
-  const char *last_filename = NULL;
+  const char *last_filename = "";
   int first = 1;
 
   gdb_assert (kind <= TYPES_DOMAIN);
@@ -4679,10 +4695,7 @@ rbreak_command (const char *regexp, int from_tty)
 	  string = string_printf ("%s:'%s'", fullname,
 				  SYMBOL_LINKAGE_NAME (p.symbol));
 	  break_command (&string[0], from_tty);
-	  print_symbol_info (FUNCTIONS_DOMAIN,
-			     p.symbol,
-			     p.block,
-			     symtab_to_filename_for_display (symtab));
+	  print_symbol_info (FUNCTIONS_DOMAIN, p.symbol, p.block, NULL);
 	}
       else
 	{
@@ -4943,6 +4956,50 @@ symbol_is_function_or_method (minimal_symbol *msymbol)
     default:
       return false;
     }
+}
+
+/* See symtab.h.  */
+
+bound_minimal_symbol
+find_gnu_ifunc (const symbol *sym)
+{
+  if (SYMBOL_CLASS (sym) != LOC_BLOCK)
+    return {};
+
+  lookup_name_info lookup_name (SYMBOL_SEARCH_NAME (sym),
+				symbol_name_match_type::SEARCH_NAME);
+  struct objfile *objfile = symbol_objfile (sym);
+
+  CORE_ADDR address = BLOCK_START (SYMBOL_BLOCK_VALUE (sym));
+  minimal_symbol *ifunc = NULL;
+
+  iterate_over_minimal_symbols (objfile, lookup_name,
+				[&] (minimal_symbol *minsym)
+    {
+      if (MSYMBOL_TYPE (minsym) == mst_text_gnu_ifunc
+	  || MSYMBOL_TYPE (minsym) == mst_data_gnu_ifunc)
+	{
+	  CORE_ADDR msym_addr = MSYMBOL_VALUE_ADDRESS (objfile, minsym);
+	  if (MSYMBOL_TYPE (minsym) == mst_data_gnu_ifunc)
+	    {
+	      struct gdbarch *gdbarch = get_objfile_arch (objfile);
+	      msym_addr
+		= gdbarch_convert_from_func_ptr_addr (gdbarch,
+						      msym_addr,
+						      current_top_target ());
+	    }
+	  if (msym_addr == address)
+	    {
+	      ifunc = minsym;
+	      return true;
+	    }
+	}
+      return false;
+    });
+
+  if (ifunc != NULL)
+    return {ifunc, objfile};
+  return {};
 }
 
 /* Add matching symbols from SYMTAB to the current completion list.  */
@@ -5917,7 +5974,7 @@ If zero then the symbol cache is disabled."),
 	   _("Flush the symbol cache for each program space."),
 	   &maintenancelist);
 
-  observer_attach_executable_changed (symtab_observer_executable_changed);
-  observer_attach_new_objfile (symtab_new_objfile_observer);
-  observer_attach_free_objfile (symtab_free_objfile_observer);
+  gdb::observers::executable_changed.attach (symtab_observer_executable_changed);
+  gdb::observers::new_objfile.attach (symtab_new_objfile_observer);
+  gdb::observers::free_objfile.attach (symtab_free_objfile_observer);
 }

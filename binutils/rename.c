@@ -93,7 +93,7 @@ set_times (const char *destination, const struct stat *statbuf)
   int result;
 
   {
-#ifdef HAVE_GOOD_UTIME_H
+#if defined(HAVE_GOOD_UTIME_H) || defined(_MSC_VER)
     struct utimbuf tb;
 
     tb.actime = statbuf->st_atime;

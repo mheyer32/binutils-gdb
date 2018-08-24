@@ -444,10 +444,7 @@ TARGET_CPU_CFILES = \
 	config/tc-h8300.c \
 	config/tc-hppa.c \
 	config/tc-ia64.c \
-	config/tc-i370.c \
 	config/tc-i386.c \
-	config/tc-i860.c \
-	config/tc-i960.c \
 	config/tc-ip2k.c \
 	config/tc-iq2000.c \
 	config/tc-lm32.c \
@@ -455,6 +452,7 @@ TARGET_CPU_CFILES = \
 	config/tc-m32r.c \
 	config/tc-m68hc11.c \
 	config/tc-m68k.c \
+	config/tc-s12z.c \
 	config/tc-mcore.c \
 	config/tc-mep.c \
 	config/tc-metag.c \
@@ -480,7 +478,6 @@ TARGET_CPU_CFILES = \
 	config/tc-s390.c \
 	config/tc-score.c \
 	config/tc-sh.c \
-	config/tc-sh64.c \
 	config/tc-sparc.c \
 	config/tc-spu.c \
 	config/tc-tic30.c \
@@ -521,10 +518,7 @@ TARGET_CPU_HFILES = \
 	config/tc-h8300.h \
 	config/tc-hppa.h \
 	config/tc-ia64.h \
-	config/tc-i370.h \
 	config/tc-i386.h \
-	config/tc-i860.h \
-	config/tc-i960.h \
 	config/tc-ip2k.h \
 	config/tc-iq2000.h \
 	config/tc-lm32.h \
@@ -532,6 +526,7 @@ TARGET_CPU_HFILES = \
 	config/tc-m32r.h \
 	config/tc-m68hc11.h \
 	config/tc-m68k.h \
+	config/tc-s12z.h \
 	config/tc-mcore.h \
 	config/tc-mep.h \
 	config/tc-metag.h \
@@ -556,7 +551,6 @@ TARGET_CPU_HFILES = \
 	config/tc-s390.h \
 	config/tc-score.h \
 	config/tc-sh.h \
-	config/tc-sh64.h \
 	config/tc-sparc.h \
 	config/tc-spu.h \
 	config/tc-tic30.h \
@@ -612,8 +606,6 @@ TARG_ENV_HFILES = \
 	config/te-armfbsdeabi.h \
 	config/te-armfbsdvfp.h \
 	config/te-armlinuxeabi.h \
-	config/te-dynix.h \
-	config/te-epoc-pe.h \
 	config/te-freebsd.h \
 	config/te-generic.h \
 	config/te-gnu.h \
@@ -621,22 +613,15 @@ TARG_ENV_HFILES = \
 	config/te-hppa.h \
 	config/te-hppa64.h \
 	config/te-hppalinux64.h \
-	config/te-i386aix.h \
 	config/te-ia64aix.h \
 	config/te-interix.h \
 	config/te-lynx.h \
-	config/te-mach.h \
 	config/te-macos.h \
 	config/te-nbsd.h \
 	config/te-nbsd532.h \
-	config/te-netware.h \
 	config/te-pc532mach.h \
 	config/te-pe.h \
-	config/te-psos.h \
-	config/te-riscix.h \
 	config/te-solaris.h \
-	config/te-sparcaout.h \
-	config/te-sun3.h \
 	config/te-svr4.h \
 	config/te-symbian.h \
 	config/te-tmips.h \
@@ -883,10 +868,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-ft32.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-h8300.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-hppa.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-i370.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-i386.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-i860.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-i960.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-ia64.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-ip2k.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-iq2000.Po@am__quote@
@@ -917,10 +899,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-riscv.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-rl78.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-rx.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-s12z.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-s390.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-score.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-sh.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-sh64.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-sparc.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-spu.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-tic30.Po@am__quote@
@@ -1230,20 +1212,6 @@ tc-ia64.obj: config/tc-ia64.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tc-ia64.obj `if test -f 'config/tc-ia64.c'; then $(CYGPATH_W) 'config/tc-ia64.c'; else $(CYGPATH_W) '$(srcdir)/config/tc-ia64.c'; fi`
 
-tc-i370.o: config/tc-i370.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tc-i370.o -MD -MP -MF $(DEPDIR)/tc-i370.Tpo -c -o tc-i370.o `test -f 'config/tc-i370.c' || echo '$(srcdir)/'`config/tc-i370.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/tc-i370.Tpo $(DEPDIR)/tc-i370.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='config/tc-i370.c' object='tc-i370.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tc-i370.o `test -f 'config/tc-i370.c' || echo '$(srcdir)/'`config/tc-i370.c
-
-tc-i370.obj: config/tc-i370.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tc-i370.obj -MD -MP -MF $(DEPDIR)/tc-i370.Tpo -c -o tc-i370.obj `if test -f 'config/tc-i370.c'; then $(CYGPATH_W) 'config/tc-i370.c'; else $(CYGPATH_W) '$(srcdir)/config/tc-i370.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/tc-i370.Tpo $(DEPDIR)/tc-i370.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='config/tc-i370.c' object='tc-i370.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tc-i370.obj `if test -f 'config/tc-i370.c'; then $(CYGPATH_W) 'config/tc-i370.c'; else $(CYGPATH_W) '$(srcdir)/config/tc-i370.c'; fi`
-
 tc-i386.o: config/tc-i386.c
 @am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tc-i386.o -MD -MP -MF $(DEPDIR)/tc-i386.Tpo -c -o tc-i386.o `test -f 'config/tc-i386.c' || echo '$(srcdir)/'`config/tc-i386.c
 @am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/tc-i386.Tpo $(DEPDIR)/tc-i386.Po
@@ -1257,34 +1225,6 @@ tc-i386.obj: config/tc-i386.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='config/tc-i386.c' object='tc-i386.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tc-i386.obj `if test -f 'config/tc-i386.c'; then $(CYGPATH_W) 'config/tc-i386.c'; else $(CYGPATH_W) '$(srcdir)/config/tc-i386.c'; fi`
-
-tc-i860.o: config/tc-i860.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tc-i860.o -MD -MP -MF $(DEPDIR)/tc-i860.Tpo -c -o tc-i860.o `test -f 'config/tc-i860.c' || echo '$(srcdir)/'`config/tc-i860.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/tc-i860.Tpo $(DEPDIR)/tc-i860.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='config/tc-i860.c' object='tc-i860.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tc-i860.o `test -f 'config/tc-i860.c' || echo '$(srcdir)/'`config/tc-i860.c
-
-tc-i860.obj: config/tc-i860.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tc-i860.obj -MD -MP -MF $(DEPDIR)/tc-i860.Tpo -c -o tc-i860.obj `if test -f 'config/tc-i860.c'; then $(CYGPATH_W) 'config/tc-i860.c'; else $(CYGPATH_W) '$(srcdir)/config/tc-i860.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/tc-i860.Tpo $(DEPDIR)/tc-i860.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='config/tc-i860.c' object='tc-i860.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tc-i860.obj `if test -f 'config/tc-i860.c'; then $(CYGPATH_W) 'config/tc-i860.c'; else $(CYGPATH_W) '$(srcdir)/config/tc-i860.c'; fi`
-
-tc-i960.o: config/tc-i960.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tc-i960.o -MD -MP -MF $(DEPDIR)/tc-i960.Tpo -c -o tc-i960.o `test -f 'config/tc-i960.c' || echo '$(srcdir)/'`config/tc-i960.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/tc-i960.Tpo $(DEPDIR)/tc-i960.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='config/tc-i960.c' object='tc-i960.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tc-i960.o `test -f 'config/tc-i960.c' || echo '$(srcdir)/'`config/tc-i960.c
-
-tc-i960.obj: config/tc-i960.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tc-i960.obj -MD -MP -MF $(DEPDIR)/tc-i960.Tpo -c -o tc-i960.obj `if test -f 'config/tc-i960.c'; then $(CYGPATH_W) 'config/tc-i960.c'; else $(CYGPATH_W) '$(srcdir)/config/tc-i960.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/tc-i960.Tpo $(DEPDIR)/tc-i960.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='config/tc-i960.c' object='tc-i960.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tc-i960.obj `if test -f 'config/tc-i960.c'; then $(CYGPATH_W) 'config/tc-i960.c'; else $(CYGPATH_W) '$(srcdir)/config/tc-i960.c'; fi`
 
 tc-ip2k.o: config/tc-ip2k.c
 @am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tc-ip2k.o -MD -MP -MF $(DEPDIR)/tc-ip2k.Tpo -c -o tc-ip2k.o `test -f 'config/tc-ip2k.c' || echo '$(srcdir)/'`config/tc-ip2k.c
@@ -1383,6 +1323,20 @@ tc-m68k.obj: config/tc-m68k.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='config/tc-m68k.c' object='tc-m68k.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tc-m68k.obj `if test -f 'config/tc-m68k.c'; then $(CYGPATH_W) 'config/tc-m68k.c'; else $(CYGPATH_W) '$(srcdir)/config/tc-m68k.c'; fi`
+
+tc-s12z.o: config/tc-s12z.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tc-s12z.o -MD -MP -MF $(DEPDIR)/tc-s12z.Tpo -c -o tc-s12z.o `test -f 'config/tc-s12z.c' || echo '$(srcdir)/'`config/tc-s12z.c
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/tc-s12z.Tpo $(DEPDIR)/tc-s12z.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='config/tc-s12z.c' object='tc-s12z.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tc-s12z.o `test -f 'config/tc-s12z.c' || echo '$(srcdir)/'`config/tc-s12z.c
+
+tc-s12z.obj: config/tc-s12z.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tc-s12z.obj -MD -MP -MF $(DEPDIR)/tc-s12z.Tpo -c -o tc-s12z.obj `if test -f 'config/tc-s12z.c'; then $(CYGPATH_W) 'config/tc-s12z.c'; else $(CYGPATH_W) '$(srcdir)/config/tc-s12z.c'; fi`
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/tc-s12z.Tpo $(DEPDIR)/tc-s12z.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='config/tc-s12z.c' object='tc-s12z.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tc-s12z.obj `if test -f 'config/tc-s12z.c'; then $(CYGPATH_W) 'config/tc-s12z.c'; else $(CYGPATH_W) '$(srcdir)/config/tc-s12z.c'; fi`
 
 tc-mcore.o: config/tc-mcore.c
 @am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tc-mcore.o -MD -MP -MF $(DEPDIR)/tc-mcore.Tpo -c -o tc-mcore.o `test -f 'config/tc-mcore.c' || echo '$(srcdir)/'`config/tc-mcore.c
@@ -1733,20 +1687,6 @@ tc-sh.obj: config/tc-sh.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='config/tc-sh.c' object='tc-sh.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tc-sh.obj `if test -f 'config/tc-sh.c'; then $(CYGPATH_W) 'config/tc-sh.c'; else $(CYGPATH_W) '$(srcdir)/config/tc-sh.c'; fi`
-
-tc-sh64.o: config/tc-sh64.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tc-sh64.o -MD -MP -MF $(DEPDIR)/tc-sh64.Tpo -c -o tc-sh64.o `test -f 'config/tc-sh64.c' || echo '$(srcdir)/'`config/tc-sh64.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/tc-sh64.Tpo $(DEPDIR)/tc-sh64.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='config/tc-sh64.c' object='tc-sh64.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tc-sh64.o `test -f 'config/tc-sh64.c' || echo '$(srcdir)/'`config/tc-sh64.c
-
-tc-sh64.obj: config/tc-sh64.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tc-sh64.obj -MD -MP -MF $(DEPDIR)/tc-sh64.Tpo -c -o tc-sh64.obj `if test -f 'config/tc-sh64.c'; then $(CYGPATH_W) 'config/tc-sh64.c'; else $(CYGPATH_W) '$(srcdir)/config/tc-sh64.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/tc-sh64.Tpo $(DEPDIR)/tc-sh64.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='config/tc-sh64.c' object='tc-sh64.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tc-sh64.obj `if test -f 'config/tc-sh64.c'; then $(CYGPATH_W) 'config/tc-sh64.c'; else $(CYGPATH_W) '$(srcdir)/config/tc-sh64.c'; fi`
 
 tc-sparc.o: config/tc-sparc.c
 @am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tc-sparc.o -MD -MP -MF $(DEPDIR)/tc-sparc.Tpo -c -o tc-sparc.o `test -f 'config/tc-sparc.c' || echo '$(srcdir)/'`config/tc-sparc.c

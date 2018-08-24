@@ -39,7 +39,7 @@
 #include "block.h"
 #include "disasm.h"
 #include "target-float.h"
-#include "observer.h"
+#include "observable.h"
 #include "solist.h"
 #include "parser-defs.h"
 #include "charset.h"
@@ -50,10 +50,6 @@
 #include "source.h"
 #include "common/byte-vector.h"
 
-#ifdef TUI
-#include "tui/tui.h"		/* For tui_active et al.   */
-#endif
-
 /* Last specified output format.  */
 
 static char last_format = 0;
@@ -61,6 +57,10 @@ static char last_format = 0;
 /* Last specified examination size.  'b', 'h', 'w' or `q'.  */
 
 static char last_size = 'w';
+
+/* Last specified count for the 'x' command.  */
+
+static int last_count;
 
 /* Default address to examine next, and associated architecture.  */
 
@@ -78,7 +78,7 @@ static CORE_ADDR last_examine_address;
 /* Contents of last address examined.
    This is not valid past the end of the `x' command!  */
 
-static struct value *last_examine_value;
+static value_ref_ptr last_examine_value;
 
 /* Largest offset between a symbolic value and an address, that will be
    printed as `0x1234 <symbol+offset>'.  */
@@ -211,9 +211,7 @@ decode_format (const char **string_ptr, int oformat, int osize)
 	break;
     }
 
-  while (*p == ' ' || *p == '\t')
-    p++;
-  *string_ptr = p;
+  *string_ptr = skip_spaces (p);
 
   /* Set defaults for format and size if not specified.  */
   if (val.format == '?')
@@ -522,63 +520,50 @@ print_address_symbolic (struct gdbarch *gdbarch, CORE_ADDR addr,
 			struct ui_file *stream,
 			int do_demangle, const char *leadin)
 {
-  char *name = NULL;
-  char *filename = NULL;
+  std::string name, filename;
   int unmapped = 0;
   int offset = 0;
   int line = 0;
 
-  /* Throw away both name and filename.  */
-  struct cleanup *cleanup_chain = make_cleanup (free_current_contents, &name);
-  make_cleanup (free_current_contents, &filename);
-
   if (build_address_symbolic (gdbarch, addr, do_demangle, &name, &offset,
 			      &filename, &line, &unmapped))
-    {
-      do_cleanups (cleanup_chain);
-      return 0;
-    }
+    return 0;
 
   fputs_filtered (leadin, stream);
   if (unmapped)
     fputs_filtered ("<*", stream);
   else
     fputs_filtered ("<", stream);
-  fputs_filtered (name, stream);
+  fputs_filtered (name.c_str (), stream);
   if (offset != 0)
     fprintf_filtered (stream, "+%u", (unsigned int) offset);
 
   /* Append source filename and line number if desired.  Give specific
      line # of this addr, if we have it; else line # of the nearest symbol.  */
-  if (print_symbol_filename && filename != NULL)
+  if (print_symbol_filename && !filename.empty ())
     {
       if (line != -1)
-	fprintf_filtered (stream, " at %s:%d", filename, line);
+	fprintf_filtered (stream, " at %s:%d", filename.c_str (), line);
       else
-	fprintf_filtered (stream, " in %s", filename);
+	fprintf_filtered (stream, " in %s", filename.c_str ());
     }
   if (unmapped)
     fputs_filtered ("*>", stream);
   else
     fputs_filtered (">", stream);
 
-  do_cleanups (cleanup_chain);
   return 1;
 }
 
-/* Given an address ADDR return all the elements needed to print the
-   address in a symbolic form.  NAME can be mangled or not depending
-   on DO_DEMANGLE (and also on the asm_demangle global variable,
-   manipulated via ''set print asm-demangle'').  Return 0 in case of
-   success, when all the info in the OUT paramters is valid.  Return 1
-   otherwise.  */
+/* See valprint.h.  */
+
 int
 build_address_symbolic (struct gdbarch *gdbarch,
 			CORE_ADDR addr,  /* IN */
 			int do_demangle, /* IN */
-			char **name,     /* OUT */
+			std::string *name, /* OUT */
 			int *offset,     /* OUT */
-			char **filename, /* OUT */
+			std::string *filename, /* OUT */
 			int *line,       /* OUT */
 			int *unmapped)   /* OUT */
 {
@@ -680,7 +665,7 @@ build_address_symbolic (struct gdbarch *gdbarch,
 
   *offset = addr - name_location;
 
-  *name = xstrdup (name_temp);
+  *name = name_temp;
 
   if (print_symbol_filename)
     {
@@ -690,7 +675,7 @@ build_address_symbolic (struct gdbarch *gdbarch,
 
       if (sal.symtab)
 	{
-	  *filename = xstrdup (symtab_to_filename_for_display (sal.symtab));
+	  *filename = symtab_to_filename_for_display (sal.symtab);
 	  *line = sal.line;
 	}
     }
@@ -1093,9 +1078,6 @@ do_examine (struct format_data fmt, struct gdbarch *gdbarch, CORE_ADDR addr)
 	     object.  */
 	  last_examine_address = next_address;
 
-	  if (last_examine_value)
-	    value_free (last_examine_value);
-
 	  /* The value to be displayed is not fetched greedily.
 	     Instead, to avoid the possibility of a fetched value not
 	     being used, its retrieval is delayed until the print code
@@ -1105,12 +1087,10 @@ do_examine (struct format_data fmt, struct gdbarch *gdbarch, CORE_ADDR addr)
 	     the disassembler be modified so that LAST_EXAMINE_VALUE
 	     is left with the byte sequence from the last complete
 	     instruction fetched from memory?  */
-	  last_examine_value = value_at_lazy (val_type, next_address);
+	  last_examine_value
+	    = release_value (value_at_lazy (val_type, next_address));
 
-	  if (last_examine_value)
-	    release_value (last_examine_value);
-
-	  print_formatted (last_examine_value, size, &opts, gdb_stdout);
+	  print_formatted (last_examine_value.get (), size, &opts, gdb_stdout);
 
 	  /* Display any branch delay slots following the final insn.  */
 	  if (format == 'i' && count == 1)
@@ -1228,16 +1208,8 @@ call_command (const char *exp, int from_tty)
 
 /* Implementation of the "output" command.  */
 
-static void
-output_command (const char *exp, int from_tty)
-{
-  output_command_const (exp, from_tty);
-}
-
-/* Like output_command, but takes a const string as argument.  */
-
 void
-output_command_const (const char *exp, int from_tty)
+output_command (const char *exp, int from_tty)
 {
   char format = 0;
   struct value *val;
@@ -1564,7 +1536,7 @@ info_address_command (const char *exp, int from_tty)
       {
 	struct bound_minimal_symbol msym;
 
-	msym = lookup_minimal_symbol_and_objfile (SYMBOL_LINKAGE_NAME (sym));
+	msym = lookup_bound_minimal_symbol (SYMBOL_LINKAGE_NAME (sym));
 	if (msym.minsym == NULL)
 	  printf_filtered ("unresolved");
 	else
@@ -1621,6 +1593,11 @@ x_command (const char *exp, int from_tty)
   fmt.count = 1;
   fmt.raw = 0;
 
+  /* If there is no expression and no format, use the most recent
+     count.  */
+  if (exp == nullptr && last_count > 0)
+    fmt.count = last_count;
+
   if (exp && *exp == '/')
     {
       const char *tmp = exp + 1;
@@ -1628,6 +1605,8 @@ x_command (const char *exp, int from_tty)
       fmt = decode_format (&tmp, last_format, last_size);
       exp = (char *) tmp;
     }
+
+  last_count = fmt.count;
 
   /* If we have an expression, evaluate it and use it as the address.  */
 
@@ -1668,12 +1647,12 @@ x_command (const char *exp, int from_tty)
   last_format = fmt.format;
 
   /* Set a couple of internal variables if appropriate.  */
-  if (last_examine_value)
+  if (last_examine_value != nullptr)
     {
       /* Make last address examined available to the user as $_.  Use
          the correct pointer type.  */
       struct type *pointer_type
-	= lookup_pointer_type (value_type (last_examine_value));
+	= lookup_pointer_type (value_type (last_examine_value.get ()));
       set_internalvar (lookup_internalvar ("_"),
 		       value_from_pointer (pointer_type,
 					   last_examine_address));
@@ -1682,10 +1661,10 @@ x_command (const char *exp, int from_tty)
 	 as $__.  If the last value has not been fetched from memory
 	 then don't fetch it now; instead mark it by voiding the $__
 	 variable.  */
-      if (value_lazy (last_examine_value))
+      if (value_lazy (last_examine_value.get ()))
 	clear_internalvar (lookup_internalvar ("__"));
       else
-	set_internalvar (lookup_internalvar ("__"), last_examine_value);
+	set_internalvar (lookup_internalvar ("__"), last_examine_value.get ());
     }
 }
 
@@ -2220,6 +2199,11 @@ printf_c_string (struct ui_file *stream, const char *format,
   int j;
 
   tem = value_as_address (value);
+  if (tem == 0)
+    {
+      fprintf_filtered (stream, format, "(null)");
+      return;
+    }
 
   /* This is a %s argument.  Find the length of the string.  */
   for (j = 0;; j++)
@@ -2260,6 +2244,11 @@ printf_wide_c_string (struct ui_file *stream, const char *format,
   gdb_byte *buf = (gdb_byte *) alloca (wcwidth);
 
   tem = value_as_address (value);
+  if (tem == 0)
+    {
+      fprintf_filtered (stream, format, "(null)");
+      return;
+    }
 
   /* This is a %s argument.  Find the length of the string.  */
   for (j = 0;; j += wcwidth)
@@ -2399,8 +2388,9 @@ printf_pointer (struct ui_file *stream, const char *format,
   if (val != 0)
     *fmt_p++ = '#';
 
-  /* Copy any width.  */
-  while (*p >= '0' && *p < '9')
+  /* Copy any width or flags.  Only the "-" flag is valid for pointers
+     -- see the format_pieces constructor.  */
+  while (*p == '-' || (*p >= '0' && *p < '9'))
     *fmt_p++ = *p++;
 
   gdb_assert (*p == 'p' && *(p + 1) == '\0');
@@ -2612,7 +2602,7 @@ _initialize_printcmd (void)
 
   current_display_number = -1;
 
-  observer_attach_free_objfile (clear_dangling_display_expressions);
+  gdb::observers::free_objfile.attach (clear_dangling_display_expressions);
 
   add_info ("address", info_address_command,
 	    _("Describe where symbol SYM is stored."));
@@ -2680,8 +2670,9 @@ No argument means cancel all automatic-display expressions.\n\
 Do \"info display\" to see current list of code numbers."), &deletelist);
 
   add_com ("printf", class_vars, printf_command, _("\
-printf \"printf format string\", arg1, arg2, arg3, ..., argn\n\
-This is useful for formatted output in user-defined commands."));
+Formatted printing, like the C \"printf\" function.\n\
+Usage: printf \"format string\", arg1, arg2, arg3, ..., argn\n\
+This supports most C printf format specifications, like %s, %d, etc."));
 
   add_com ("output", class_vars, output_command, _("\
 Like \"print\" but don't put in value history and don't print newline.\n\
@@ -2725,6 +2716,7 @@ with $), a register (a few standard names starting with $), or an actual\n\
 variable in the program being debugged.  EXP is any valid expression.\n\
 This may usually be abbreviated to simply \"set\"."),
 	   &setlist);
+  add_alias_cmd ("var", "variable", class_vars, 0, &setlist);
 
   c = add_com ("print", class_vars, print_command, _("\
 Print value of expression EXP.\n\

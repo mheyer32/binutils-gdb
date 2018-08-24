@@ -766,6 +766,12 @@ static const struct elf_x86_lazy_plt_layout elf_i386_lazy_plt =
     sizeof (elf_i386_lazy_plt0_entry),	/* plt0_entry_size */
     elf_i386_lazy_plt_entry,		/* plt_entry */
     LAZY_PLT_ENTRY_SIZE,		/* plt_entry_size */
+    NULL,				/* plt_tlsdesc_entry */
+    0,					/* plt_tlsdesc_entry_size*/
+    0,					/* plt_tlsdesc_got1_offset */
+    0,					/* plt_tlsdesc_got2_offset */
+    0,					/* plt_tlsdesc_got1_insn_end */
+    0,					/* plt_tlsdesc_got2_insn_end */
     2,					/* plt0_got1_offset */
     8,					/* plt0_got2_offset */
     0,					/* plt0_got2_insn_end */
@@ -798,6 +804,12 @@ static const struct elf_x86_lazy_plt_layout elf_i386_lazy_ibt_plt =
     sizeof (elf_i386_lazy_ibt_plt0_entry), /* plt0_entry_size */
     elf_i386_lazy_ibt_plt_entry,	/* plt_entry */
     LAZY_PLT_ENTRY_SIZE,		/* plt_entry_size */
+    NULL,				/* plt_tlsdesc_entry */
+    0,					/* plt_tlsdesc_entry_size*/
+    0,					/* plt_tlsdesc_got1_offset */
+    0,					/* plt_tlsdesc_got2_offset */
+    0,					/* plt_tlsdesc_got1_insn_end */
+    0,					/* plt_tlsdesc_got2_insn_end */
     2,					/* plt0_got1_offset */
     8,					/* plt0_got2_offset */
     0,					/* plt0_got2_insn_end */
@@ -2451,66 +2463,7 @@ skip_ifunc:
       switch (r_type)
 	{
 	case R_386_GOT32X:
-	  /* Avoid optimizing _DYNAMIC since ld.so may use its
-	     link-time address.  */
-	  if (h == htab->elf.hdynamic)
-	    goto r_386_got32;
-
-	  if (bfd_link_pic (info))
-	    {
-	      /* It is OK to convert mov to lea and convert indirect
-		 branch to direct branch.  It is OK to convert adc,
-		 add, and, cmp, or, sbb, sub, test, xor only when PIC
-		 is false.   */
-	      unsigned int opcode, addend;
-	      addend = bfd_get_32 (input_bfd, contents + rel->r_offset);
-	      if (addend != 0)
-		goto r_386_got32;
-	      opcode = bfd_get_8 (input_bfd, contents + rel->r_offset - 2);
-	      if (opcode != 0x8b && opcode != 0xff)
-		goto r_386_got32;
-	    }
-
-	  /* Resolve "mov GOT[(%reg)], %reg",
-	     "call/jmp *GOT[(%reg)]", "test %reg, foo@GOT[(%reg)]"
-	     and "binop foo@GOT[(%reg)], %reg".  */
-	  if (h == NULL
-	      || (h->plt.offset == (bfd_vma) -1
-		  && h->got.offset == (bfd_vma) -1)
-	      || htab->elf.sgotplt == NULL)
-	    abort ();
-
-	  offplt = (htab->elf.sgotplt->output_section->vma
-		    + htab->elf.sgotplt->output_offset);
-
-	  /* It is relative to .got.plt section.  */
-	  if (h->got.offset != (bfd_vma) -1)
-	    /* Use GOT entry.  Mask off the least significant bit in
-	       GOT offset which may be set by R_386_GOT32 processing
-	       below.  */
-	    relocation = (htab->elf.sgot->output_section->vma
-			  + htab->elf.sgot->output_offset
-			  + (h->got.offset & ~1) - offplt);
-	  else
-	    /* Use GOTPLT entry.  */
-	    relocation = (h->plt.offset / plt_entry_size
-			  - htab->plt.has_plt0 + 3) * 4;
-
-	  if (!bfd_link_pic (info))
-	    {
-	      /* If not PIC, add the .got.plt section address for
-		 baseless addressing.  */
-	      unsigned int modrm;
-	      modrm = bfd_get_8 (input_bfd, contents + rel->r_offset - 1);
-	      if ((modrm & 0xc7) == 0x5)
-		relocation += offplt;
-	    }
-
-	  unresolved_reloc = FALSE;
-	  break;
-
 	case R_386_GOT32:
-r_386_got32:
 	  /* Relocation is to the entry for this symbol in the global
 	     offset table.  */
 	  if (htab->elf.sgot == NULL)
@@ -3805,6 +3758,8 @@ elf_i386_finish_dynamic_symbol (bfd *output_bfd,
 	sym->st_value = 0;
     }
 
+  _bfd_x86_elf_link_fixup_ifunc_symbol (info, htab, h, sym);
+
   /* Don't generate dynamic GOT relocation against undefined weak
      symbol in executable.  */
   if (h->got.offset != (bfd_vma) -1
@@ -4435,6 +4390,8 @@ elf_i386_link_setup_gnu_properties (struct bfd_link_info *info)
 
 #define elf_backend_linux_prpsinfo32_ugid16	TRUE
 
+#define	elf32_bed			      elf32_i386_bed
+
 #include "elf32-target.h"
 
 /* FreeBSD support.  */
@@ -4783,6 +4740,12 @@ static const struct elf_x86_lazy_plt_layout elf_i386_nacl_plt =
     sizeof (elf_i386_nacl_plt0_entry),	/* plt0_entry_size */
     elf_i386_nacl_plt_entry,		/* plt_entry */
     NACL_PLT_ENTRY_SIZE,		/* plt_entry_size */
+    NULL,				/* plt_tlsdesc_entry */
+    0,					/* plt_tlsdesc_entry_size*/
+    0,					/* plt_tlsdesc_got1_offset */
+    0,					/* plt_tlsdesc_got2_offset */
+    0,					/* plt_tlsdesc_got1_insn_end */
+    0,					/* plt_tlsdesc_got2_insn_end */
     2,					/* plt0_got1_offset */
     8,					/* plt0_got2_offset */
     0,					/* plt0_got2_insn_end */

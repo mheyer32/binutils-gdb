@@ -2174,19 +2174,28 @@ read_and_display_attr_value (unsigned long           attribute,
 	      debug_info_p->have_frame_base [num] = have_frame_base;
 	      if (attribute != DW_AT_GNU_locviews)
 		{
-		  debug_info_p->loc_offsets [num] = uvalue;
-		  debug_info_p->num_loc_offsets++;
-		  assert (debug_info_p->num_loc_offsets
-			  - debug_info_p->num_loc_views <= 1);
+		  /* Corrupt DWARF info can produce more offsets than views.
+		     See PR 23062 for an example.  */
+		  if (debug_info_p->num_loc_offsets
+		      > debug_info_p->num_loc_views)
+		    warn (_("More location offset attributes than DW_AT_GNU_locview attributes\n"));
+		  else
+		    {
+		      debug_info_p->loc_offsets [num] = uvalue;
+		      debug_info_p->num_loc_offsets++;
+		    }
 		}
 	      else
 		{
 		  assert (debug_info_p->num_loc_views <= num);
 		  num = debug_info_p->num_loc_views;
-		  debug_info_p->loc_views [num] = uvalue;
-		  debug_info_p->num_loc_views++;
-		  assert (debug_info_p->num_loc_views
-			  - debug_info_p->num_loc_offsets <= 1);
+		  if (num > debug_info_p->num_loc_offsets)
+		    warn (_("More DW_AT_GNU_locview attributes than location offset attributes\n"));
+		  else
+		    {
+		      debug_info_p->loc_views [num] = uvalue;
+		      debug_info_p->num_loc_views++;
+		    }
 		}
 	    }
 	  break;
@@ -2352,12 +2361,22 @@ read_and_display_attr_value (unsigned long           attribute,
 	  /* DWARF 4 values.  */
 	case DW_LANG_Python:		printf ("(Python)"); break;
 	  /* DWARF 5 values.  */
+	case DW_LANG_OpenCL:		printf ("(OpenCL)"); break;
 	case DW_LANG_Go:		printf ("(Go)"); break;
+	case DW_LANG_Modula3:		printf ("(Modula 3)"); break;
+	case DW_LANG_Haskell:		printf ("(Haskell)"); break;
+	case DW_LANG_C_plus_plus_03:	printf ("(C++03)"); break;
 	case DW_LANG_C_plus_plus_11:	printf ("(C++11)"); break;
+	case DW_LANG_OCaml:		printf ("(OCaml)"); break;
+	case DW_LANG_Rust:		printf ("(Rust)"); break;
 	case DW_LANG_C11:		printf ("(C11)"); break;
+	case DW_LANG_Swift:		printf ("(Swift)"); break;
+	case DW_LANG_Julia:		printf ("(Julia)"); break;
+	case DW_LANG_Dylan:		printf ("(Dylan)"); break;
 	case DW_LANG_C_plus_plus_14:	printf ("(C++14)"); break;
 	case DW_LANG_Fortran03:		printf ("(Fortran 03)"); break;
 	case DW_LANG_Fortran08:		printf ("(Fortran 08)"); break;
+	case DW_LANG_RenderScript:	printf ("(RenderScript)"); break;
 	  /* MIPS extension.  */
 	case DW_LANG_Mips_Assembler:	printf ("(MIPS assembler)"); break;
 	  /* UPC extension.  */
@@ -9277,7 +9296,18 @@ process_cu_tu_index (struct dwarf_section *section, int do_display)
 		}
 
 	      if (!do_display)
-		memcpy (&this_set[row - 1].signature, ph, sizeof (uint64_t));
+		{
+		  size_t num_copy = sizeof (uint64_t);
+
+		  /* PR 23064: Beware of buffer overflow.  */
+		  if (ph + num_copy < limit)
+		    memcpy (&this_set[row - 1].signature, ph, num_copy);
+		  else
+		    {
+		      warn (_("Signature (%p) extends beyond end of space in section\n"), ph);
+		      return 0;
+		    }
+		}
 
 	      prow = poffsets + (row - 1) * ncols * 4;
 	      /* PR 17531: file: b8ce60a8.  */

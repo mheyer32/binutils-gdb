@@ -3572,6 +3572,8 @@ bfd_elf64_bfd_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
 static reloc_howto_type *
 mips_elf64_rtype_to_howto (bfd *abfd, unsigned int r_type, bfd_boolean rela_p)
 {
+  reloc_howto_type *howto = NULL;
+
   switch (r_type)
     {
     case R_MIPS_GNU_VTINHERIT:
@@ -3595,29 +3597,33 @@ mips_elf64_rtype_to_howto (bfd *abfd, unsigned int r_type, bfd_boolean rela_p)
       if (r_type >= R_MICROMIPS_min && r_type < R_MICROMIPS_max)
 	{
 	  if (rela_p)
-	    return &micromips_elf64_howto_table_rela[r_type - R_MICROMIPS_min];
+	    howto
+	      = &micromips_elf64_howto_table_rela[r_type - R_MICROMIPS_min];
 	  else
-	    return &micromips_elf64_howto_table_rel[r_type - R_MICROMIPS_min];
+	    howto
+	      = &micromips_elf64_howto_table_rel[r_type - R_MICROMIPS_min];
 	}
       if (r_type >= R_MIPS16_min && r_type < R_MIPS16_max)
 	{
 	  if (rela_p)
-	    return &mips16_elf64_howto_table_rela[r_type - R_MIPS16_min];
+	    howto = &mips16_elf64_howto_table_rela[r_type - R_MIPS16_min];
 	  else
-	    return &mips16_elf64_howto_table_rel[r_type - R_MIPS16_min];
+	    howto = &mips16_elf64_howto_table_rel[r_type - R_MIPS16_min];
 	}
-      if (r_type >= R_MIPS_max)
+      if (r_type < R_MIPS_max)
 	{
-	  _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
-			      abfd, r_type);
-	  bfd_set_error (bfd_error_bad_value);
-	  return NULL;
+	  if (rela_p)
+	    howto = &mips_elf64_howto_table_rela[r_type];
+	  else
+	    howto = &mips_elf64_howto_table_rel[r_type];
 	}
-      if (rela_p)
-	return &mips_elf64_howto_table_rela[r_type];
-      else
-	return &mips_elf64_howto_table_rel[r_type];
-      break;
+      if (howto != NULL && howto->name != NULL)
+	return howto;
+
+      _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
+			  abfd, r_type);
+      bfd_set_error (bfd_error_bad_value);
+      return NULL;
     }
 }
 
@@ -3663,6 +3669,7 @@ mips_elf64_slurp_one_reloc_table (bfd *abfd, asection *asect,
 {
   void *allocated;
   bfd_byte *native_relocs;
+  unsigned int symcount;
   arelent *relent;
   bfd_vma i;
   int entsize;
@@ -3687,6 +3694,11 @@ mips_elf64_slurp_one_reloc_table (bfd *abfd, asection *asect,
     rela_p = FALSE;
   else
     rela_p = TRUE;
+
+  if (dynamic)
+    symcount = bfd_get_dynamic_symcount (abfd);
+  else
+    symcount = bfd_get_symcount (abfd);
 
   for (i = 0, relent = relents;
        i < reloc_count;
@@ -3744,6 +3756,17 @@ mips_elf64_slurp_one_reloc_table (bfd *abfd, asection *asect,
 		{
 		  if (rela.r_sym == STN_UNDEF)
 		    relent->sym_ptr_ptr = bfd_abs_section_ptr->symbol_ptr_ptr;
+		  else if (rela.r_sym > symcount)
+		    {
+		      _bfd_error_handler
+			/* xgettext:c-format */
+			(_("%pB(%pA): relocation %" PRIu64
+			   " has invalid symbol index %ld"),
+			 abfd, asect, (uint64_t) i, rela.r_sym);
+		      bfd_set_error (bfd_error_bad_value);
+		      relent->sym_ptr_ptr
+			= bfd_abs_section_ptr->symbol_ptr_ptr;
+		    }
 		  else
 		    {
 		      asymbol **ps, *s;
@@ -4015,7 +4038,8 @@ mips_elf64_write_rel (bfd *abfd, asection *sec,
       int_rel.r_sym = n;
       int_rel.r_ssym = RSS_UNDEF;
 
-      if ((*ptr->sym_ptr_ptr)->the_bfd->xvec != abfd->xvec
+      if ((*ptr->sym_ptr_ptr)->the_bfd != NULL
+	  && (*ptr->sym_ptr_ptr)->the_bfd->xvec != abfd->xvec
 	  && ! _bfd_elf_validate_reloc (abfd, ptr))
 	{
 	  *failedp = TRUE;
@@ -4114,7 +4138,8 @@ mips_elf64_write_rela (bfd *abfd, asection *sec,
       int_rela.r_addend = ptr->addend;
       int_rela.r_ssym = RSS_UNDEF;
 
-      if ((*ptr->sym_ptr_ptr)->the_bfd->xvec != abfd->xvec
+      if ((*ptr->sym_ptr_ptr)->the_bfd != NULL
+	  && (*ptr->sym_ptr_ptr)->the_bfd->xvec != abfd->xvec
 	  && ! _bfd_elf_validate_reloc (abfd, ptr))
 	{
 	  *failedp = TRUE;

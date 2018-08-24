@@ -333,16 +333,14 @@ CPU_DOCS = \
 	c-epiphany.texi \
 	c-h8300.texi \
 	c-hppa.texi \
-	c-i370.texi \
 	c-i386.texi \
-	c-i860.texi \
-	c-i960.texi \
 	c-ip2k.texi \
 	c-lm32.texi \
 	c-m32c.texi \
 	c-m32r.texi \
 	c-m68hc11.texi \
 	c-m68k.texi \
+	c-s12z.texi \
 	c-metag.texi \
 	c-microblaze.texi \
 	c-mips.texi \
@@ -362,7 +360,6 @@ CPU_DOCS = \
 	c-s390.texi \
 	c-score.texi \
 	c-sh.texi \
-	c-sh64.texi \
 	c-sparc.texi \
         c-tic54x.texi \
         c-tic6x.texi \

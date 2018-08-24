@@ -1,3 +1,409 @@
+2018-06-11  Alan Hayward  <alan.hayward@arm.com>
+
+	* linux-aarch64-ipa.c (get_ipa_tdesc): Add null VQ param.
+	(initialize_low_tracepoint): Likewise
+	* linux-aarch64-low.c (aarch64_arch_setup): Get VQ.
+	* linux-aarch64-tdesc-selftest.c (aarch64_tdesc_test): Add null VQ
+	param.
+	* linux-aarch64-tdesc.c (aarch64_linux_read_description): Add VQ
+	checks.
+	* linux-aarch64-tdesc.h (aarch64_linux_read_description): Add VQ.
+
+2018-06-11  Alan Hayward  <alan.hayward@arm.com>
+
+	* server.h (PBUFSIZ): Increase size
+
+2018-06-11  Alan Hayward  <alan.hayward@arm.com>
+
+	* regcache.c (regcache::raw_compare): New function.
+	* regcache.h (regcache::raw_compare): New declaration.
+
+2018-06-11  Alan Hayward  <alan.hayward@arm.com>
+
+	* regcache.c (new_register_cache): Use new.
+	(free_register_cache): Use delete.
+	(register_data): Use const.
+	(supply_register): Move body inside regcache.
+	(regcache::raw_supply): New override function.
+	(collect_register): Move body inside regcache.
+	(regcache::raw_collect): New override function.
+	(regcache::get_register_status): New override function.
+	* regcache.h (struct regcache): Inherit from reg_buffer_common.
+
+2018-06-09  Tom Tromey  <tom@tromey.com>
+
+	* event-loop.c (gdb_event, gdb_event_p): Remove typedefs.  Don't
+	declare queue.
+	(event_queue): Use std::queue.
+	(gdb_event_xfree): Remove.
+	(initialize_event_loop, process_event, wait_for_event): Update.
+
+2018-06-08  Stan Cox  <scox@redhat.com>
+
+	* win32-low.c (win32_create_inferior):  last_ptid and last_status
+	moved to client_state.
+
+2018-06-08  Pedro Alves  <palves@redhat.com>
+
+	* Makefile.in (GDBREPLAY_OBS): Add common/cleanups.o,
+	common/common-exceptions.o, common/common-utils.o,
+	common/errors.o, common/print-utils.o and utils.o.
+	* gdbreplay.c: Include "common-defs.h" instead of the two
+	'config.h's here.  Don't include stdio.h, errno.h, stdlib.h,
+	string.h or alloca.h.
+	(perror_with_name): Delete.
+	(remote_open): Use xstrdup instead of strdup.
+	(main): Rename to ...
+	(captured_main): ... this.
+	(main): New.
+
+2018-06-08  Tom Tromey  <tom@tromey.com>
+
+	* linux-low.c (linux_low_read_btrace): Update.
+
+2018-06-04  Stan Cox  <scox@redhat.com>
+
+	* server.h (struct client_state): New.
+	* server.c (cont_thread, general_thread, multi_process)
+	(report_fork_events, report_vfork_events, report_exec_events)
+	(report_thread_events, swbreak_feature, hwbreak_feature)
+	(vCont_supported, disable_randomization, pass_signals)
+	(program_signals, program_signals_p, last_status, last_ptid, own_buf):
+	Moved to client_state.
+	* remote-utils.c (remote_debug, noack_mode)
+	(transport_is_reliable): Moved to client_state.
+	* tracepoint.c (current_traceframe): Moved to client_state.
+
+	Update all callers.
+	* server.c, remote-utils.c, tracepoint.c, fork-child.c,
+	linux-low.c, remote-utils.h, target.c: Use client_state.
+
+2018-05-31  Alan Hayward  <alan.hayward@arm.com>
+
+	* configure.srv: Add new c/h file.
+
+2018-05-31  Alan Hayward  <alan.hayward@arm.com>
+
+	* linux-aarch64-tdesc.c (aarch64_linux_read_description): Add
+	null VQ.
+
+2018-05-25  Maciej W. Rozycki  <macro@mips.com>
+
+	* gdb.arch/mips-fpregset-core.exp: New test.
+	* gdb.arch/mips-fpregset-core.c: New test source.
+
+2018-05-23  Erik Kurzinger  <ekurzinger@nvidia.com>
+
+	PR server/23198
+	* hostio.c (require_int): Do not report overflow for integers
+	between 0xfffffff and 0x7fffffff.
+
+2018-05-22  Maciej W. Rozycki  <macro@mips.com>
+
+	* linux-mips-low.c [HAVE_PTRACE_GETREGS] (mips_collect_register)
+	(mips_supply_register): Move outside HAVE_PTRACE_GETREGS.
+	(mips_collect_ptrace_register, mips_supply_ptrace_register): New
+	functions.
+	(the_low_target): Wire them.
+
+2018-05-22  Pedro Franco de Carvalho  <pedromfc@linux.vnet.ibm.com>
+
+	* linux-ppc-low.c (ppc_fill_vrregset): Add vscr_offset variable.
+	Set vscr_offset to 0 in little-endian mode and 12 in big-endian
+	mode. Call collect_register_by_name with vscr using
+	vscr_offset. Zero-pad vscr and vrsave fields in collector buffer.
+	(ppc_store_vrregset): Add and set vscr_offset variable as in
+	ppc_fill_vrregset. Call supply_register_by_name with vscr using
+	vscr_offset.
+
+2018-05-22  Pedro Franco de Carvalho  <pedromfc@linux.vnet.ibm.com>
+
+	* linux-ppc-low.c (SIZEOF_VSXREGS, SIZEOF_VRREGS): Remove.
+	(ppc_arch_setup): Change SIZEOF_VRREGS and SIZEOF_VSXREGS to
+	PPC_LINUX_SIZEOF_VRREGSET and PPC_LINUX_SIZEOF_VSXREGSET.
+
+2018-05-22  Pedro Franco de Carvalho  <pedromfc@linux.vnet.ibm.com>
+
+	* linux-ppc-low.c (ppc_fill_vsxregset): Remove ppc_hwcap check.
+	(ppc_store_vsxregset): Likewise.
+	(ppc_fill_vrregset): Likewise.
+	(ppc_store_vrregset): Likewise.
+	(ppc_fill_evrregset): Likewise.
+	(ppc_store_evrregset): Likewise.
+	(ppc_regsets): Set VSX/VR/EVR regset sizes to 0.
+	(ppc_arch_setup): Iterate through ppc_regsets and set sizes when
+	needed.
+
+2018-05-22  Pedro Franco de Carvalho  <pedromfc@linux.vnet.ibm.com>
+
+	* linux-ppc-low.c (ppc_arch_setup): Remove code for getting the
+	wordsize of the inferior. Call ppc_linux_target_wordsize.
+
+2018-05-22  Pedro Franco de Carvalho  <pedromfc@linux.vnet.ibm.com>
+
+	* configure.srv (srv_tgtobj): Add arch/ppc-linux-common.o.
+	* Makefile.in (SFILES): Add arch/ppc-linux-common.c.
+	* linux-ppc-tdesc.h: Rename to linux-ppc-tdesc-init.h.
+	* linux-ppc-tdesc-init.h (tdesc_powerpc_32l, tdesc_powerpc_64l)
+	(tdesc_powerpc_altivec32l, tdesc_powerpc_altivec64l)
+	(tdesc_powerpc_cell32l, tdesc_powerpc_cell64l)
+	(tdesc_powerpc_vsx32l, tdesc_powerpc_vsx64l)
+	(tdesc_powerpc_isa205_32l, tdesc_powerpc_isa205_64l)
+	(tdesc_powerpc_isa205_altivec32l, tdesc_powerpc_isa205_altivec64l)
+	(tdesc_powerpc_isa205_vsx32l, tdesc_powerpc_isa205_vsx64l)
+	(tdesc_powerpc_e500l): Remove.
+	* linux-ppc-ipa.c: Include arch/ppc-linux-tdesc.h and
+	linux-ppc-tdesc-init.h. Don't include linux-ppc-tdesc.h.
+	* linux-ppc-low.c: Include arch/ppc-linux-common.h,
+	arch/ppc-linux-tdesc.h, and linux-ppc-tdesc-init.h. Don't include
+	linux-ppc-tdesc.h.
+	(ppc_arch_setup): Remove target description matching code. Fill a
+	ppc_linux_features struct and call ppc_linux_match_description
+	with it.
+
+2018-05-22  Maciej W. Rozycki  <macro@mips.com>
+
+	* linux-mips-low.c (mips_cannot_fetch_register): Return 1 if the
+	width of the requested register exceeds the width of the
+	`ptrace' data type.
+	(mips_cannot_store_register): Likewise.
+
+2018-05-21  Maciej W. Rozycki  <macro@mips.com>
+
+	* linux-mips-low.c (mips_fetch_register): New function.  Update
+	preceding comment.
+	(mips_store_gregset): Supply 0 rather than $restart for $zero.
+	(the_low_target): Wire `mips_fetch_register'.
+
+2018-05-10  Joel Brobecker  <brobecker@adacore.com>
+
+	* lynx-i386-low.c (LYNXOS_178): New macro.
+	[LYNXOS_178] (usr_fcontext_t): Provide a definition that matches
+	the layout on LynxOS-178.
+	(lynx_i386_fill_fpregset, lynx_i386_store_fpregset): Do not
+	handle floating point registers that are not supported by
+	LynxOS-178.
+
+2018-05-10  Tom Tromey  <tom@tromey.com>
+
+	* configure: Rebuild.
+
+2018-05-10  Joel Brobecker  <brobecker@adacore.com>
+
+	PR server/23158:
+	* tdesc.h (init_target_desc) <expedite_regs>: New parameter.
+	* tdesc.c (init_target_desc) <expedite_regs>: New parameter.
+	Use it to set the expedite_regs field in the given tdesc.
+	* x86-tdesc.h: New file.
+	* linux-aarch64-tdesc.c (aarch64_linux_read_description):
+	Adjust following the addition of the new expedite_regs parameter
+	to init_target_desc.
+	* linux-tic6x-low.c (tic6x_read_description): Likewise.
+	* linux-x86-tdesc.c: #include "x86-tdesc.h".
+	(i386_linux_read_description, amd64_linux_read_description):
+	Adjust following the addition of the new expedite_regs parameter
+	to init_target_desc.
+	* lynx-i386-low.c: #include "x86-tdesc.h".
+	(lynx_i386_arch_setup): Adjust following the addition of the new
+	expedite_regs parameter to init_target_desc.
+	* nto-x86-low.c: #include "x86-tdesc.h".
+	(nto_x86_arch_setup): Adjust following the addition of the new
+	expedite_regs parameter to init_target_desc.
+	* win32-i386-low.c: #include "x86-tdesc.h".
+	(i386_arch_setup): Adjust following the addition of the new
+	expedite_regs parameter to init_target_desc.
+
+2018-05-10  Joel Brobecker  <brobecker@adacore.com>
+
+	PR server/23158:
+	* win32-low.c (win32_create_inferior): Add call to my_wait
+	setting last_status global.
+
+2018-05-10  Joel Brobecker  <brobecker@adacore.com>
+
+	PR server/23158:
+	* win32-low.c (create_process): Only call gdb_tilde_expand if
+	inferior_cwd is not NULL.
+
+2018-05-08  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* i387-fp.c (i387_cache_to_xsave): Only write x87 control
+	registers to the cache if their values have changed.
+	(i387_xsave_to_cache): Provide default values for x87 control
+	registers when these features are available, but disabled.
+	* regcache.c (supply_register_by_name_zeroed): New function.
+	* regcache.h (supply_register_by_name_zeroed): Declare new
+	function.
+
+2018-05-07  Tom Tromey  <tom@tromey.com>
+
+	* configure: Rebuild.
+
+2018-05-04  Tom Tromey  <tom@tromey.com>
+
+	* configure: Rebuild.
+
+2018-05-04  Jan Kratochvil  <jan.kratochvil@redhat.com>
+	    Pedro Alves <palves@redhat.com>
+
+	* linux-aarch64-low.c (aarch64_stopped_data_address):
+	Likewise.
+
+2018-04-27  Tom Tromey  <tom@tromey.com>
+
+	* configure: Rebuild.
+
+2018-04-23  Tom Tromey  <tom@tromey.com>
+
+	* configure: Rebuild.
+
+2018-04-19  Simon Marchi  <simon.marchi@ericsson.com>
+
+	* Makefile.in (depcomp): Add "..".
+	(all_deps_files): New and use it.
+
+2018-04-18  Alan Hayward  <alan.hayward@arm.com>
+
+	* configure.srv (aarch64*-*-linux*): Don't include xml.
+	(i[34567]86-*-cygwin*): Likewise.
+	(i[34567]86-*-linux*): Likewise.
+	(i[34567]86-*-lynxos*): Likewise.
+	(i[34567]86-*-mingw32ce*): Likewise.
+	(i[34567]86-*-mingw*): Likewise.
+	(i[34567]86-*-nto*): Likewise.
+	(tic6x-*-uclinux): Likewise.
+	(x86_64-*-linux*): Likewise.
+	(x86_64-*-mingw*): Likewise.
+	(x86_64-*-cygwin*): Likewise.
+
+2018-04-18  Alan Hayward  <alan.hayward@arm.com>
+
+	* tdesc.c: Remove xml parameter.
+
+2018-04-18  Alan Hayward  <alan.hayward@arm.com>
+
+	* server.c (get_features_xml): Remove cast.
+	* tdesc.c (void target_desc::accept): Fill in function.
+	(tdesc_get_features_xml): Remove old xml creation.
+	(print_xml_feature::visit_pre): Add xml vistor.
+	* tdesc.h (struct target_desc): Make xmltarget mutable.
+	(tdesc_get_features_xml): Remove declaration.
+
+2018-04-18  Alan Hayward  <alan.hayward@arm.com>
+
+	* tdesc.c (tdesc_architecture_name): Add new function.
+	(tdesc_osabi_name): Likewise.
+	(tdesc_get_features_xml): Use new functions.
+
+2018-04-18  Alan Hayward  <alan.hayward@arm.com>
+
+	* tdesc.c (tdesc_create_flags): Remove.
+	(tdesc_add_flag): Likewise.
+	(tdesc_named_type): Likewise.
+	(tdesc_create_union): Likewise.
+	(tdesc_create_struct): Likewise.
+	(tdesc_create_vector): Likewise.
+	(tdesc_add_bitfield): Likewise.
+	(tdesc_add_field): Likewise.
+	(tdesc_set_struct_size): Likewise.
+
+2018-04-18  Alan Hayward  <alan.hayward@arm.com>
+
+	* tdesc.c (~target_desc): Remove implictly deleted items.
+	(init_target_desc): Iterate all features.
+	(tdesc_get_features_xml): Use vector.
+	(tdesc_create_feature): Create feature.
+	* tdesc.h (tdesc_feature) Remove
+	(target_desc): Add features.
+
+2018-04-18  Alan Hayward  <alan.hayward@arm.com>
+
+	* Makefile.in: Add common/tdesc.c
+	* tdesc.c (init_target_desc): init all reg_defs from register
+	vector.
+	(tdesc_create_reg): Create tdesc_reg.
+	* tdesc.h (tdesc_feature): Add register vector.
+
+2018-03-30  Simon Marchi  <simon.marchi@polymtl.ca>
+
+	* tdesc.h (struct target_desc) <features>: Change type to
+	std::vector<std::string>.
+	* tdesc.c (target_desc::~target_desc): Adjust to std::vector
+	changes.
+	(tdesc_get_features_xml): Likewise.
+	(tdesc_create_feature): Likewise.
+
+2018-03-26  Alan Hayward  <alan.hayward@arm.com>
+
+	* regcache.c (find_register_by_number): Return a ref.
+	(find_regno): Use references.
+	(register_size): Likewise.
+	(register_data): Likewise.
+	* tdesc.c (target_desc::~target_desc): Remove free calls.
+	(target_desc::operator==): Use std::vector compare.
+	(init_target_desc): Use reference.
+	(tdesc_create_reg): Use reg constructors.
+	* tdesc.h (struct target_desc): Replace pointer with object.
+
+2018-03-23  Alan Hayward  <alan.hayward@arm.com>
+
+	* regcache.c (find_register_by_number): Make static.
+	(find_regno): Use find_register_by_number
+	* regcache.h (struct reg): Remove declaration.
+
+2018-03-23  Alan Hayward  <alan.hayward@arm.com>
+
+	* tdesc.c (target_desc::~target_desc): Move to here.
+	(target_desc::operator==): Likewise.
+	* tdesc.h (target_desc::~target_desc): Move from here.
+	(target_desc::operator==): Likewise.
+
+2018-03-22  Andreas Arnez  <arnez@linux.vnet.ibm.com>
+
+	* linux-s390-low.c (s390_get_wordsize): Correct brace style.
+
+2018-03-21  Andreas Arnez  <arnez@linux.vnet.ibm.com>
+
+	* linux-s390-ipa.c (get_ipa_tdesc): Add handling for
+	S390_TDESC_GS.
+	* linux-s390-low.c (s390_get_ipa_tdesc_idx): Likewise.
+	(initialize_low_tracepoint): Call init_registers_s390x_gs_linux64
+	and init_registers_s390_gs_linux64.
+
+2018-03-21  Andreas Arnez  <arnez@linux.vnet.ibm.com>
+
+	* linux-s390-low.c (s390_fill_gs): Remove function.
+	(s390_fill_gsbc): Remove function.
+	(s390_regsets): Set fill functions for the guarded storage regsets
+	to NULL.
+
+2018-03-21  Andreas Arnez  <arnez@linux.vnet.ibm.com>
+
+	* linux-s390-low.c (s390_get_hwcap): Replace tdesc parameter by
+	the word size.  Add comment.
+	(s390_get_wordsize): New function.
+	(s390_arch_setup): No longer select a temporary tdesc to fetch the
+	pswm with it.  Instead, use s390_get_wordsize to determine the
+	word size first and derive the correct tdesc from that directly.
+
+2018-03-16  Simon Marchi  <simon.marchi@polymtl.ca>
+
+	* Makefile.in: Include silent-rules.mk.
+	(srcdir, abs_top_srcdir, abs_srcdir, VPATH): Move up.
+	(COMPILE): Add ECHO_CXX.
+	(gdbserver$(EXEEXT)): Add SILENCE and ECHO_CXXLD.
+	(gdbreplay$(EXEEXT)): Add SILENCE and ECHO_CXXLD.
+	($(IPA_LIB)): Add SILENCE and ECHO_CXXLD.
+	(version-generated.c): Add ECHO_GEN.
+	(stamp-xml): Add SILENCE and ECHO_GEN_XML_BUILTIN_GENERATED.
+	(IPAGENT_COMPILE): Add ECHO_CXX.
+	(%-generated.c): Add ECHO_REGDAT.
+
+2018-03-14  Tom Tromey  <tom@tromey.com>
+
+	PR cli/14977:
+	* ax.c (ax_printf): Special case for NULL.
+
 2018-03-08  Simon Marchi  <simon.marchi@polymtl.ca>
 
 	* linux-low.c (linux_qxfer_libraries_svr4): Use

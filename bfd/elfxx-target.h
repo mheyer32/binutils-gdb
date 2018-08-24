@@ -205,6 +205,10 @@
 #define bfd_elfNN_bfd_define_common_symbol bfd_generic_define_common_symbol
 #endif
 
+#ifndef bfd_elfNN_bfd_link_hide_symbol
+#define bfd_elfNN_bfd_link_hide_symbol _bfd_elf_link_hide_symbol
+#endif
+
 #ifndef bfd_elfNN_bfd_lookup_section_flags
 #define bfd_elfNN_bfd_lookup_section_flags bfd_elf_lookup_section_flags
 #endif
@@ -367,6 +371,10 @@
 #define ELF_COMMONPAGESIZE ELF_MAXPAGESIZE
 #endif
 
+#ifndef ELF_RELROPAGESIZE
+#define ELF_RELROPAGESIZE ELF_COMMONPAGESIZE
+#endif
+
 #ifndef ELF_MINPAGESIZE
 #define ELF_MINPAGESIZE ELF_COMMONPAGESIZE
 #endif
@@ -374,8 +382,14 @@
 #if ELF_COMMONPAGESIZE > ELF_MAXPAGESIZE
 # error ELF_COMMONPAGESIZE > ELF_MAXPAGESIZE
 #endif
+#if ELF_RELROPAGESIZE > ELF_MAXPAGESIZE
+# error ELF_RELROPAGESIZE > ELF_MAXPAGESIZE
+#endif
 #if ELF_MINPAGESIZE > ELF_COMMONPAGESIZE
 # error ELF_MINPAGESIZE > ELF_COMMONPAGESIZE
+#endif
+#if ELF_MINPAGESIZE > ELF_RELROPAGESIZE
+# error ELF_MINPAGESIZE > ELF_RELROPAGESIZE
 #endif
 
 #ifndef ELF_DYNAMIC_SEC_FLAGS
@@ -757,6 +771,7 @@ static struct elf_backend_data elfNN_bed =
   ELF_MAXPAGESIZE,		/* maxpagesize */
   ELF_MINPAGESIZE,		/* minpagesize */
   ELF_COMMONPAGESIZE,		/* commonpagesize */
+  ELF_RELROPAGESIZE,		/* commonpagesize to use with -z relro */
   ELF_DYNAMIC_SEC_FLAGS,	/* dynamic_sec_flags */
   elf_backend_arch_data,
   elf_info_to_howto,

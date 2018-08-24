@@ -227,16 +227,14 @@ enum
   CpuWBNOINVD,
   /* PCONFIG instructions required */
   CpuPCONFIG,
-  /* MMX register support required */
-  CpuRegMMX,
-  /* XMM register support required */
-  CpuRegXMM,
-  /* YMM register support required */
-  CpuRegYMM,
-  /* ZMM register support required */
-  CpuRegZMM,
-  /* Mask register support required */
-  CpuRegMask,
+  /* WAITPKG instructions required */
+  CpuWAITPKG,
+  /* CLDEMOTE instruction required */
+  CpuCLDEMOTE,
+  /* MOVDIRI instruction support required */
+  CpuMOVDIRI,
+  /* MOVDIRR64B instruction required */
+  CpuMOVDIR64B,
   /* 64bit support required  */
   Cpu64,
   /* Not supported in the 64bit mode  */
@@ -358,11 +356,10 @@ typedef union i386_cpu_flags
       unsigned int cpuvpclmulqdq:1;
       unsigned int cpuwbnoinvd:1;
       unsigned int cpupconfig:1;
-      unsigned int cpuregmmx:1;
-      unsigned int cpuregxmm:1;
-      unsigned int cpuregymm:1;
-      unsigned int cpuregzmm:1;
-      unsigned int cpuregmask:1;
+      unsigned int cpuwaitpkg:1;
+      unsigned int cpucldemote:1;
+      unsigned int cpumovdiri:1;
+      unsigned int cpumovdir64b:1;
       unsigned int cpu64:1;
       unsigned int cpuno64:1;
 #ifdef CpuUnused
@@ -454,8 +451,8 @@ enum
   ToDword,
   /* Convert to QWORD */
   ToQword,
-  /* Address prefix changes operand 0 */
-  AddrPrefixOp0,
+  /* Address prefix changes register operand */
+  AddrPrefixOpReg,
   /* opcode is a prefix */
   IsPrefix,
   /* instruction has extension in 8 bit imm */
@@ -526,8 +523,6 @@ enum
 #define XOP2SOURCES	1
 #define VEX3SOURCES	2
   VexSources,
-  /* instruction has VEX 8 bit imm */
-  VexImmExt,
   /* Instruction with vector SIB byte:
 	1: 128bit vector register.
 	2: 256bit vector register.
@@ -566,22 +561,6 @@ enum
 #define BOTH_MASKING    3
   Masking,
 
-  /* Input element size of vector insn:
-	0: 32bit.
-	1: 64bit.
-   */
-  VecESize,
-
-  /* Broadcast factor.
-	0: No broadcast.
-	1: 1to16 broadcast.
-	2: 1to8 broadcast.
-   */
-#define NO_BROADCAST	0
-#define BROADCAST_1TO16	1
-#define BROADCAST_1TO8	2
-#define BROADCAST_1TO4	3
-#define BROADCAST_1TO2	4
   Broadcast,
 
   /* Static rounding control is supported.  */
@@ -654,7 +633,7 @@ typedef struct i386_opcode_modifier
   unsigned int repprefixok:1;
   unsigned int todword:1;
   unsigned int toqword:1;
-  unsigned int addrprefixop0:1;
+  unsigned int addrprefixopreg:1;
   unsigned int isprefix:1;
   unsigned int immext:1;
   unsigned int norex64:1;
@@ -665,14 +644,12 @@ typedef struct i386_opcode_modifier
   unsigned int vexw:2;
   unsigned int vexopcode:3;
   unsigned int vexsources:2;
-  unsigned int veximmext:1;
   unsigned int vecsib:2;
   unsigned int sse2avx:1;
   unsigned int noavx:1;
   unsigned int evex:3;
   unsigned int masking:2;
-  unsigned int vecesize:1;
-  unsigned int broadcast:3;
+  unsigned int broadcast:1;
   unsigned int staticrounding:1;
   unsigned int sae:1;
   unsigned int disp8memshift:3;

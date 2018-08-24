@@ -82,7 +82,8 @@ if ![info exists gdb_prompt] then {
 }
 
 # A regexp that matches the pagination prompt.
-set pagination_prompt [string_to_regexp "---Type <return> to continue, or q <return> to quit---"]
+set pagination_prompt \
+    "--Type <RET> for more, q to quit, c to continue without paging--"
 
 # The variable fullname_syntax_POSIX is a regexp which matches a POSIX 
 # absolute path ie. /foo/ 
@@ -3003,6 +3004,36 @@ gdb_caching_proc skip_btrace_pt_tests {
     return $skip_btrace_tests
 }
 
+# A helper that compiles a test case to see if __int128 is supported.
+proc gdb_int128_helper {lang} {
+    set src [standard_temp_file i128[pid].c]
+    set obj [standard_temp_file i128[pid].o]
+
+    verbose -log "checking $lang for __int128"
+    gdb_produce_source $src {
+	__int128 x;
+	int main() { return 0; }
+    }
+
+    set lines [gdb_compile $src $obj object [list nowarnings quiet $lang]]
+    file delete $src
+    file delete $obj
+
+    set result [expr {!![string match "" $lines]}]
+    verbose -log "__int128 for $lang result = $result"
+    return $result
+}
+
+# Return true if the C compiler understands the __int128 type.
+gdb_caching_proc has_int128_c {
+    return [gdb_int128_helper c]
+}
+
+# Return true if the C++ compiler understands the __int128 type.
+gdb_caching_proc has_int128_cxx {
+    return [gdb_int128_helper c++]
+}
+
 # Return whether we should skip tests for showing inlined functions in
 # backtraces.  Requires get_compiler_info and get_debug_format.
 
@@ -5773,6 +5804,22 @@ proc get_var_address { var } {
 	}
     }
     return ""
+}
+
+# Return the frame number for the currently selected frame
+proc get_current_frame_number {{test_name ""}} {
+    global gdb_prompt
+
+    if { $test_name == "" } {
+	set test_name "get current frame number"
+    }
+    set frame_num -1
+    gdb_test_multiple "frame" $test_name {
+	-re "#(\[0-9\]+) .*$gdb_prompt $" {
+	    set frame_num $expect_out(1,string)
+	}
+    }
+    return $frame_num
 }
 
 # Get the current value for remotetimeout and return it.

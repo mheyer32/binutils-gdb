@@ -24,7 +24,7 @@
 #include "objfiles.h"
 #include "symtab.h"
 #include "xcoffread.h"
-#include "observer.h"
+#include "observable.h"
 #include "gdbcmd.h"
 
 /* Variable controlling the output of the debugging traces for
@@ -279,10 +279,10 @@ solib_aix_get_library_list (struct inferior *inf, const char *warning_msg)
   if (data->library_list != NULL)
     return data->library_list;
 
-  gdb::unique_xmalloc_ptr<char> library_document
-    = target_read_stralloc (&current_target, TARGET_OBJECT_LIBRARIES_AIX,
+  gdb::optional<gdb::char_vector> library_document
+    = target_read_stralloc (current_top_target (), TARGET_OBJECT_LIBRARIES_AIX,
 			    NULL);
-  if (library_document == NULL && warning_msg != NULL)
+  if (!library_document && warning_msg != NULL)
     {
       warning (_("%s (failed to read TARGET_OBJECT_LIBRARIES_AIX)"),
 	       warning_msg);
@@ -292,9 +292,9 @@ solib_aix_get_library_list (struct inferior *inf, const char *warning_msg)
   if (solib_aix_debug)
     fprintf_unfiltered (gdb_stdlog,
 			"DEBUG: TARGET_OBJECT_LIBRARIES_AIX = \n%s\n",
-			library_document.get ());
+			library_document->data ());
 
-  data->library_list = solib_aix_parse_libraries (library_document.get ());
+  data->library_list = solib_aix_parse_libraries (library_document->data ());
   if (data->library_list == NULL && warning_msg != NULL)
     {
       warning (_("%s (missing XML support?)"), warning_msg);
@@ -791,7 +791,7 @@ _initialize_solib_aix (void)
 
   solib_aix_inferior_data_handle = register_inferior_data ();
 
-  observer_attach_normal_stop (solib_aix_normal_stop_observer);
+  gdb::observers::normal_stop.attach (solib_aix_normal_stop_observer);
 
   /* Debug this file's internals.  */
   add_setshow_boolean_cmd ("aix-solib", class_maintenance,

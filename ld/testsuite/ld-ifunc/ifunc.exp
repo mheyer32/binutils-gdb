@@ -33,10 +33,8 @@ if {!(([istarget "i?86-*-*"]
        || [istarget "s390*-*-*"])
       && ([istarget "*-*-elf*"]
 	  || [istarget "*-*-nacl*"]
-	  || (([istarget "*-*-linux*"]
-	       || [istarget "*-*-gnu*"])
-	      && ![istarget "*-*-*aout*"]
-	      && ![istarget "*-*-*oldld*"]))) } {
+	  || [istarget "*-*-linux*"]
+	  || [istarget "*-*-gnu*"])) } {
     verbose "IFUNC tests not run - target does not support IFUNC"
     return
 }
@@ -49,6 +47,13 @@ if ![check_shared_lib_support] {
 
 # This test does not need a compiler...
 run_dump_test "ifuncmod5"
+
+set test_list [lsort [glob -nocomplain $srcdir/$subdir/*.d]]
+foreach t $test_list {
+    # We need to strip the ".d", but can leave the dirname.
+    verbose [file rootname $t]
+    run_dump_test [file rootname $t]
+}
 
 # We need a working compiler.  (Strictly speaking this is
 # not true, we could use target specific assembler files).
@@ -427,13 +432,6 @@ run_ld_link_exec_tests [list \
     ] \
 ]
 
-set test_list [lsort [glob -nocomplain $srcdir/$subdir/*.d]]
-foreach t $test_list {
-    # We need to strip the ".d", but can leave the dirname.
-    verbose [file rootname $t]
-    run_dump_test [file rootname $t]
-}
-
 # Run-time tests which require working IFUNC support.
 if { ![check_ifunc_available] } {
     return
@@ -583,6 +581,76 @@ run_cc_link_tests [list \
 	{} \
 	"libpr18841cn.so" \
     ] \
+    [list \
+	"Build libpr23169a.so" \
+	"-shared" \
+	"-fPIC -O2 -g" \
+	{ pr23169a.c } \
+	{} \
+	"libpr23169a.so" \
+    ] \
+    [list \
+	"Build libpr23169b.so" \
+	"-shared -Wl,-z,now" \
+	"-fPIC -O2 -g" \
+	{ pr23169a.c } \
+	{} \
+	"libpr23169b.so" \
+    ] \
+    [list \
+	"Build pr23169a" \
+	"$NOPIE_LDFLAGS -Wl,--no-as-needed tmpdir/libpr23169a.so" \
+	"$NOPIE_CFLAGS -O2 -g" \
+	{ pr23169b.c pr23169c.c } \
+	{{readelf {--dyn-syms} pr23169a.rd} \
+	 {readelf {-r -W} pr23169b.rd}} \
+	"pr23169a" \
+    ] \
+    [list \
+	"Build pr23169b" \
+	"-pie -Wl,--no-as-needed tmpdir/libpr23169a.so" \
+	"-fPIE -O2 -g" \
+	{ pr23169b.c pr23169c.c } \
+	{{readelf {--dyn-syms} pr23169c.rd} \
+	 {readelf {-r -W} pr23169b.rd}} \
+	"pr23169b" \
+    ] \
+    [list \
+	"Build pr23169c" \
+	"$NOPIE_LDFLAGS -Wl,--no-as-needed tmpdir/libpr23169a.so" \
+	"-fPIE -O2 -g" \
+	{ pr23169b.c pr23169c.c } \
+	{{readelf {--dyn-syms} pr23169c.rd} \
+	 {readelf {-r -W} pr23169b.rd}} \
+	"pr23169c" \
+    ] \
+    [list \
+	"Build pr23169d" \
+	"$NOPIE_LDFLAGS -Wl,--no-as-needed,-z,now tmpdir/libpr23169b.so" \
+	"$NOPIE_CFLAGS -O2 -g" \
+	{ pr23169b.c pr23169c.c } \
+	{{readelf {--dyn-syms} pr23169a.rd} \
+	 {readelf {-r -W} pr23169b.rd}} \
+	"pr23169d" \
+    ] \
+    [list \
+	"Build pr23169e" \
+	"-pie -Wl,--no-as-needed,-z,now tmpdir/libpr23169b.so" \
+	"-fPIE -O2 -g" \
+	{ pr23169b.c pr23169c.c } \
+	{{readelf {--dyn-syms} pr23169c.rd} \
+	 {readelf {-r -W} pr23169b.rd}} \
+	"pr23169e" \
+    ] \
+    [list \
+	"Build pr23169f" \
+	"$NOPIE_LDFLAGS -Wl,--no-as-needed,-z,now tmpdir/libpr23169b.so" \
+	"-fPIE -O2 -g" \
+	{ pr23169b.c pr23169c.c } \
+	{{readelf {--dyn-syms} pr23169c.rd} \
+	 {readelf {-r -W} pr23169b.rd}} \
+	"pr23169f" \
+    ] \
 ]
 
 run_ld_link_exec_tests [list \
@@ -633,5 +701,59 @@ run_ld_link_exec_tests [list \
 	{ dummy.c } \
 	"pr18841cn" \
 	"pr18841.out" \
+    ] \
+    [list \
+	"Run pr23169a" \
+	"$NOPIE_LDFLAGS -Wl,--no-as-needed tmpdir/libpr23169a.so" \
+	"" \
+	{ pr23169b.c pr23169c.c } \
+	"pr23169a" \
+	"pass.out" \
+	"$NOPIE_CFLAGS -O2 -g" \
+    ] \
+    [list \
+	"Run pr23169b" \
+	"-pie -Wl,--no-as-needed tmpdir/libpr23169a.so" \
+	"" \
+	{ pr23169b.c pr23169c.c } \
+	"pr23169b" \
+	"pass.out" \
+	"-fPIE -O2 -g" \
+    ] \
+    [list \
+	"Run pr23169c" \
+	"$NOPIE_LDFLAGS -Wl,--no-as-needed tmpdir/libpr23169a.so" \
+	"" \
+	{ pr23169b.c pr23169c.c } \
+	"pr23169c" \
+	"pass.out" \
+	"-fPIE -O2 -g" \
+    ] \
+    [list \
+	"Run pr23169d" \
+	"$NOPIE_LDFLAGS -Wl,--no-as-needed,-z,now tmpdir/libpr23169b.so" \
+	"" \
+	{ pr23169b.c pr23169c.c } \
+	"pr23169d" \
+	"pass.out" \
+	"$NOPIE_CFLAGS -O2 -g" \
+    ] \
+    [list \
+	"Run pr23169e" \
+	"-pie -Wl,--no-as-needed,-z,now tmpdir/libpr23169b.so" \
+	"" \
+	{ pr23169b.c pr23169c.c } \
+	"pr23169e" \
+	"pass.out" \
+	"-fPIE -O2 -g" \
+    ] \
+    [list \
+	"Run pr23169f" \
+	"$NOPIE_LDFLAGS -Wl,--no-as-needed,-z,now tmpdir/libpr23169b.so" \
+	"" \
+	{ pr23169b.c pr23169c.c } \
+	"pr23169f" \
+	"pass.out" \
+	"-fPIE -O2 -g" \
     ] \
 ]

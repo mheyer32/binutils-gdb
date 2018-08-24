@@ -40,6 +40,7 @@
 #include "gdb_proc_service.h"
 #include "arch/aarch64.h"
 #include "linux-aarch64-tdesc.h"
+#include "nat/aarch64-sve-linux-ptrace.h"
 
 #ifdef HAVE_SYS_REG_H
 #include <sys/reg.h>
@@ -360,14 +361,39 @@ aarch64_stopped_data_address (void)
   state = aarch64_get_debug_reg_state (pid_of (current_thread));
   for (i = aarch64_num_wp_regs - 1; i >= 0; --i)
     {
+      const unsigned int offset
+	= aarch64_watchpoint_offset (state->dr_ctrl_wp[i]);
       const unsigned int len = aarch64_watchpoint_length (state->dr_ctrl_wp[i]);
       const CORE_ADDR addr_trap = (CORE_ADDR) siginfo.si_addr;
-      const CORE_ADDR addr_watch = state->dr_addr_wp[i];
+      const CORE_ADDR addr_watch = state->dr_addr_wp[i] + offset;
+      const CORE_ADDR addr_watch_aligned = align_down (state->dr_addr_wp[i], 8);
+      const CORE_ADDR addr_orig = state->dr_addr_orig_wp[i];
+
       if (state->dr_ref_count_wp[i]
 	  && DR_CONTROL_ENABLED (state->dr_ctrl_wp[i])
-	  && addr_trap >= addr_watch
+	  && addr_trap >= addr_watch_aligned
 	  && addr_trap < addr_watch + len)
-	return addr_trap;
+	{
+	  /* ADDR_TRAP reports the first address of the memory range
+	     accessed by the CPU, regardless of what was the memory
+	     range watched.  Thus, a large CPU access that straddles
+	     the ADDR_WATCH..ADDR_WATCH+LEN range may result in an
+	     ADDR_TRAP that is lower than the
+	     ADDR_WATCH..ADDR_WATCH+LEN range.  E.g.:
+
+	     addr: |   4   |   5   |   6   |   7   |   8   |
+				   |---- range watched ----|
+		   |----------- range accessed ------------|
+
+	     In this case, ADDR_TRAP will be 4.
+
+	     To match a watchpoint known to GDB core, we must never
+	     report *ADDR_P outside of any ADDR_WATCH..ADDR_WATCH+LEN
+	     range.  ADDR_WATCH <= ADDR_TRAP < ADDR_ORIG is a false
+	     positive on kernels older than 4.10.  See PR
+	     external/20207.  */
+	  return addr_orig;
+	}
     }
 
   return (CORE_ADDR) 0;
@@ -478,7 +504,10 @@ aarch64_arch_setup (void)
   is_elf64 = linux_pid_exe_is_elf_64_file (tid, &machine);
 
   if (is_elf64)
-    current_process ()->tdesc = aarch64_linux_read_description ();
+    {
+      uint64_t vq = aarch64_sve_get_vq (tid);
+      current_process ()->tdesc = aarch64_linux_read_description (vq);
+    }
   else
     current_process ()->tdesc = tdesc_arm_with_neon;
 
