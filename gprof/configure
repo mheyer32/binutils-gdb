@@ -6330,7 +6330,6 @@ esac
 
 
 
-
 # If no C compiler was specified, use CC.
 LTCC=${LTCC-"$CC"}
 
@@ -8220,7 +8219,7 @@ $as_echo_n "checking for $compiler option to produce PIC... " >&6; }
 
 case $host_os in
   # For platforms which do not support PIC, -DPIC is meaningless:
-  *djgpp*)
+  amiga* | *djgpp*)
     lt_prog_compiler_pic=
     ;;
   *)
@@ -12337,7 +12336,14 @@ test "x$prefix" = xNONE && prefix=$ac_default_prefix
 # Let make expand exec_prefix.
 test "x$exec_prefix" = xNONE && exec_prefix='${prefix}'
 
-DEFS=-DHAVE_CONFIG_H
+case $target_os in
+  amiga*)
+    DEFS="-DHAVE_CONFIG_H -DTARGET_AMIGA"
+  ;;
+  *)
+    DEFS=-DHAVE_CONFIG_H
+  ;;
+esac
 
 ac_libobjs=
 ac_ltlibobjs=

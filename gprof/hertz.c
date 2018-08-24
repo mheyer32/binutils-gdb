@@ -33,6 +33,9 @@
 int
 hertz (void)
 {
+#ifdef TARGET_AMIGA
+  return 50;
+#else
 #ifdef HERTZ
   return HERTZ;
 #else /* ! defined (HERTZ) */
@@ -44,7 +47,9 @@ hertz (void)
   tim.it_value.tv_sec = 0;
   tim.it_value.tv_usec = 0;
   setitimer (ITIMER_REAL, &tim, 0);
+#ifndef __CYGWIN__
   setitimer (ITIMER_REAL, 0, &tim);
+#endif
   if (tim.it_interval.tv_usec >= 2)
     {
       return 1000000 / tim.it_interval.tv_usec;
@@ -60,4 +65,5 @@ hertz (void)
 #endif /* ! defined (__MSDOS__) */
 #endif /* ! defined (HAVE_SYSCONF) || ! defined (_SC_CLK_TCK) */
 #endif /* ! defined (HERTZ) */
+#endif /* TARGET_AMIGA */
 }

@@ -496,8 +496,12 @@ gmon_out_read (const char *filename)
 	  histograms->lowpc = tmp.low_pc;
 	  histograms->highpc = tmp.high_pc;
 	  histograms->num_bins = hist_num_bins;
+#ifdef TARGET_AMIGA
+	  hist_scale = 1.;
+#else
 	  hist_scale = (double)((tmp.high_pc - tmp.low_pc) / sizeof (UNIT))
 	    / hist_num_bins;
+#endif
 	  histograms->sample = (int *) xmalloc (hist_num_bins * sizeof (int));
 	  memset (histograms->sample, 0,
 		  hist_num_bins * sizeof (int));
