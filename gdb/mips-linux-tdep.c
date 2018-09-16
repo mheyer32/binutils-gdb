@@ -537,16 +537,18 @@ mips_linux_iterate_over_regset_sections (struct gdbarch *gdbarch,
 {
   if (register_size (gdbarch, MIPS_ZERO_REGNUM) == 4)
     {
-      cb (".reg", sizeof (mips_elf_gregset_t), &mips_linux_gregset,
-	  NULL, cb_data);
-      cb (".reg2", sizeof (mips64_elf_fpregset_t), &mips64_linux_fpregset,
+      cb (".reg", sizeof (mips_elf_gregset_t), sizeof (mips_elf_gregset_t),
+	  &mips_linux_gregset, NULL, cb_data);
+      cb (".reg2", sizeof (mips64_elf_fpregset_t),
+	  sizeof (mips64_elf_fpregset_t), &mips64_linux_fpregset,
 	  NULL, cb_data);
     }
   else
     {
-      cb (".reg", sizeof (mips64_elf_gregset_t), &mips64_linux_gregset,
-	  NULL, cb_data);
-      cb (".reg2", sizeof (mips64_elf_fpregset_t), &mips64_linux_fpregset,
+      cb (".reg", sizeof (mips64_elf_gregset_t), sizeof (mips64_elf_gregset_t),
+	  &mips64_linux_gregset, NULL, cb_data);
+      cb (".reg2", sizeof (mips64_elf_fpregset_t),
+	  sizeof (mips64_elf_fpregset_t), &mips64_linux_fpregset,
 	  NULL, cb_data);
     }
 }
@@ -1314,9 +1316,9 @@ mips_linux_syscall_next_pc (struct frame_info *frame)
 
 static LONGEST
 mips_linux_get_syscall_number (struct gdbarch *gdbarch,
-			       ptid_t ptid)
+			       thread_info *thread)
 {
-  struct regcache *regcache = get_thread_regcache (ptid);
+  struct regcache *regcache = get_thread_regcache (thread);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   int regsize = register_size (gdbarch, MIPS_V0_REGNUM);

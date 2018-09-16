@@ -17,7 +17,7 @@
 # <http://www.gnu.org/licenses/>.
 #
 
-AUTOMAKE_OPTIONS = 1.11 no-dist foreign
+AUTOMAKE_OPTIONS = no-dist foreign
 ACLOCAL_AMFLAGS = -I . -I .. -I ../config
 
 INCDIR = $(srcdir)/../include
@@ -32,7 +32,8 @@ if INSTALL_LIBBFD
 bfdlibdir = @bfdlibdir@
 bfdincludedir = @bfdincludedir@
 bfdlib_LTLIBRARIES = libbfd.la
-bfdinclude_HEADERS = $(BFD_H) $(INCDIR)/ansidecl.h $(INCDIR)/symcat.h $(INCDIR)/bfdlink.h
+bfdinclude_HEADERS = $(BFD_H) $(INCDIR)/ansidecl.h $(INCDIR)/symcat.h \
+		     $(INCDIR)/bfdlink.h $(INCDIR)/diagnostics.h
 else !INSTALL_LIBBFD
 # Empty these so that the respective installation directories will not be created.
 bfdlibdir =
@@ -69,17 +70,17 @@ BFD_H = bfd.h
 # need two copies of the executable, one to download and one for the
 # debugger).
 BFD32_LIBS = \
-	archive.lo archures.lo bfd.lo bfdio.lo bfdwin.lo \
-	cache.lo coff-bfd.lo compress.lo corefile.lo format.lo hash.lo \
-	init.lo libbfd.lo linker.lo merge.lo opncls.lo reloc.lo \
+	archive.lo archures.lo bfd.lo bfdio.lo bfdwin.lo cache.lo \
+	coff-bfd.lo compress.lo corefile.lo elf-properties.lo format.lo \
+	hash.lo init.lo libbfd.lo linker.lo merge.lo opncls.lo reloc.lo \
 	section.lo simple.lo stab-syms.lo stabs.lo syms.lo targets.lo \
 	binary.lo ihex.lo srec.lo tekhex.lo verilog.lo
 
 BFD64_LIBS = archive64.lo
 
 BFD32_LIBS_CFILES = \
-	archive.c archures.c bfd.c bfdio.c bfdwin.c \
-	cache.c coff-bfd.c compress.c corefile.c format.c hash.c \
+	archive.c archures.c bfd.c bfdio.c bfdwin.c cache.c coff-bfd.c \
+	compress.c corefile.c elf-properties.c format.c hash.c \
 	init.c libbfd.c linker.c merge.c opncls.c reloc.c \
 	section.c simple.c stab-syms.c stabs.c syms.c targets.c \
 	binary.c ihex.c srec.c tekhex.c verilog.c
@@ -99,6 +100,7 @@ ALL_MACHINES = \
 	cpu-cr16c.lo \
 	cpu-cris.lo \
 	cpu-crx.lo \
+	cpu-csky.lo \
 	cpu-d10v.lo \
 	cpu-d30v.lo \
 	cpu-dlx.lo \
@@ -184,6 +186,7 @@ ALL_MACHINES_CFILES = \
 	cpu-cr16c.c \
 	cpu-cris.c \
 	cpu-crx.c \
+	cpu-csky.c \
 	cpu-d10v.c \
 	cpu-d30v.c \
 	cpu-dlx.c \
@@ -293,7 +296,6 @@ BFD32_BACKENDS = \
 	elf-m10200.lo \
 	elf-m10300.lo \
 	elf-nacl.lo \
-	elf-properties.lo \
 	elf-strtab.lo \
 	elf-vxworks.lo \
 	elf.lo \
@@ -306,6 +308,7 @@ BFD32_BACKENDS = \
 	elf32-cr16c.lo \
 	elf32-cris.lo \
 	elf32-crx.lo \
+	elf32-csky.lo \
 	elf32-d10v.lo \
 	elf32-d30v.lo \
 	elf32-dlx.lo \
@@ -433,7 +436,6 @@ BFD32_BACKENDS_CFILES = \
 	elf-m10200.c \
 	elf-m10300.c \
 	elf-nacl.c \
-	elf-properties.c \
 	elf-strtab.c \
 	elf-vxworks.c \
 	elf.c \
@@ -446,6 +448,7 @@ BFD32_BACKENDS_CFILES = \
 	elf32-cr16c.c \
 	elf32-cris.c \
 	elf32-crx.c \
+	elf32-csky.c \
 	elf32-d10v.c \
 	elf32-d30v.c \
 	elf32-dlx.c \
@@ -663,7 +666,7 @@ BFD_MACHINES = @bfd_machines@
 TDEFAULTS = @tdefaults@
 HAVEVECS = @havevecs@
 
-INCLUDES = @HDEFINES@ @COREFLAG@ @TDEFINES@ $(CSEARCH) $(CSWITCHES) \
+AM_CPPFLAGS += @HDEFINES@ @COREFLAG@ @TDEFINES@ $(CSEARCH) $(CSWITCHES) \
 	$(HAVEVECS) @INCINTL@
 
 # C source files that correspond to .o's.

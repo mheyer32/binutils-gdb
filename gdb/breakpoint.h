@@ -40,6 +40,7 @@ struct bpstats;
 struct bp_location;
 struct linespec_result;
 struct linespec_sals;
+struct inferior;
 
 /* Why are we removing the breakpoint from the target?  */
 
@@ -666,9 +667,6 @@ enum watchpoint_triggered
   watch_triggered_yes  
 };
 
-typedef struct bp_location *bp_location_p;
-DEF_VEC_P(bp_location_p);
-
 /* Some targets (e.g., embedded PowerPC) need two debug registers to set
    a watchpoint over a memory region.  If this flag is true, GDB will use
    only one register per watchpoint, thus assuming that all acesses that
@@ -903,8 +901,6 @@ struct tracepoint : public breakpoint
   int static_trace_marker_id_idx;
 };
 
-typedef struct breakpoint *breakpoint_p;
-DEF_VEC_P(breakpoint_p);
 
 /* The following stuff is an abstract data type "bpstat" ("breakpoint
    status").  This provides the ability to determine whether we have
@@ -948,7 +944,7 @@ extern bpstat build_bpstat_chain (const address_space *aspace,
    commands, FIXME??? fields.  */
 
 extern bpstat bpstat_stop_status (const address_space *aspace,
-				  CORE_ADDR pc, ptid_t ptid,
+				  CORE_ADDR pc, thread_info *thread,
 				  const struct target_waitstatus *ws,
 				  bpstat stop_chain = NULL);
 
@@ -1396,7 +1392,7 @@ extern void insert_breakpoints (void);
 
 extern int remove_breakpoints (void);
 
-extern int remove_breakpoints_pid (int pid);
+extern int remove_breakpoints_inf (inferior *inf);
 
 /* This function can be used to update the breakpoint package's state
    after an exec() system call has been executed.
@@ -1625,16 +1621,13 @@ extern struct tracepoint *
   get_tracepoint_by_number (const char **arg,
 			    number_or_range_parser *parser);
 
-/* Return a vector of all tracepoints currently defined.  The vector
-   is newly allocated; the caller should free when done with it.  */
-extern VEC(breakpoint_p) *all_tracepoints (void);
+/* Return a vector of all tracepoints currently defined.  */
+extern std::vector<breakpoint *> all_tracepoints (void);
 
 extern int is_tracepoint (const struct breakpoint *b);
 
-/* Return a vector of all static tracepoints defined at ADDR.  The
-   vector is newly allocated; the caller should free when done with
-   it.  */
-extern VEC(breakpoint_p) *static_tracepoints_here (CORE_ADDR addr);
+/* Return a vector of all static tracepoints defined at ADDR.  */
+extern std::vector<breakpoint *> static_tracepoints_here (CORE_ADDR addr);
 
 /* Create an instance of this to start registering breakpoint numbers
    for a later "commands" command.  */

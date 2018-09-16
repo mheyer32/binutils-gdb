@@ -17,7 +17,6 @@ dnl along with this program; see the file COPYING3.  If not see
 dnl <http://www.gnu.org/licenses/>.
 dnl
 
-AC_PREREQ(2.59)
 m4_include([version.m4])
 AC_INIT([bfd], BFD_VERSION)
 AC_CONFIG_SRCDIR([libbfd.c])
@@ -107,8 +106,10 @@ AC_ARG_ENABLE(separate-code,
   no) ac_default_ld_z_separate_code=0 ;;
 esac])
 # Enable -z separate-code by default for Linux/x86.
+changequote(,)dnl
 case "${target}" in
 i[3-7]86-*-linux-* | x86_64-*-linux-*)
+changequote([,])dnl
   if test ${ac_default_ld_z_separate_code} = unset; then
     ac_default_ld_z_separate_code=1
   fi
@@ -404,8 +405,8 @@ selarchs="$f"
 # Target backend .o files.
 tb=
 
-elf="elf.lo elflink.lo elf-attrs.lo elf-strtab.lo elf-properties.lo
-     elf-eh-frame.lo dwarf1.lo dwarf2.lo"
+elf="elf.lo elflink.lo elf-attrs.lo elf-strtab.lo elf-eh-frame.lo
+     dwarf1.lo dwarf2.lo"
 coffgen="coffgen.lo dwarf2.lo"
 coff="cofflink.lo $coffgen"
 ecoff="ecofflink.lo $coffgen"
@@ -464,6 +465,8 @@ do
     cris_elf32_vec)		 tb="$tb elf32-cris.lo elf32.lo $elf" ;;
     cris_elf32_us_vec)		 tb="$tb elf32-cris.lo elf32.lo $elf" ;;
     crx_elf32_vec)		 tb="$tb elf32-crx.lo elf32.lo $elf" ;;
+    csky_elf32_be_vec)		 tb="$tb elf32-csky.lo elf32.lo $elf" ;;
+    csky_elf32_le_vec)		 tb="$tb elf32-csky.lo elf32.lo $elf" ;;
     d10v_elf32_vec)		 tb="$tb elf32-d10v.lo elf32.lo $elf" ;;
     d30v_elf32_vec)		 tb="$tb elf32-d30v.lo elf32.lo $elf" ;;
     dlx_elf32_be_vec)		 tb="$tb elf32-dlx.lo elf32.lo $elf" ;;

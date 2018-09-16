@@ -458,7 +458,6 @@ find_minsym_type_and_address (minimal_symbol *msymbol,
 			      CORE_ADDR *address_p)
 {
   bound_minimal_symbol bound_msym = {msymbol, objfile};
-  struct gdbarch *gdbarch = get_objfile_arch (objfile);
   struct obj_section *section = MSYMBOL_OBJ_SECTION (objfile, msymbol);
   enum minimal_symbol_type type = MSYMBOL_TYPE (msymbol);
 
@@ -1147,7 +1146,7 @@ parse_exp_in_context_1 (const char **stringptr, CORE_ADDR pc,
   if (!expression_context_block)
     expression_context_block = get_selected_block (&expression_context_pc);
   else if (pc == 0)
-    expression_context_pc = BLOCK_START (expression_context_block);
+    expression_context_pc = BLOCK_ENTRY_PC (expression_context_block);
   else
     expression_context_pc = pc;
 
@@ -1161,7 +1160,7 @@ parse_exp_in_context_1 (const char **stringptr, CORE_ADDR pc,
 	  = BLOCKVECTOR_BLOCK (SYMTAB_BLOCKVECTOR (cursal.symtab),
 			       STATIC_BLOCK);
       if (expression_context_block)
-	expression_context_pc = BLOCK_START (expression_context_block);
+	expression_context_pc = BLOCK_ENTRY_PC (expression_context_block);
     }
 
   if (language_mode == language_mode_auto && block != NULL)
@@ -1202,8 +1201,7 @@ parse_exp_in_context_1 (const char **stringptr, CORE_ADDR pc,
 
   TRY
     {
-      if (lang->la_parser (&ps))
-        lang->la_error (NULL);
+      lang->la_parser (&ps);
     }
   CATCH (except, RETURN_MASK_ALL)
     {

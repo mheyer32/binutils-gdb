@@ -36,7 +36,7 @@ struct value_print_options;
 struct type_print_options;
 struct lang_varobj_ops;
 struct parser_state;
-struct compile_instance;
+class compile_instance;
 struct completion_match_for_lcd;
 
 #define MAX_FORTRAN_DIMS  7	/* Maximum number of F77 array dims.  */
@@ -171,10 +171,6 @@ struct language_defn
     /* Parser function.  */
 
     int (*la_parser) (struct parser_state *);
-
-    /* Parser error function.  */
-
-    void (*la_error) (const char *);
 
     /* Given an expression *EXPP created by prefixifying the result of
        la_parser, perform any remaining processing necessary to complete
@@ -370,8 +366,10 @@ struct language_defn
        characters, excluding any eventual terminating null character.
        Otherwise *LENGTH will include all characters - including any nulls.
        CHARSET will hold the encoding used in the string.  */
-    void (*la_get_string) (struct value *value, gdb_byte **buffer, int *length,
-			   struct type **chartype, const char **charset);
+    void (*la_get_string) (struct value *value,
+			   gdb::unique_xmalloc_ptr<gdb_byte> *buffer,
+			   int *length, struct type **chartype,
+			   const char **charset);
 
     /* Return an expression that can be used for a location
        watchpoint.  TYPE is a pointer type that points to the memory
@@ -426,7 +424,7 @@ struct language_defn
        instance is owned by its caller and must be deallocated by
        calling its 'destroy' method.  */
 
-    struct compile_instance *(*la_get_compile_instance) (void);
+    compile_instance *(*la_get_compile_instance) (void);
 
     /* This method must be defined if 'la_get_gcc_context' is defined.
        If 'la_get_gcc_context' is not defined, then this method is
@@ -442,7 +440,7 @@ struct language_defn
        parsed.
        EXPR_PC is the PC at which the expression is being parsed.  */
 
-    std::string (*la_compute_program) (struct compile_instance *inst,
+    std::string (*la_compute_program) (compile_instance *inst,
 				       const char *input,
 				       struct gdbarch *gdbarch,
 				       const struct block *expr_block,
@@ -631,8 +629,10 @@ int default_pass_by_reference (struct type *type);
 void default_print_typedef (struct type *type, struct symbol *new_symbol,
 			    struct ui_file *stream);
 
-void default_get_string (struct value *value, gdb_byte **buffer, int *length,
-			 struct type **char_type, const char **charset);
+void default_get_string (struct value *value,
+			 gdb::unique_xmalloc_ptr<gdb_byte> *buffer,
+			 int *length, struct type **char_type,
+			 const char **charset);
 
 /* Default name hashing function.  */
 
@@ -642,8 +642,10 @@ void default_get_string (struct value *value, gdb_byte **buffer, int *length,
    comparison operators hash to the same value.  */
 extern unsigned int default_search_name_hash (const char *search_name);
 
-void c_get_string (struct value *value, gdb_byte **buffer, int *length,
-		   struct type **char_type, const char **charset);
+void c_get_string (struct value *value,
+		   gdb::unique_xmalloc_ptr<gdb_byte> *buffer,
+		   int *length, struct type **char_type,
+		   const char **charset);
 
 /* The default implementation of la_symbol_name_matcher.  Matches with
    strncmp_iw.  */

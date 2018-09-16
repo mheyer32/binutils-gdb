@@ -77,6 +77,9 @@ public:
   /* Override the GNU/Linux inferior startup hook.  */
   void post_startup_inferior (ptid_t) override;
 
+  /* Override the GNU/Linux post attach hook.  */
+  void post_attach (int pid) override;
+
   /* These three defer to common nat/ code.  */
   void low_new_thread (struct lwp_info *lp) override
   { aarch64_linux_new_thread (lp); }
@@ -209,7 +212,7 @@ fetch_gregs_from_thread (struct regcache *regcache)
      and arm.  */
   gdb_static_assert (sizeof (regs) >= 18 * 4);
 
-  tid = ptid_get_lwp (regcache->ptid ());
+  tid = regcache->ptid ().lwp ();
 
   iovec.iov_base = &regs;
   if (gdbarch_bfd_arch_info (gdbarch)->bits_per_word == 32)
@@ -246,7 +249,7 @@ store_gregs_to_thread (const struct regcache *regcache)
   /* Make sure REGS can hold all registers contents on both aarch64
      and arm.  */
   gdb_static_assert (sizeof (regs) >= 18 * 4);
-  tid = ptid_get_lwp (regcache->ptid ());
+  tid = regcache->ptid ().lwp ();
 
   iovec.iov_base = &regs;
   if (gdbarch_bfd_arch_info (gdbarch)->bits_per_word == 32)
@@ -289,7 +292,7 @@ fetch_fpregs_from_thread (struct regcache *regcache)
      and arm.  */
   gdb_static_assert (sizeof regs >= VFP_REGS_SIZE);
 
-  tid = ptid_get_lwp (regcache->ptid ());
+  tid = regcache->ptid ().lwp ();
 
   iovec.iov_base = &regs;
 
@@ -335,7 +338,7 @@ store_fpregs_to_thread (const struct regcache *regcache)
   /* Make sure REGS can hold all VFP registers contents on both aarch64
      and arm.  */
   gdb_static_assert (sizeof regs >= VFP_REGS_SIZE);
-  tid = ptid_get_lwp (regcache->ptid ());
+  tid = regcache->ptid ().lwp ();
 
   iovec.iov_base = &regs;
 
@@ -384,19 +387,62 @@ store_fpregs_to_thread (const struct regcache *regcache)
     }
 }
 
+/* Fill GDB's register array with the sve register values
+   from the current thread.  */
+
+static void
+fetch_sveregs_from_thread (struct regcache *regcache)
+{
+  std::unique_ptr<gdb_byte[]> base
+    = aarch64_sve_get_sveregs (regcache->ptid ().lwp ());
+  aarch64_sve_regs_copy_to_reg_buf (regcache, base.get ());
+}
+
+/* Store to the current thread the valid sve register
+   values in the GDB's register array.  */
+
+static void
+store_sveregs_to_thread (struct regcache *regcache)
+{
+  int ret;
+  struct iovec iovec;
+  int tid = regcache->ptid ().lwp ();
+
+  /* Obtain a dump of SVE registers from ptrace.  */
+  std::unique_ptr<gdb_byte[]> base = aarch64_sve_get_sveregs (tid);
+
+  /* Overwrite with regcache state.  */
+  aarch64_sve_regs_copy_from_reg_buf (regcache, base.get ());
+
+  /* Write back to the kernel.  */
+  iovec.iov_base = base.get ();
+  iovec.iov_len = ((struct user_sve_header *) base.get ())->size;
+  ret = ptrace (PTRACE_SETREGSET, tid, NT_ARM_SVE, &iovec);
+
+  if (ret < 0)
+    perror_with_name (_("Unable to store sve registers"));
+}
+
 /* Implement the "fetch_registers" target_ops method.  */
 
 void
 aarch64_linux_nat_target::fetch_registers (struct regcache *regcache,
 					   int regno)
 {
+  struct gdbarch_tdep *tdep = gdbarch_tdep (regcache->arch ());
+
   if (regno == -1)
     {
       fetch_gregs_from_thread (regcache);
-      fetch_fpregs_from_thread (regcache);
+      if (tdep->has_sve ())
+	fetch_sveregs_from_thread (regcache);
+      else
+	fetch_fpregs_from_thread (regcache);
     }
   else if (regno < AARCH64_V0_REGNUM)
     fetch_gregs_from_thread (regcache);
+  else if (tdep->has_sve ())
+    fetch_sveregs_from_thread (regcache);
   else
     fetch_fpregs_from_thread (regcache);
 }
@@ -407,13 +453,20 @@ void
 aarch64_linux_nat_target::store_registers (struct regcache *regcache,
 					   int regno)
 {
+  struct gdbarch_tdep *tdep = gdbarch_tdep (regcache->arch ());
+
   if (regno == -1)
     {
       store_gregs_to_thread (regcache);
-      store_fpregs_to_thread (regcache);
+      if (tdep->has_sve ())
+	store_sveregs_to_thread (regcache);
+      else
+	store_fpregs_to_thread (regcache);
     }
   else if (regno < AARCH64_V0_REGNUM)
     store_gregs_to_thread (regcache);
+  else if (tdep->has_sve ())
+    store_sveregs_to_thread (regcache);
   else
     store_fpregs_to_thread (regcache);
 }
@@ -487,7 +540,7 @@ aarch64_linux_nat_target::low_new_fork (struct lwp_info *parent,
      new process so that all breakpoints and watchpoints can be
      removed together.  */
 
-  parent_pid = ptid_get_pid (parent->ptid);
+  parent_pid = parent->ptid.pid ();
   parent_state = aarch64_get_debug_reg_state (parent_pid);
   child_state = aarch64_get_debug_reg_state (child_pid);
   *child_state = *parent_state;
@@ -513,9 +566,24 @@ ps_get_thread_area (struct ps_prochandle *ph,
 void
 aarch64_linux_nat_target::post_startup_inferior (ptid_t ptid)
 {
-  low_forget_process (ptid_get_pid (ptid));
-  aarch64_linux_get_debug_reg_capacity (ptid_get_pid (ptid));
+  low_forget_process (ptid.pid ());
+  aarch64_linux_get_debug_reg_capacity (ptid.pid ());
   linux_nat_target::post_startup_inferior (ptid);
+}
+
+/* Implement the "post_attach" target_ops method.  */
+
+void
+aarch64_linux_nat_target::post_attach (int pid)
+{
+  low_forget_process (pid);
+  /* Set the hardware debug register capacity.  If
+     aarch64_linux_get_debug_reg_capacity is not called
+     (as it is in aarch64_linux_child_post_startup_inferior) then
+     software watchpoints will be used instead of hardware
+     watchpoints when attaching to a target.  */
+  aarch64_linux_get_debug_reg_capacity (pid);
+  linux_nat_target::post_attach (pid);
 }
 
 extern struct target_desc *tdesc_arm_with_neon;
@@ -529,7 +597,7 @@ aarch64_linux_nat_target::read_description ()
   gdb_byte regbuf[VFP_REGS_SIZE];
   struct iovec iovec;
 
-  tid = ptid_get_lwp (inferior_ptid);
+  tid = inferior_ptid.lwp ();
 
   iovec.iov_base = regbuf;
   iovec.iov_len = VFP_REGS_SIZE;
@@ -619,7 +687,7 @@ aarch64_linux_nat_target::insert_hw_breakpoint (struct gdbarch *gdbarch,
   int len;
   const enum target_hw_bp_type type = hw_execute;
   struct aarch64_debug_reg_state *state
-    = aarch64_get_debug_reg_state (ptid_get_pid (inferior_ptid));
+    = aarch64_get_debug_reg_state (inferior_ptid.pid ());
 
   gdbarch_breakpoint_from_pc (gdbarch, &addr, &len);
 
@@ -652,7 +720,7 @@ aarch64_linux_nat_target::remove_hw_breakpoint (struct gdbarch *gdbarch,
   int len = 4;
   const enum target_hw_bp_type type = hw_execute;
   struct aarch64_debug_reg_state *state
-    = aarch64_get_debug_reg_state (ptid_get_pid (inferior_ptid));
+    = aarch64_get_debug_reg_state (inferior_ptid.pid ());
 
   gdbarch_breakpoint_from_pc (gdbarch, &addr, &len);
 
@@ -685,7 +753,7 @@ aarch64_linux_nat_target::insert_watchpoint (CORE_ADDR addr, int len,
 {
   int ret;
   struct aarch64_debug_reg_state *state
-    = aarch64_get_debug_reg_state (ptid_get_pid (inferior_ptid));
+    = aarch64_get_debug_reg_state (inferior_ptid.pid ());
 
   if (show_debug_regs)
     fprintf_unfiltered (gdb_stdlog,
@@ -717,7 +785,7 @@ aarch64_linux_nat_target::remove_watchpoint (CORE_ADDR addr, int len,
 {
   int ret;
   struct aarch64_debug_reg_state *state
-    = aarch64_get_debug_reg_state (ptid_get_pid (inferior_ptid));
+    = aarch64_get_debug_reg_state (inferior_ptid.pid ());
 
   if (show_debug_regs)
     fprintf_unfiltered (gdb_stdlog,
@@ -751,7 +819,7 @@ bool
 aarch64_linux_nat_target::stopped_data_address (CORE_ADDR *addr_p)
 {
   siginfo_t siginfo;
-  int i, tid;
+  int i;
   struct aarch64_debug_reg_state *state;
 
   if (!linux_nat_get_siginfo (inferior_ptid, &siginfo))
@@ -763,7 +831,7 @@ aarch64_linux_nat_target::stopped_data_address (CORE_ADDR *addr_p)
     return false;
 
   /* Check if the address matches any watched address.  */
-  state = aarch64_get_debug_reg_state (ptid_get_pid (inferior_ptid));
+  state = aarch64_get_debug_reg_state (inferior_ptid.pid ());
   for (i = aarch64_num_wp_regs - 1; i >= 0; --i)
     {
       const unsigned int offset

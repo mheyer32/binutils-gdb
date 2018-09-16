@@ -17,7 +17,7 @@
 # <http://www.gnu.org/licenses/>.
 #
 
-AUTOMAKE_OPTIONS = dejagnu no-texinfo.tex no-dist foreign
+AUTOMAKE_OPTIONS = dejagnu no-texinfo.tex no-dist foreign info-in-builddir
 ACLOCAL_AMFLAGS = -I .. -I ../config -I ../bfd
 TEXINFO_TEX = ../texinfo/texinfo.tex
 
@@ -80,7 +80,7 @@ INCDIR	= $(BASEDIR)/include
 # What version of the manual to build
 DOCVER = gen
 
-# Options to extract the man page from ld.texinfo
+# Options to extract the man page from ld.texi
 MANCONF = -Dman
 
 TEXI2POD = perl $(BASEDIR)/etc/texi2pod.pl $(AM_MAKEINFOFLAGS)
@@ -135,9 +135,9 @@ CXXFLAGS_FOR_TARGET = `echo $(CXXFLAGS) | sed -e 's/-fsanitize=address//g' -e 's
 
 transform = s/^ld-new$$/$(installed_linker)/;@program_transform_name@
 bin_PROGRAMS = ld-new
-info_TEXINFOS = ld.texinfo
+info_TEXINFOS = ld.texi
 ld_TEXINFOS = configdoc.texi
-noinst_TEXINFOS = ldint.texinfo
+noinst_TEXINFOS = ldint.texi
 man_MANS = ld.1
 
 AM_MAKEINFOFLAGS = -I $(srcdir) -I $(BFDDIR)/doc -I ../bfd/doc \
@@ -211,6 +211,8 @@ ALL_EMULATION_SOURCES = \
 	ecrisaout.c \
 	ecriself.c \
 	ecrislinux.c \
+	ecskyelf.c \
+	ecskyelf_linux.c \
 	ed10velf.c \
 	ed30v_e.c \
 	ed30v_o.c \
@@ -876,6 +878,12 @@ ecriself.c: $(srcdir)/emulparams/criself.sh \
   $(ELF_DEPS) $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 
 ecrislinux.c: $(srcdir)/emulparams/crislinux.sh \
+  $(ELF_DEPS) $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
+
+ecskyelf.c: $(srcdir)/emulparams/cskyelf.sh \
+  $(ELF_DEPS) $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
+
+ecskyelf_linux.c: $(srcdir)/emulparams/cskyelf_linux.sh \
   $(ELF_DEPS) $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 
 ed10velf.c: $(srcdir)/emulparams/d10velf.sh \
@@ -1899,6 +1907,10 @@ check-DEJAGNU: site.exp
 	else echo "WARNING: could not find \`runtest'" 1>&2; :;\
 	fi
 
+development.exp: $(BFDDIR)/development.sh
+	$(EGREP) "[development|experimental]=" $(BFDDIR)/development.sh  \
+	  | $(AWK) -F= '{ print "set " $$1 " " $$2 }' > $@
+#
 #
 # Build a dummy plugin using libtool.
 #
@@ -1930,9 +1942,9 @@ configdoc.texi:	${DOCVER}-doc.texi
 # Build the man page from the texinfo file
 # The sed command removes the no-adjust Nroff command so that
 # the man output looks standard.
-ld.1: $(srcdir)/ld.texinfo configdoc.texi
+ld.1: $(srcdir)/ld.texi configdoc.texi
 	touch $@
-	-$(TEXI2POD) $(MANCONF) < $(srcdir)/ld.texinfo > ld.pod
+	-$(TEXI2POD) $(MANCONF) < $(srcdir)/ld.texi > ld.pod
 	-($(POD2MAN) ld.pod | \
 		sed -e '/^.if n .na/d' > $@.T$$$$ && \
 		mv -f $@.T$$$$ $@) || \
@@ -1945,6 +1957,8 @@ MAINTAINERCLEANFILES = configdoc.texi ld.1
 # development.sh is used to determine -Werror default.
 CONFIG_STATUS_DEPENDENCIES = $(srcdir)/configure.host $(srcdir)/configure.tgt \
 	$(BFDDIR)/development.sh
+
+EXTRA_DEJAGNU_SITE_CONFIG = development.exp
 
 MOSTLYCLEANFILES = $(STAGESTUFF) ld1$(EXEEXT) ld2$(EXEEXT) ld3$(EXEEXT) \
 	ldemul-list.h crtbegin.@OBJEXT@ crtend.@OBJEXT@ ld.log ld.sum
@@ -1991,15 +2005,8 @@ diststuff: info $(EXTRA_DIST)
 # ld.1 to support parallel build.
 info-recursive: ld.1
 
-DISTCLEANFILES = tdirs site.exp site.bak stringify.sed
+DISTCLEANFILES = tdirs site.exp development.exp site.bak stringify.sed
 distclean-local:
 	rm -rf ldscripts
 
 MAINTAINERCLEANFILES += ld.info
-
-# Automake 1.9 will only build info files in the objdir if they are
-# mentioned in DISTCLEANFILES.  It doesn't have to be unconditional,
-# though, so we use a bogus condition.
-if GENINSRC_NEVER
-DISTCLEANFILES += ld.info
-endif

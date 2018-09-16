@@ -609,7 +609,7 @@ build_address_symbolic (struct gdbarch *gdbarch,
 	 pointer is <function+3>.  This matches the ISA behavior.  */
       addr = gdbarch_addr_bits_remove (gdbarch, addr);
 
-      name_location = BLOCK_START (SYMBOL_BLOCK_VALUE (symbol));
+      name_location = BLOCK_ENTRY_PC (SYMBOL_BLOCK_VALUE (symbol));
       if (do_demangle || asm_demangle)
 	name_temp = SYMBOL_PRINT_NAME (symbol);
       else
@@ -1297,7 +1297,6 @@ info_symbol_command (const char *arg, int from_tty)
       {
 	const char *obj_name, *mapped, *sec_name, *msym_name;
 	const char *loc_string;
-	struct cleanup *old_chain;
 
 	matches = 1;
 	offset = sect_addr - MSYMBOL_VALUE_ADDRESS (objfile, msymbol);
@@ -1520,7 +1519,7 @@ info_address_command (const char *exp, int from_tty)
 
     case LOC_BLOCK:
       printf_filtered (_("a function at address "));
-      load_addr = BLOCK_START (SYMBOL_BLOCK_VALUE (sym));
+      load_addr = BLOCK_ENTRY_PC (SYMBOL_BLOCK_VALUE (sym));
       fputs_filtered (paddress (gdbarch, load_addr), gdb_stdout);
       if (section_is_overlay (section))
 	{
@@ -2286,7 +2285,6 @@ printf_floating (struct ui_file *stream, const char *format,
   /* Parameter data.  */
   struct type *param_type = value_type (value);
   struct gdbarch *gdbarch = get_type_arch (param_type);
-  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
 
   /* Determine target type corresponding to the format string.  */
   struct type *fmt_type;

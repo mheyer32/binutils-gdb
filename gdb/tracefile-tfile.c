@@ -555,7 +555,7 @@ tfile_target_open (const char *arg, int from_tty)
   END_CATCH
 
   inferior_appeared (current_inferior (), TFILE_PID);
-  inferior_ptid = pid_to_ptid (TFILE_PID);
+  inferior_ptid = ptid_t (TFILE_PID);
   add_thread_silent (inferior_ptid);
 
   if (ts->traceframe_count <= 0)
@@ -615,14 +615,11 @@ tfile_interp_line (char *line, struct uploaded_tp **utpp,
 void
 tfile_target::close ()
 {
-  int pid;
-
   if (trace_fd < 0)
     return;
 
-  pid = ptid_get_pid (inferior_ptid);
   inferior_ptid = null_ptid;	/* Avoid confusion from thread stuff.  */
-  exit_inferior_silent (pid);
+  exit_inferior_silent (current_inferior ());
 
   ::close (trace_fd);
   trace_fd = -1;

@@ -483,7 +483,7 @@ insert_dxdn (uint64_t insn,
 static int64_t
 extract_dxdn (uint64_t insn,
 	      ppc_cpu_t dialect ATTRIBUTE_UNUSED,
-	      int *invalid ATTRIBUTE_UNUSED)
+	      int *invalid)
 {
   return -extract_dxd (insn, dialect, invalid);
 }
@@ -537,8 +537,12 @@ extract_fxm (uint64_t insn,
 	     ppc_cpu_t dialect ATTRIBUTE_UNUSED,
 	     int *invalid)
 {
-  int64_t mask = (insn >> 12) & 0xff;
+  /* Return a value of -1 for a missing optional operand, which is
+     used as a flag by insert_fxm.  */
+  if (*invalid < 0)
+    return -1;
 
+  int64_t mask = (insn >> 12) & 0xff;
   /* Is this a Power4 insn?  */
   if ((insn & (1 << 20)) != 0)
     {
@@ -611,8 +615,11 @@ extract_ls (uint64_t insn,
 	    ppc_cpu_t dialect,
 	    int *invalid)
 {
-  uint64_t lvalue = (insn >> 21) & 3;
+  /* Missing optional operands have a value of zero.  */
+  if (*invalid < 0)
+    return 0;
 
+  uint64_t lvalue = (insn >> 21) & 3;
   if (((insn >> 1) & 0x3ff) == 598)
     {
       uint64_t max_lvalue = (dialect & PPC_OPCODE_POWER4) ? 2 : 1;
@@ -629,21 +636,13 @@ extract_ls (uint64_t insn,
 static uint64_t
 insert_esync (uint64_t insn,
 	      int64_t value,
-	      ppc_cpu_t dialect,
+	      ppc_cpu_t dialect ATTRIBUTE_UNUSED,
 	      const char **errmsg)
 {
   uint64_t ls = (insn >> 21) & 0x03;
 
-  if (value == 0)
-    {
-      if (((dialect & PPC_OPCODE_E6500) != 0 && ls > 1)
-	  || ((dialect & PPC_OPCODE_POWER9) != 0 && ls > 2))
-	*errmsg = _("illegal L operand value");
-      return insn;
-    }
-
-  if ((ls & ~0x1)
-      || (((value >> 1) & 0x1) ^ ls) == 0)
+  if (value != 0
+      && ((~value >> 1) & 0x1) != ls)
     *errmsg = _("incompatible L operand value");
 
   return insn | ((value & 0xf) << 16);
@@ -651,23 +650,18 @@ insert_esync (uint64_t insn,
 
 static int64_t
 extract_esync (uint64_t insn,
-	       ppc_cpu_t dialect,
+	       ppc_cpu_t dialect ATTRIBUTE_UNUSED,
 	       int *invalid)
 {
+  if (*invalid < 0)
+    return 0;
+
   uint64_t ls = (insn >> 21) & 0x3;
-  uint64_t lvalue = (insn >> 16) & 0xf;
-
-  if (lvalue == 0)
-    {
-      if (((dialect & PPC_OPCODE_E6500) != 0 && ls > 1)
-	  || ((dialect & PPC_OPCODE_POWER9) != 0 && ls > 2))
-	*invalid = 1;
-    }
-  else if ((ls & ~0x1)
-	   || (((lvalue >> 1) & 0x1) ^ ls) == 0)
+  uint64_t value = (insn >> 16) & 0xf;
+  if (value != 0
+      && ((~value >> 1) & 0x1) != ls)
     *invalid = 1;
-
-  return lvalue;
+  return value;
 }
 
 /* The MB and ME fields in an M form instruction expressed as a single
@@ -914,9 +908,11 @@ extract_raq (uint64_t insn,
 	     ppc_cpu_t dialect ATTRIBUTE_UNUSED,
 	     int *invalid)
 {
+  if (*invalid < 0)
+    return 0;
+
   uint64_t rtvalue = (insn >> 21) & 0x1f;
   uint64_t ravalue = (insn >> 16) & 0x1f;
-
   if (ravalue == rtvalue)
     *invalid = 1;
   return ravalue;
@@ -1187,6 +1183,41 @@ extract_spr (uint64_t insn,
   return ((insn >> 16) & 0x1f) | ((insn >> 6) & 0x3e0);
 }
 
+/* Some dialects have 8 [DI]BAT registers instead of the standard 4.  */
+#define ALLOW8_BAT (PPC_OPCODE_750)
+
+static uint64_t
+insert_sprbat (uint64_t insn,
+	       int64_t value,
+	       ppc_cpu_t dialect,
+	       const char **errmsg)
+{
+  if (value > 7
+      || (value > 3 && (dialect & ALLOW8_BAT) == 0))
+    *errmsg = _("invalid bat number");
+
+  /* If this is [di]bat4..7 then use spr 560..575, otherwise 528..543.  */
+  if (value > 3)
+    value = ((value & 3) << 6) | 1;
+  else
+    value = value << 6;
+
+  return insn | (value << 11);
+}
+
+static int64_t
+extract_sprbat (uint64_t insn,
+		ppc_cpu_t dialect,
+		int *invalid)
+{
+  uint64_t val = (insn >> 17) & 0x3;
+
+  val = val + ((insn >> 9) & 0x4);
+  if (val > 3 && (dialect & ALLOW8_BAT) == 0)
+    *invalid = 1;
+  return val;
+}
+
 /* Some dialects have 8 SPRG registers instead of the standard 4.  */
 #define ALLOW8_SPRG (PPC_OPCODE_BOOKE | PPC_OPCODE_405)
 
@@ -1244,6 +1275,9 @@ extract_tbr (uint64_t insn,
 	     ppc_cpu_t dialect ATTRIBUTE_UNUSED,
 	     int *invalid)
 {
+  if (*invalid < 0)
+    return 268;
+
   int64_t ret = ((insn >> 16) & 0x1f) | ((insn >> 6) & 0x3e0);
   if (ret != 268 && ret != 269)
     *invalid = 1;
@@ -1426,7 +1460,7 @@ insert_vlensi (uint64_t insn,
 static int64_t
 extract_vlensi (uint64_t insn,
 		ppc_cpu_t dialect ATTRIBUTE_UNUSED,
-		int *invalid ATTRIBUTE_UNUSED)
+		int *invalid)
 {
   int64_t value = ((insn >> 10) & 0xf800) | (insn & 0x7ff);
   value = (value ^ 0x8000) - 0x8000;
@@ -1738,6 +1772,25 @@ extract_Ddd (uint64_t insn,
 {
   return ((insn >> 11) & 0x3) | ((insn << 2) & 0x4);
 }
+
+static uint64_t
+insert_sxl (uint64_t insn,
+	    int64_t value,
+	    ppc_cpu_t dialect ATTRIBUTE_UNUSED,
+	    const char **errmsg ATTRIBUTE_UNUSED)
+{
+  return insn | ((value & 0x1) << 11);
+}
+
+static int64_t
+extract_sxl (uint64_t insn,
+	     ppc_cpu_t dialect ATTRIBUTE_UNUSED,
+	     int *invalid)
+{
+  if (*invalid < 0)
+    return 1;
+  return (insn >> 11) & 0x1;
+}
 
 /* The operands table.
 
@@ -2036,13 +2089,10 @@ const struct powerpc_operand powerpc_operands[] =
 
   /* Power4 version for mfcr.  */
 #define FXM4 FXM + 1
-  { 0xff, 12, insert_fxm, extract_fxm,
-    PPC_OPERAND_OPTIONAL | PPC_OPERAND_OPTIONAL_VALUE},
-  /* If the FXM4 operand is ommitted, use the sentinel value -1.  */
-  { -1, -1, NULL, NULL, 0},
+  { 0xff, 12, insert_fxm, extract_fxm, PPC_OPERAND_OPTIONAL },
 
   /* The IMM20 field in an LI instruction.  */
-#define IMM20 FXM4 + 2
+#define IMM20 FXM4 + 1
   { 0xfffff, PPC_OPSHIFT_INV, insert_li20, extract_li20, PPC_OPERAND_SIGNED},
 
   /* The L field in a D or X form instruction.  */
@@ -2305,11 +2355,16 @@ const struct powerpc_operand powerpc_operands[] =
 
   /* The BAT index number in an XFX form m[ft]ibat[lu] instruction.  */
 #define SPRBAT SPR + 1
-#define SPRBAT_MASK (0x3 << 17)
-  { 0x3, 17, NULL, NULL, 0 },
+#define SPRBAT_MASK (0xc1 << 11)
+  { 0x7, PPC_OPSHIFT_INV, insert_sprbat, extract_sprbat, PPC_OPERAND_SPR },
+
+  /* The GQR index number in an XFX form m[ft]gqr instruction.  */
+#define SPRGQR SPRBAT + 1
+#define SPRGQR_MASK (0x7 << 16)
+  { 0x7, 16, NULL, NULL, PPC_OPERAND_GQR },
 
   /* The SPRG register number in an XFX form m[ft]sprg instruction.  */
-#define SPRG SPRBAT + 1
+#define SPRG SPRGQR + 1
   { 0x1f, 16, insert_sprg, extract_sprg, PPC_OPERAND_SPR },
 
   /* The SR field in an X form instruction.  */
@@ -2338,12 +2393,10 @@ const struct powerpc_operand powerpc_operands[] =
      field, but it is optional.  */
 #define TBR SV + 1
   { 0x3ff, 11, insert_tbr, extract_tbr,
-    PPC_OPERAND_SPR | PPC_OPERAND_OPTIONAL | PPC_OPERAND_OPTIONAL_VALUE},
-  /* If the TBR operand is ommitted, use the value 268.  */
-  { -1, 268, NULL, NULL, 0},
+    PPC_OPERAND_SPR | PPC_OPERAND_OPTIONAL },
 
   /* The TO field in a D or X form instruction.  */
-#define TO TBR + 2
+#define TO TBR + 1
 #define DUI TO
 #define TO_MASK (0x1f << 21)
   { 0x1f, 21, NULL, NULL, 0 },
@@ -2497,12 +2550,10 @@ const struct powerpc_operand powerpc_operands[] =
 
   /* The S field in a XL form instruction.  */
 #define SXL S + 1
-  { 0x1, 11, NULL, NULL, PPC_OPERAND_OPTIONAL | PPC_OPERAND_OPTIONAL_VALUE},
-  /* If the SXL operand is ommitted, use the value 1.  */
-  { -1, 1, NULL, NULL, 0},
+  { 0x1, 11, insert_sxl, extract_sxl, PPC_OPERAND_OPTIONAL },
 
   /* SH field starting at bit position 16.  */
-#define SH16 SXL + 2
+#define SH16 SXL + 1
   /* The DCM and DGM fields in a Z form instruction.  */
 #define DCM SH16
 #define DGM DCM
@@ -3366,6 +3417,10 @@ const unsigned int num_powerpc_operands = (sizeof (powerpc_operands)
 #define XSPRBAT_MASK (XSPR_MASK &~ SPRBAT_MASK)
 
 /* An XFX form instruction with the SPR field filled in except for the
+   SPRGQR field.  */
+#define XSPRGQR_MASK (XSPR_MASK &~ SPRGQR_MASK)
+
+/* An XFX form instruction with the SPR field filled in except for the
    SPRG field.  */
 #define XSPRG_MASK (XSPR_MASK & ~(0x1f << 16))
 
@@ -3480,6 +3535,8 @@ const unsigned int num_powerpc_operands = (sizeof (powerpc_operands)
 #define PPC464	PPC440
 #define PPC476	PPC_OPCODE_476
 #define PPC750	PPC_OPCODE_750
+#define GEKKO	PPC_OPCODE_750
+#define BROADWAY PPC_OPCODE_750
 #define PPC7450 PPC_OPCODE_7450
 #define PPC860	PPC_OPCODE_860
 #define PPCPS	PPC_OPCODE_PPCPS
@@ -3512,7 +3569,7 @@ const unsigned int num_powerpc_operands = (sizeof (powerpc_operands)
 #define PPCPMR	PPC_OPCODE_PMR
 #define PPCTMR  PPC_OPCODE_TMR
 #define PPCCHLK PPC_OPCODE_CACHELCK
-#define PPCRFMCI	PPC_OPCODE_RFMCI
+#define PPCRFMCI PPC_OPCODE_RFMCI
 #define E500MC  PPC_OPCODE_E500MC
 #define PPCA2	PPC_OPCODE_A2
 #define TITAN   PPC_OPCODE_TITAN
@@ -5900,6 +5957,18 @@ const struct powerpc_opcode powerpc_opcodes[] = {
 {"mfdpdr",	XSPR(31,339,630), XSPR_MASK, PPC860,	0,		{RT}},
 {"mfdpir",	XSPR(31,339,631), XSPR_MASK, PPC860,	0,		{RT}},
 {"mfimmr",	XSPR(31,339,638), XSPR_MASK, PPC860,	0,		{RT}},
+{"mfupmc1",	XSPR(31,339,771), XSPR_MASK, POWER9,	0, 		{RT}},
+{"mfpmc1",	XSPR(31,339,771), XSPR_MASK, POWER9,	0,		{RT}},
+{"mfupmc2",	XSPR(31,339,772), XSPR_MASK, POWER9,	0,		{RT}},
+{"mfpmc2",	XSPR(31,339,772), XSPR_MASK, POWER9,	0,		{RT}},
+{"mfupmc3",	XSPR(31,339,773), XSPR_MASK, POWER9,	0,		{RT}},
+{"mfpmc3",	XSPR(31,339,773), XSPR_MASK, POWER9,	0,		{RT}},
+{"mfupmc4",	XSPR(31,339,774), XSPR_MASK, POWER9,	0,		{RT}},
+{"mfpmc4",	XSPR(31,339,774), XSPR_MASK, POWER9,	0,		{RT}},
+{"mfupmc5",	XSPR(31,339,775), XSPR_MASK, POWER9,	0,		{RT}},
+{"mfpmc5",	XSPR(31,339,775), XSPR_MASK, POWER9,	0,		{RT}},
+{"mfupmc6",	XSPR(31,339,776), XSPR_MASK, POWER9,	0,		{RT}},
+{"mfpmc6",	XSPR(31,339,776), XSPR_MASK, POWER9,	0,		{RT}},
 {"mfmi_ctr",	XSPR(31,339,784), XSPR_MASK, PPC860,	0,		{RT}},
 {"mfmi_ap",	XSPR(31,339,786), XSPR_MASK, PPC860,	0,		{RT}},
 {"mfmi_epn",	XSPR(31,339,787), XSPR_MASK, PPC860,	0,		{RT}},
@@ -5927,6 +5996,11 @@ const struct powerpc_opcode powerpc_opcodes[] = {
 {"mfccr1",	XSPR(31,339,888), XSPR_MASK, TITAN,	0,		{RT}},
 {"mfppr",	XSPR(31,339,896), XSPR_MASK, POWER7,	0,		{RT}},
 {"mfppr32",	XSPR(31,339,898), XSPR_MASK, POWER7,	0,		{RT}},
+{"mfgqr",	XSPR(31,339,912), XSPRGQR_MASK, PPCPS,	0,		{RT, SPRGQR}},
+{"mfhid2",	XSPR(31,339,920), XSPR_MASK, GEKKO,	0,		{RT}},
+{"mfwpar",	XSPR(31,339,921), XSPR_MASK, GEKKO,	0,		{RT}},
+{"mfdmau",	XSPR(31,339,922), XSPR_MASK, GEKKO,	0,		{RT}},
+{"mfdmal",	XSPR(31,339,923), XSPR_MASK, GEKKO,	0,		{RT}},
 {"mfrstcfg",	XSPR(31,339,923), XSPR_MASK, TITAN,	0,		{RT}},
 {"mfdcdbtrl",	XSPR(31,339,924), XSPR_MASK, TITAN,	0,		{RT}},
 {"mfdcdbtrh",	XSPR(31,339,925), XSPR_MASK, TITAN,	0,		{RT}},
@@ -5971,10 +6045,15 @@ const struct powerpc_opcode powerpc_opcodes[] = {
 {"mfsrr2",	XSPR(31,339,990), XSPR_MASK, PPC403,	0,		{RT}},
 {"mfsrr3",	XSPR(31,339,991), XSPR_MASK, PPC403,	0,		{RT}},
 {"mfdbsr",	XSPR(31,339,1008), XSPR_MASK, PPC403,	0,		{RT}},
+{"mfhid0",	XSPR(31,339,1008), XSPR_MASK, GEKKO,	0,		{RT}},
+{"mfhid1",	XSPR(31,339,1009), XSPR_MASK, GEKKO,	0,		{RT}},
 {"mfdbcr0",	XSPR(31,339,1010), XSPR_MASK, PPC405,	0,		{RT}},
+{"mfiabr",	XSPR(31,339,1010), XSPR_MASK, GEKKO,	0,		{RT}},
+{"mfhid4",	XSPR(31,339,1011), XSPR_MASK, BROADWAY,	0,		{RT}},
 {"mfdbdr",	XSPR(31,339,1011), XSPR_MASK, TITAN,	0,		{RS}},
 {"mfiac1",	XSPR(31,339,1012), XSPR_MASK, PPC403,	0,		{RT}},
 {"mfiac2",	XSPR(31,339,1013), XSPR_MASK, PPC403,	0,		{RT}},
+{"mfdabr",	XSPR(31,339,1013), XSPR_MASK, PPC750,	0,		{RT}},
 {"mfdac1",	XSPR(31,339,1014), XSPR_MASK, PPC403,	0,		{RT}},
 {"mfdac2",	XSPR(31,339,1015), XSPR_MASK, PPC403,	0,		{RT}},
 {"mfl2cr",	XSPR(31,339,1017), XSPR_MASK, PPC750,	0,		{RT}},
@@ -6243,6 +6322,12 @@ const struct powerpc_opcode powerpc_opcodes[] = {
 {"mtmcsrr0",	XSPR(31,467,570), XSPR_MASK, PPCRFMCI,	0,		{RS}},
 {"mtmcsrr1",	XSPR(31,467,571), XSPR_MASK, PPCRFMCI,	0,		{RS}},
 {"mtmcsr",	XSPR(31,467,572), XSPR_MASK, PPCRFMCI,	0,		{RS}},
+{"mtupmc1",	XSPR(31,467,771), XSPR_MASK, POWER9,	0,		{RS}},
+{"mtupmc2",	XSPR(31,467,772), XSPR_MASK, POWER9,	0,		{RS}},
+{"mtupmc3",	XSPR(31,467,773), XSPR_MASK, POWER9,	0,		{RS}},
+{"mtupmc4",	XSPR(31,467,774), XSPR_MASK, POWER9,	0,		{RS}},
+{"mtupmc5",	XSPR(31,467,775), XSPR_MASK, POWER9,	0,		{RS}},
+{"mtupmc6",	XSPR(31,467,776), XSPR_MASK, POWER9,	0,		{RS}},
 {"mtivndx",	XSPR(31,467,880), XSPR_MASK, TITAN,	0,		{RS}},
 {"mtdvndx",	XSPR(31,467,881), XSPR_MASK, TITAN,	0,		{RS}},
 {"mtivlim",	XSPR(31,467,882), XSPR_MASK, TITAN,	0,		{RS}},
@@ -6251,6 +6336,11 @@ const struct powerpc_opcode powerpc_opcodes[] = {
 {"mtccr1",	XSPR(31,467,888), XSPR_MASK, TITAN,	0,		{RS}},
 {"mtppr",	XSPR(31,467,896), XSPR_MASK, POWER7,	0,		{RS}},
 {"mtppr32",	XSPR(31,467,898), XSPR_MASK, POWER7,	0,		{RS}},
+{"mtgqr",	XSPR(31,467,912), XSPRGQR_MASK, PPCPS,	0,		{SPRGQR, RS}},
+{"mthid2",	XSPR(31,467,920), XSPR_MASK, GEKKO,	0,		{RS}},
+{"mtwpar",	XSPR(31,467,921), XSPR_MASK, GEKKO,	0,		{RS}},
+{"mtdmau",	XSPR(31,467,922), XSPR_MASK, GEKKO,	0,		{RS}},
+{"mtdmal",	XSPR(31,467,923), XSPR_MASK, GEKKO,	0,		{RS}},
 {"mtummcr0",	XSPR(31,467,936), XSPR_MASK, PPC750,	0,		{RS}},
 {"mtupmc1",	XSPR(31,467,937), XSPR_MASK, PPC750,	0,		{RS}},
 {"mtupmc2",	XSPR(31,467,938), XSPR_MASK, PPC750,	0,		{RS}},
@@ -6291,10 +6381,15 @@ const struct powerpc_opcode powerpc_opcodes[] = {
 {"mtsrr2",	XSPR(31,467,990), XSPR_MASK, PPC403,	0,		{RS}},
 {"mtsrr3",	XSPR(31,467,991), XSPR_MASK, PPC403,	0,		{RS}},
 {"mtdbsr",	XSPR(31,467,1008), XSPR_MASK, PPC403,	0,		{RS}},
-{"mtdbdr",	XSPR(31,467,1011), XSPR_MASK, TITAN,	0,		{RS}},
+{"mthid0",	XSPR(31,467,1008), XSPR_MASK, GEKKO,	0,		{RS}},
+{"mthid1",	XSPR(31,467,1009), XSPR_MASK, GEKKO,	0,		{RS}},
 {"mtdbcr0",	XSPR(31,467,1010), XSPR_MASK, PPC405,	0,		{RS}},
+{"mtiabr",	XSPR(31,467,1010), XSPR_MASK, GEKKO,	0,		{RS}},
+{"mthid4",	XSPR(31,467,1011), XSPR_MASK, BROADWAY,	0,		{RS}},
+{"mtdbdr",	XSPR(31,467,1011), XSPR_MASK, TITAN,	0,		{RS}},
 {"mtiac1",	XSPR(31,467,1012), XSPR_MASK, PPC403,	0,		{RS}},
 {"mtiac2",	XSPR(31,467,1013), XSPR_MASK, PPC403,	0,		{RS}},
+{"mtdabr",	XSPR(31,467,1013), XSPR_MASK, PPC750,	0,		{RS}},
 {"mtdac1",	XSPR(31,467,1014), XSPR_MASK, PPC403,	0,		{RS}},
 {"mtdac2",	XSPR(31,467,1015), XSPR_MASK, PPC403,	0,		{RS}},
 {"mtl2cr",	XSPR(31,467,1017), XSPR_MASK, PPC750,	0,		{RS}},

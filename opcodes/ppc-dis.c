@@ -94,6 +94,10 @@ struct ppc_mopt ppc_opts[] = {
     0 },
   { "750cl",   PPC_OPCODE_PPC | PPC_OPCODE_750 | PPC_OPCODE_PPCPS
     , 0 },
+  { "gekko",   PPC_OPCODE_PPC | PPC_OPCODE_750 | PPC_OPCODE_PPCPS
+    , 0 },
+  { "broadway", PPC_OPCODE_PPC | PPC_OPCODE_750 | PPC_OPCODE_PPCPS
+    , 0 },
   { "821",     PPC_OPCODE_PPC | PPC_OPCODE_860,
     0 },
   { "850",     PPC_OPCODE_PPC | PPC_OPCODE_860,
@@ -313,6 +317,9 @@ powerpc_init_dialect (struct disassemble_info *info)
     case bfd_mach_ppc_601:
       dialect = ppc_parse_cpu (dialect, &sticky, "601");
       break;
+    case bfd_mach_ppc_750:
+      dialect = ppc_parse_cpu (dialect, &sticky, "750cl");
+      break;
     case bfd_mach_ppc_a35:
     case bfd_mach_ppc_rs64ii:
     case bfd_mach_ppc_rs64iii:
@@ -444,7 +451,7 @@ operand_value_powerpc (const struct powerpc_operand *operand,
 		       uint64_t insn, ppc_cpu_t dialect)
 {
   int64_t value;
-  int invalid;
+  int invalid = 0;
   /* Extract the value from the instruction.  */
   if (operand->extract)
     value = (*operand->extract) (insn, dialect, &invalid);
@@ -477,15 +484,22 @@ skip_optional_operands (const unsigned char *opindex,
 			uint64_t insn, ppc_cpu_t dialect)
 {
   const struct powerpc_operand *operand;
+  int num_optional;
 
-  for (; *opindex != 0; opindex++)
+  for (num_optional = 0; *opindex != 0; opindex++)
     {
       operand = &powerpc_operands[*opindex];
-      if ((operand->flags & PPC_OPERAND_NEXT) != 0
-	  || ((operand->flags & PPC_OPERAND_OPTIONAL) != 0
-	      && operand_value_powerpc (operand, insn, dialect) !=
-		 ppc_optional_operand_value (operand)))
+      if ((operand->flags & PPC_OPERAND_NEXT) != 0)
 	return 0;
+      if ((operand->flags & PPC_OPERAND_OPTIONAL) != 0)
+	{
+	  /* Negative count is used as a flag to extract function.  */
+	  --num_optional;
+	  if (operand_value_powerpc (operand, insn, dialect)
+	      != ppc_optional_operand_value (operand, insn, dialect,
+					     num_optional))
+	    return 0;
+	}
     }
 
   return 1;
@@ -810,24 +824,30 @@ print_insn_powerpc (bfd_vma memaddr,
   return 4;
 }
 
-const disasm_options_t *
+const disasm_options_and_args_t *
 disassembler_options_powerpc (void)
 {
-  static disasm_options_t *opts = NULL;
+  static disasm_options_and_args_t *opts_and_args;
 
-  if (opts == NULL)
+  if (opts_and_args == NULL)
     {
       size_t i, num_options = ARRAY_SIZE (ppc_opts);
-      opts = XNEW (disasm_options_t);
+      disasm_options_t *opts;
+
+      opts_and_args = XNEW (disasm_options_and_args_t);
+      opts_and_args->args = NULL;
+
+      opts = &opts_and_args->options;
       opts->name = XNEWVEC (const char *, num_options + 1);
+      opts->description = NULL;
+      opts->arg = NULL;
       for (i = 0; i < num_options; i++)
 	opts->name[i] = ppc_opts[i].opt;
       /* The array we return must be NULL terminated.  */
       opts->name[i] = NULL;
-      opts->description = NULL;
     }
 
-  return opts;
+  return opts_and_args;
 }
 
 void

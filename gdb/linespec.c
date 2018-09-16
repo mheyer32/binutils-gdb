@@ -1501,8 +1501,6 @@ decode_line_2 (struct linespec_state *self,
   for (i = 0; i < result->size (); ++i)
     {
       const struct linespec_canonical_name *canonical;
-      struct decode_line_2_item *item;
-
       std::string displayform;
 
       canonical = &self->canonical_names[i];
@@ -1556,7 +1554,7 @@ decode_line_2 (struct linespec_state *self,
     {
       prompt = "> ";
     }
-  args = command_line_input (prompt, 0, "overload-choice");
+  args = command_line_input (prompt, "overload-choice");
 
   if (args == 0 || *args == 0)
     error_no_arg (_("one or more choice numbers"));
@@ -2196,6 +2194,7 @@ create_sals_line_offset (struct linespec_state *self,
 
 	    if (self->funfirstline)
 	      skip_prologue_sal (&intermediate_results[i]);
+	    intermediate_results[i].symbol = sym;
 	    add_sal_to_sals (self, &values, &intermediate_results[i],
 			     sym ? SYMBOL_NATURAL_NAME (sym) : NULL, 0);
 	  }
@@ -2224,6 +2223,7 @@ convert_address_location_to_sals (struct linespec_state *self,
   sal.pc = address;
   sal.section = find_pc_overlay (address);
   sal.explicit_pc = 1;
+  sal.symbol = find_pc_sect_containing_function (sal.pc, sal.section);
 
   std::vector<symtab_and_line> sals;
   add_sal_to_sals (self, &sals, &sal, core_addr_to_string (address), 1);
@@ -2283,7 +2283,7 @@ convert_linespec_to_sals (struct linespec_state *state, linespec_p ls)
 		   && SYMBOL_CLASS (sym) == LOC_BLOCK)
 		{
 		  const CORE_ADDR addr
-		    = BLOCK_START (SYMBOL_BLOCK_VALUE (sym));
+		    = BLOCK_ENTRY_PC (SYMBOL_BLOCK_VALUE (sym));
 
 		  bound_minimal_symbol_d *elem;
 		  for (int m = 0;

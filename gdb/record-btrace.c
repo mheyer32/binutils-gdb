@@ -39,6 +39,7 @@
 #include "event-loop.h"
 #include "inf-loop.h"
 #include "vec.h"
+#include "inferior.h"
 #include <algorithm>
 
 static const target_info record_btrace_target_info = {
@@ -244,13 +245,12 @@ record_btrace_get_cpu (void)
 static struct thread_info *
 require_btrace_thread (void)
 {
-  struct thread_info *tp;
-
   DEBUG ("require");
 
-  tp = find_thread_ptid (inferior_ptid);
-  if (tp == NULL)
+  if (inferior_ptid == null_ptid)
     error (_("No thread."));
+
+  thread_info *tp = inferior_thread ();
 
   validate_registers_access ();
 
@@ -1401,7 +1401,7 @@ record_btrace_target::record_is_replaying (ptid_t ptid)
   struct thread_info *tp;
 
   ALL_NON_EXITED_THREADS (tp)
-    if (ptid_match (tp->ptid, ptid) && btrace_is_replaying (tp))
+    if (tp->ptid.matches (ptid) && btrace_is_replaying (tp))
       return true;
 
   return false;
@@ -1569,8 +1569,6 @@ record_btrace_target::fetch_registers (struct regcache *regcache, int regno)
 void
 record_btrace_target::store_registers (struct regcache *regcache, int regno)
 {
-  struct target_ops *t;
-
   if (!record_btrace_generating_corefile
       && record_is_replaying (regcache->ptid ()))
     error (_("Cannot write registers while replaying."));
@@ -1778,8 +1776,7 @@ record_btrace_frame_sniffer (const struct frame_unwind *self,
   struct frame_info *next;
 
   /* THIS_FRAME does not contain a reference to its thread.  */
-  tp = find_thread_ptid (inferior_ptid);
-  gdb_assert (tp != NULL);
+  tp = inferior_thread ();
 
   bfun = NULL;
   next = get_next_frame (this_frame);
@@ -1845,7 +1842,7 @@ record_btrace_tailcall_frame_sniffer (const struct frame_unwind *self,
   if ((callee->flags & BFUN_UP_LINKS_TO_TAILCALL) == 0)
     return 0;
 
-  tinfo = find_thread_ptid (inferior_ptid);
+  tinfo = inferior_thread ();
   if (btrace_find_call_by_number (&it, &tinfo->btrace, callee->up) == 0)
     return 0;
 
@@ -1977,9 +1974,11 @@ get_thread_current_frame (struct thread_info *tp)
   ptid_t old_inferior_ptid;
   int executing;
 
-  /* Set INFERIOR_PTID, which is implicitly used by get_current_frame.  */
-  old_inferior_ptid = inferior_ptid;
-  inferior_ptid = tp->ptid;
+  /* Set current thread, which is implicitly used by
+     get_current_frame.  */
+  scoped_restore_current_thread restore_thread;
+
+  switch_to_thread (tp);
 
   /* Clear the executing flag to allow changes to the current frame.
      We are not actually running, yet.  We just started a reverse execution
@@ -1988,8 +1987,8 @@ get_thread_current_frame (struct thread_info *tp)
      For the former, EXECUTING is true and we're in wait, about to
      move the thread.  Since we need to recompute the stack, we temporarily
      set EXECUTING to flase.  */
-  executing = is_executing (inferior_ptid);
-  set_executing (inferior_ptid, 0);
+  executing = tp->executing;
+  set_executing (inferior_ptid, false);
 
   frame = NULL;
   TRY
@@ -2001,18 +2000,12 @@ get_thread_current_frame (struct thread_info *tp)
       /* Restore the previous execution state.  */
       set_executing (inferior_ptid, executing);
 
-      /* Restore the previous inferior_ptid.  */
-      inferior_ptid = old_inferior_ptid;
-
       throw_exception (except);
     }
   END_CATCH
 
   /* Restore the previous execution state.  */
   set_executing (inferior_ptid, executing);
-
-  /* Restore the previous inferior_ptid.  */
-  inferior_ptid = old_inferior_ptid;
 
   return frame;
 }
@@ -2073,7 +2066,7 @@ record_btrace_start_replaying (struct thread_info *tp)
       btinfo->replay = replay;
 
       /* Make sure we're not using any stale registers.  */
-      registers_changed_ptid (tp->ptid);
+      registers_changed_thread (tp);
 
       /* The current frame with replaying - computed via btrace unwind.  */
       frame = get_thread_current_frame (tp);
@@ -2090,7 +2083,7 @@ record_btrace_start_replaying (struct thread_info *tp)
       xfree (btinfo->replay);
       btinfo->replay = NULL;
 
-      registers_changed_ptid (tp->ptid);
+      registers_changed_thread (tp);
 
       throw_exception (except);
     }
@@ -2112,7 +2105,7 @@ record_btrace_stop_replaying (struct thread_info *tp)
   btinfo->replay = NULL;
 
   /* Make sure we're not leaving any stale registers.  */
-  registers_changed_ptid (tp->ptid);
+  registers_changed_thread (tp);
 }
 
 /* Stop replaying TP if it is at the end of its execution history.  */
@@ -2183,12 +2176,12 @@ record_btrace_target::resume (ptid_t ptid, int step, enum gdb_signal signal)
      For all-stop targets, we only step INFERIOR_PTID and continue others.  */
   if (!target_is_non_stop_p ())
     {
-      gdb_assert (ptid_match (inferior_ptid, ptid));
+      gdb_assert (inferior_ptid.matches (ptid));
 
       ALL_NON_EXITED_THREADS (tp)
-	if (ptid_match (tp->ptid, ptid))
+	if (tp->ptid.matches (ptid))
 	  {
-	    if (ptid_match (tp->ptid, inferior_ptid))
+	    if (tp->ptid.matches (inferior_ptid))
 	      record_btrace_resume_thread (tp, flag);
 	    else
 	      record_btrace_resume_thread (tp, cflag);
@@ -2197,7 +2190,7 @@ record_btrace_target::resume (ptid_t ptid, int step, enum gdb_signal signal)
   else
     {
       ALL_NON_EXITED_THREADS (tp)
-	if (ptid_match (tp->ptid, ptid))
+	if (tp->ptid.matches (ptid))
 	  record_btrace_resume_thread (tp, flag);
     }
 
@@ -2334,7 +2327,6 @@ record_btrace_replay_at_breakpoint (struct thread_info *tp)
   struct btrace_insn_iterator *replay;
   struct btrace_thread_info *btinfo;
   const struct btrace_insn *insn;
-  struct inferior *inf;
 
   btinfo = &tp->btrace;
   replay = btinfo->replay;
@@ -2346,11 +2338,7 @@ record_btrace_replay_at_breakpoint (struct thread_info *tp)
   if (insn == NULL)
     return 0;
 
-  inf = find_inferior_ptid (tp->ptid);
-  if (inf == NULL)
-    return 0;
-
-  return record_check_stopped_by_breakpoint (inf->aspace, insn->pc,
+  return record_check_stopped_by_breakpoint (tp->inf->aspace, insn->pc,
 					     &btinfo->stop_reason);
 }
 
@@ -2565,7 +2553,7 @@ record_btrace_target::wait (ptid_t ptid, struct target_waitstatus *status,
 
     ALL_NON_EXITED_THREADS (tp)
       {
-	if (ptid_match (tp->ptid, ptid)
+	if (tp->ptid.matches (ptid)
 	    && ((tp->btrace.flags & (BTHR_MOVE | BTHR_STOP)) != 0))
 	  moving.push_back (tp);
       }
@@ -2664,7 +2652,7 @@ record_btrace_target::wait (ptid_t ptid, struct target_waitstatus *status,
   record_btrace_clear_histories (&eventing->btrace);
 
   /* We moved the replay position but did not update registers.  */
-  registers_changed_ptid (eventing->ptid);
+  registers_changed_thread (eventing);
 
   DEBUG ("wait ended by thread %s (%s): %s",
 	 print_thread_id (eventing),
@@ -2692,7 +2680,7 @@ record_btrace_target::stop (ptid_t ptid)
       struct thread_info *tp;
 
       ALL_NON_EXITED_THREADS (tp)
-       if (ptid_match (tp->ptid, ptid))
+       if (tp->ptid.matches (ptid))
          {
            tp->btrace.flags &= ~BTHR_MOVE;
            tp->btrace.flags |= BTHR_STOP;
@@ -2782,7 +2770,7 @@ record_btrace_target::thread_alive (ptid_t ptid)
 {
   /* We don't add or remove threads during replay.  */
   if (record_is_replaying (minus_one_ptid))
-    return find_thread_ptid (ptid) != NULL;
+    return true;
 
   /* Forward the request.  */
   return this->beneath ()->thread_alive (ptid);
@@ -2809,13 +2797,14 @@ record_btrace_set_replay (struct thread_info *tp,
 	return;
 
       *btinfo->replay = *it;
-      registers_changed_ptid (tp->ptid);
+      registers_changed_thread (tp);
     }
 
   /* Start anew from the new replay position.  */
   record_btrace_clear_histories (btinfo);
 
-  stop_pc = regcache_read_pc (get_current_regcache ());
+  inferior_thread ()->suspend.stop_pc
+    = regcache_read_pc (get_current_regcache ());
   print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC, 1);
 }
 
@@ -3094,8 +3083,6 @@ cmd_set_record_btrace_cpu (const char *args, int from_tty)
 static void
 cmd_show_record_btrace_cpu (const char *args, int from_tty)
 {
-  const char *cpu;
-
   if (args != nullptr && *args != 0)
     error (_("Trailing junk: '%s'."), args);
 

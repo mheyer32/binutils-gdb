@@ -1588,7 +1588,6 @@ value_ind (struct value *arg1)
     }
 
   error (_("Attempt to take contents of a non-pointer value."));
-  return 0;			/* For lint -- never reached.  */
 }
 
 /* Create a value for an array by allocating space in GDB, copying the
@@ -3343,7 +3342,7 @@ value_struct_elt_for_reference (struct type *domain, int offset,
 				int want_address,
 				enum noside noside)
 {
-  struct type *t = curtype;
+  struct type *t = check_typedef (curtype);
   int i;
   struct value *v, *result;
 

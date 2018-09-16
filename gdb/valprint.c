@@ -2096,10 +2096,10 @@ partial_memory_read (CORE_ADDR memaddr, gdb_byte *myaddr,
   return (nread);
 }
 
-/* Read a string from the inferior, at ADDR, with LEN characters of WIDTH bytes
-   each.  Fetch at most FETCHLIMIT characters.  BUFFER will be set to a newly
-   allocated buffer containing the string, which the caller is responsible to
-   free, and BYTES_READ will be set to the number of bytes read.  Returns 0 on
+/* Read a string from the inferior, at ADDR, with LEN characters of
+   WIDTH bytes each.  Fetch at most FETCHLIMIT characters.  BUFFER
+   will be set to a newly allocated buffer containing the string, and
+   BYTES_READ will be set to the number of bytes read.  Returns 0 on
    success, or a target_xfer_status on failure.
 
    If LEN > 0, reads the lesser of LEN or FETCHLIMIT characters
@@ -2122,20 +2122,18 @@ partial_memory_read (CORE_ADDR memaddr, gdb_byte *myaddr,
 
 int
 read_string (CORE_ADDR addr, int len, int width, unsigned int fetchlimit,
-	     enum bfd_endian byte_order, gdb_byte **buffer, int *bytes_read)
+	     enum bfd_endian byte_order, gdb::unique_xmalloc_ptr<gdb_byte> *buffer,
+	     int *bytes_read)
 {
   int errcode;			/* Errno returned from bad reads.  */
   unsigned int nfetch;		/* Chars to fetch / chars fetched.  */
   gdb_byte *bufptr;		/* Pointer to next available byte in
 				   buffer.  */
-  struct cleanup *old_chain = NULL;	/* Top of the old cleanup chain.  */
 
   /* Loop until we either have all the characters, or we encounter
      some error, such as bumping into the end of the address space.  */
 
-  *buffer = NULL;
-
-  old_chain = make_cleanup (free_current_contents, buffer);
+  buffer->reset (nullptr);
 
   if (len > 0)
     {
@@ -2143,8 +2141,8 @@ read_string (CORE_ADDR addr, int len, int width, unsigned int fetchlimit,
 	 one operation.  */
       unsigned int fetchlen = std::min ((unsigned) len, fetchlimit);
 
-      *buffer = (gdb_byte *) xmalloc (fetchlen * width);
-      bufptr = *buffer;
+      buffer->reset ((gdb_byte *) xmalloc (fetchlen * width));
+      bufptr = buffer->get ();
 
       nfetch = partial_memory_read (addr, bufptr, fetchlen * width, &errcode)
 	/ width;
@@ -2173,12 +2171,12 @@ read_string (CORE_ADDR addr, int len, int width, unsigned int fetchlimit,
 	  nfetch = std::min ((unsigned long) chunksize, fetchlimit - bufsize);
 
 	  if (*buffer == NULL)
-	    *buffer = (gdb_byte *) xmalloc (nfetch * width);
+	    buffer->reset ((gdb_byte *) xmalloc (nfetch * width));
 	  else
-	    *buffer = (gdb_byte *) xrealloc (*buffer,
-					     (nfetch + bufsize) * width);
+	    buffer->reset ((gdb_byte *) xrealloc (buffer->release (),
+						  (nfetch + bufsize) * width));
 
-	  bufptr = *buffer + bufsize * width;
+	  bufptr = buffer->get () + bufsize * width;
 	  bufsize += nfetch;
 
 	  /* Read as much as we can.  */
@@ -2210,23 +2208,22 @@ read_string (CORE_ADDR addr, int len, int width, unsigned int fetchlimit,
 	    }
 	}
       while (errcode == 0	/* no error */
-	     && bufptr - *buffer < fetchlimit * width	/* no overrun */
+	     && bufptr - buffer->get () < fetchlimit * width	/* no overrun */
 	     && !found_nul);	/* haven't found NUL yet */
     }
   else
     {				/* Length of string is really 0!  */
       /* We always allocate *buffer.  */
-      *buffer = bufptr = (gdb_byte *) xmalloc (1);
+      buffer->reset ((gdb_byte *) xmalloc (1));
+      bufptr = buffer->get ();
       errcode = 0;
     }
 
   /* bufptr and addr now point immediately beyond the last byte which we
      consider part of the string (including a '\0' which ends the string).  */
-  *bytes_read = bufptr - *buffer;
+  *bytes_read = bufptr - buffer->get ();
 
   QUIT;
-
-  discard_cleanups (old_chain);
 
   return errcode;
 }
@@ -2575,7 +2572,6 @@ print_converted_chars_to_obstack (struct obstack *obstack,
 	case REPEAT:
 	  {
 	    int j;
-	    char *s;
 
 	    /* We are outputting a character with a repeat count
 	       greater than options->repeat_count_threshold.  */
@@ -2598,13 +2594,13 @@ print_converted_chars_to_obstack (struct obstack *obstack,
 	      print_wchar (gdb_WEOF, elem->buf, elem->buflen, width,
 			   byte_order, obstack, quote_char, &need_escape);
 	    obstack_grow_wstr (obstack, LCST ("'"));
-	    s = xstrprintf (_(" <repeats %u times>"), elem->repeat_count);
+	    std::string s = string_printf (_(" <repeats %u times>"),
+					   elem->repeat_count);
 	    for (j = 0; s[j]; ++j)
 	      {
 		gdb_wchar_t w = gdb_btowc (s[j]);
 		obstack_grow (obstack, &w, sizeof (gdb_wchar_t));
 	      }
-	    xfree (s);
 	  }
 	  break;
 
@@ -2793,8 +2789,7 @@ val_print_string (struct type *elttype, const char *encoding,
   int found_nul;		/* Non-zero if we found the nul char.  */
   unsigned int fetchlimit;	/* Maximum number of chars to print.  */
   int bytes_read;
-  gdb_byte *buffer = NULL;	/* Dynamically growable fetch buffer.  */
-  struct cleanup *old_chain = NULL;	/* Top of the old cleanup chain.  */
+  gdb::unique_xmalloc_ptr<gdb_byte> buffer;	/* Dynamically growable fetch buffer.  */
   struct gdbarch *gdbarch = get_type_arch (elttype);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   int width = TYPE_LENGTH (elttype);
@@ -2812,7 +2807,6 @@ val_print_string (struct type *elttype, const char *encoding,
 
   err = read_string (addr, len, width, fetchlimit, byte_order,
 		     &buffer, &bytes_read);
-  old_chain = make_cleanup (xfree, buffer);
 
   addr += bytes_read;
 
@@ -2823,8 +2817,8 @@ val_print_string (struct type *elttype, const char *encoding,
   /* Determine found_nul by looking at the last character read.  */
   found_nul = 0;
   if (bytes_read >= width)
-    found_nul = extract_unsigned_integer (buffer + bytes_read - width, width,
-					  byte_order) == 0;
+    found_nul = extract_unsigned_integer (buffer.get () + bytes_read - width,
+					  width, byte_order) == 0;
   if (len == -1 && !found_nul)
     {
       gdb_byte *peekbuf;
@@ -2852,7 +2846,7 @@ val_print_string (struct type *elttype, const char *encoding,
      and then the error message.  */
   if (err == 0 || bytes_read > 0)
     {
-      LA_PRINT_STRING (stream, elttype, buffer, bytes_read / width,
+      LA_PRINT_STRING (stream, elttype, buffer.get (), bytes_read / width,
 		       encoding, force_ellipsis, options);
     }
 
@@ -2866,7 +2860,6 @@ val_print_string (struct type *elttype, const char *encoding,
     }
 
   gdb_flush (stream);
-  do_cleanups (old_chain);
 
   return (bytes_read / width);
 }

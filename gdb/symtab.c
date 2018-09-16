@@ -1746,7 +1746,7 @@ fixup_symbol_section (struct symbol *sym, struct objfile *objfile)
       addr = SYMBOL_VALUE_ADDRESS (sym);
       break;
     case LOC_BLOCK:
-      addr = BLOCK_START (SYMBOL_BLOCK_VALUE (sym));
+      addr = BLOCK_ENTRY_PC (SYMBOL_BLOCK_VALUE (sym));
       break;
 
     default:
@@ -3053,7 +3053,6 @@ find_pc_sect_line (CORE_ADDR pc, struct obj_section *section, int notcurrent)
   struct symtab *iter_s;
   struct linetable *l;
   int len;
-  int i;
   struct linetable_entry *item;
   const struct blockvector *bv;
   struct bound_minimal_symbol msymbol;
@@ -3575,11 +3574,12 @@ find_pc_line_pc_range (CORE_ADDR pc, CORE_ADDR *startptr, CORE_ADDR *endptr)
   return sal.symtab != 0;
 }
 
-/* See symtab.h.  */
+/* Helper for find_function_start_sal.  Does most of the work, except
+   setting the sal's symbol.  */
 
-symtab_and_line
-find_function_start_sal (CORE_ADDR func_addr, obj_section *section,
-			 bool funfirstline)
+static symtab_and_line
+find_function_start_sal_1 (CORE_ADDR func_addr, obj_section *section,
+			   bool funfirstline)
 {
   symtab_and_line sal = find_pc_sect_line (func_addr, section, 0);
 
@@ -3616,13 +3616,30 @@ find_function_start_sal (CORE_ADDR func_addr, obj_section *section,
 /* See symtab.h.  */
 
 symtab_and_line
+find_function_start_sal (CORE_ADDR func_addr, obj_section *section,
+			 bool funfirstline)
+{
+  symtab_and_line sal
+    = find_function_start_sal_1 (func_addr, section, funfirstline);
+
+  /* find_function_start_sal_1 does a linetable search, so it finds
+     the symtab and linenumber, but not a symbol.  Fill in the
+     function symbol too.  */
+  sal.symbol = find_pc_sect_containing_function (sal.pc, sal.section);
+
+  return sal;
+}
+
+/* See symtab.h.  */
+
+symtab_and_line
 find_function_start_sal (symbol *sym, bool funfirstline)
 {
   fixup_symbol_section (sym, NULL);
   symtab_and_line sal
-    = find_function_start_sal (BLOCK_START (SYMBOL_BLOCK_VALUE (sym)),
-			       SYMBOL_OBJ_SECTION (symbol_objfile (sym), sym),
-			       funfirstline);
+    = find_function_start_sal_1 (BLOCK_ENTRY_PC (SYMBOL_BLOCK_VALUE (sym)),
+				 SYMBOL_OBJ_SECTION (symbol_objfile (sym), sym),
+				 funfirstline);
   sal.symbol = sym;
   return sal;
 }
@@ -3700,7 +3717,7 @@ skip_prologue_sal (struct symtab_and_line *sal)
       fixup_symbol_section (sym, NULL);
 
       objfile = symbol_objfile (sym);
-      pc = BLOCK_START (SYMBOL_BLOCK_VALUE (sym));
+      pc = BLOCK_ENTRY_PC (SYMBOL_BLOCK_VALUE (sym));
       section = SYMBOL_OBJ_SECTION (objfile, sym);
       name = SYMBOL_LINKAGE_NAME (sym);
     }
@@ -3761,7 +3778,7 @@ skip_prologue_sal (struct symtab_and_line *sal)
       /* Check if gdbarch_skip_prologue left us in mid-line, and the next
 	 line is still part of the same function.  */
       if (skip && start_sal.pc != pc
-	  && (sym ? (BLOCK_START (SYMBOL_BLOCK_VALUE (sym)) <= start_sal.end
+	  && (sym ? (BLOCK_ENTRY_PC (SYMBOL_BLOCK_VALUE (sym)) <= start_sal.end
 		     && start_sal.end < BLOCK_END (SYMBOL_BLOCK_VALUE (sym)))
 	      : (lookup_minimal_symbol_by_pc_section (start_sal.end, section).minsym
 		 == lookup_minimal_symbol_by_pc_section (pc, section).minsym)))
@@ -3965,7 +3982,7 @@ find_function_alias_target (bound_minimal_symbol msymbol)
   symbol *sym = find_pc_function (func_addr);
   if (sym != NULL
       && SYMBOL_CLASS (sym) == LOC_BLOCK
-      && BLOCK_START (SYMBOL_BLOCK_VALUE (sym)) == func_addr)
+      && BLOCK_ENTRY_PC (SYMBOL_BLOCK_VALUE (sym)) == func_addr)
     return sym;
 
   return NULL;
@@ -4970,7 +4987,7 @@ find_gnu_ifunc (const symbol *sym)
 				symbol_name_match_type::SEARCH_NAME);
   struct objfile *objfile = symbol_objfile (sym);
 
-  CORE_ADDR address = BLOCK_START (SYMBOL_BLOCK_VALUE (sym));
+  CORE_ADDR address = BLOCK_ENTRY_PC (SYMBOL_BLOCK_VALUE (sym));
   minimal_symbol *ifunc = NULL;
 
   iterate_over_minimal_symbols (objfile, lookup_name,

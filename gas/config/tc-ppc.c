@@ -1340,7 +1340,8 @@ PowerPC options:\n\
 -m476                   generate code for PowerPC 476\n\
 -m7400, -m7410, -m7450, -m7455\n\
                         generate code for PowerPC 7400/7410/7450/7455\n\
--m750cl                 generate code for PowerPC 750cl\n\
+-m750cl, -mgekko, -mbroadway\n\
+                        generate code for PowerPC 750cl/Gekko/Broadway\n\
 -m821, -m850, -m860     generate code for PowerPC 821/850/860\n"));
   fprintf (stream, _("\
 -mppc64, -m620          generate code for PowerPC 620/625/630\n\
@@ -2084,6 +2085,7 @@ ppc_elf_suffix (char **str_p, expressionS *exp_p)
     MAP64 ("tprel@highera",	BFD_RELOC_PPC64_TPREL16_HIGHERA),
     MAP64 ("tprel@highest",	BFD_RELOC_PPC64_TPREL16_HIGHEST),
     MAP64 ("tprel@highesta",	BFD_RELOC_PPC64_TPREL16_HIGHESTA),
+    MAP64 ("notoc",		BFD_RELOC_PPC64_REL24_NOTOC),
     { (char *) 0, 0, 0, 0,	BFD_RELOC_NONE }
   };
 
@@ -2378,12 +2380,22 @@ ppc_elf_localentry (int ignore ATTRIBUTE_UNUSED)
   if (resolve_expression (&exp)
       && exp.X_op == O_constant)
     {
-      unsigned char encoded = PPC64_SET_LOCAL_ENTRY_OFFSET (exp.X_add_number);
+      unsigned int encoded, ok;
 
-      if (exp.X_add_number != (offsetT) PPC64_LOCAL_ENTRY_OFFSET (encoded))
-        as_bad (_(".localentry expression for `%s' "
-		  "is not a valid power of 2"), S_GET_NAME (sym));
+      ok = 1;
+      if (exp.X_add_number == 1 || exp.X_add_number == 7)
+	encoded = exp.X_add_number << STO_PPC64_LOCAL_BIT;
       else
+	{
+	  encoded = PPC64_SET_LOCAL_ENTRY_OFFSET (exp.X_add_number);
+	  if (exp.X_add_number != (offsetT) PPC64_LOCAL_ENTRY_OFFSET (encoded))
+	    {
+	      as_bad (_(".localentry expression for `%s' "
+			"is not a valid power of 2"), S_GET_NAME (sym));
+	      ok = 0;
+	    }
+	}
+      if (ok)
 	{
 	  bfdsym = symbol_get_bfdsym (sym);
 	  elfsym = elf_symbol_from (bfd_asymbol_bfd (bfdsym), bfdsym);
@@ -2733,7 +2745,6 @@ md_assemble (char *str)
   const struct powerpc_opcode *opcode;
   uint64_t insn;
   const unsigned char *opindex_ptr;
-  int skip_optional;
   int need_paren;
   int next_opindex;
   struct ppc_fixup fixups[MAX_INSN_FIXUPS];
@@ -2771,55 +2782,11 @@ md_assemble (char *str)
     ++str;
 
   /* PowerPC operands are just expressions.  The only real issue is
-     that a few operand types are optional.  All cases which might use
-     an optional operand separate the operands only with commas (in some
-     cases parentheses are used, as in ``lwz 1,0(1)'' but such cases never
-     have optional operands).  Most instructions with optional operands
-     have only one.  Those that have more than one optional operand can
-     take either all their operands or none.  So, before we start seriously
-     parsing the operands, we check to see if we have optional operands,
-     and if we do, we count the number of commas to see which operands
-     have been omitted.  */
-  skip_optional = 0;
-  for (opindex_ptr = opcode->operands; *opindex_ptr != 0; opindex_ptr++)
-    {
-      const struct powerpc_operand *operand;
-
-      operand = &powerpc_operands[*opindex_ptr];
-      if ((operand->flags & PPC_OPERAND_OPTIONAL) != 0
-	  && !((operand->flags & PPC_OPERAND_OPTIONAL32) != 0 && ppc_obj64))
-	{
-	  unsigned int opcount;
-	  unsigned int num_operands_expected;
-
-	  /* There is an optional operand.  Count the number of
-	     commas in the input line.  */
-	  if (*str == '\0')
-	    opcount = 0;
-	  else
-	    {
-	      opcount = 1;
-	      s = str;
-	      while ((s = strchr (s, ',')) != (char *) NULL)
-		{
-		  ++opcount;
-		  ++s;
-		}
-	    }
-
-	  /* Compute the number of expected operands.  */
-	  for (num_operands_expected = 0, i = 0; opcode->operands[i]; i ++)
-	    ++ num_operands_expected;
-
-	  /* If there are fewer operands in the line then are called
-	     for by the instruction, we want to skip the optional
-	     operands.  */
-	  if (opcount < num_operands_expected)
-	    skip_optional = 1;
-
-	  break;
-	}
-    }
+     that a few operand types are optional.  If an instruction has
+     multiple optional operands and one is omitted, then all optional
+     operands past the first omitted one must also be omitted.  */
+  int num_optional_operands = 0;
+  int num_optional_provided = 0;
 
   /* Gather the operands.  */
   need_paren = 0;
@@ -2843,26 +2810,66 @@ md_assemble (char *str)
       errmsg = NULL;
 
       /* If this is an optional operand, and we are skipping it, just
-	 insert a zero.  */
+	 insert the default value, usually a zero.  */
       if ((operand->flags & PPC_OPERAND_OPTIONAL) != 0
-	  && !((operand->flags & PPC_OPERAND_OPTIONAL32) != 0 && ppc_obj64)
-	  && skip_optional)
+	  && !((operand->flags & PPC_OPERAND_OPTIONAL32) != 0 && ppc_obj64))
 	{
-	  int64_t val = ppc_optional_operand_value (operand);
-	  if (operand->insert)
+	  if (num_optional_operands == 0)
 	    {
-	      insn = (*operand->insert) (insn, val, ppc_cpu, &errmsg);
-	      if (errmsg != (const char *) NULL)
-		as_bad ("%s", errmsg);
-	    }
-	  else if (operand->shift >= 0)
-	    insn |= (val & operand->bitm) << operand->shift;
-	  else
-	    insn |= (val & operand->bitm) >> -operand->shift;
+	      const unsigned char *optr;
+	      int total = 0;
+	      int provided = 0;
+	      int omitted;
 
-	  if ((operand->flags & PPC_OPERAND_NEXT) != 0)
-	    next_opindex = *opindex_ptr + 1;
-	  continue;
+	      s = str;
+	      for (optr = opindex_ptr; *optr != 0; optr++)
+		{
+		  const struct powerpc_operand *op;
+		  op = &powerpc_operands[*optr];
+
+		  ++total;
+
+		  if ((op->flags & PPC_OPERAND_OPTIONAL) != 0
+		      && !((op->flags & PPC_OPERAND_OPTIONAL32) != 0
+			   && ppc_obj64))
+		    ++num_optional_operands;
+
+		  if (s != NULL && *s != '\0')
+		    {
+		      ++provided;
+
+		      /* Look for the start of the next operand.  */
+		      if ((op->flags & PPC_OPERAND_PARENS) != 0)
+			s = strpbrk (s, "(,");
+		      else
+			s = strchr (s, ',');
+
+		      if (s != NULL)
+			++s;
+		    }
+		}
+	      omitted = total - provided;
+	      num_optional_provided = num_optional_operands - omitted;
+	    }
+	  if (--num_optional_provided < 0)
+	    {
+	      int64_t val = ppc_optional_operand_value (operand, insn, ppc_cpu,
+							num_optional_provided);
+	      if (operand->insert)
+		{
+		  insn = (*operand->insert) (insn, val, ppc_cpu, &errmsg);
+		  if (errmsg != (const char *) NULL)
+		    as_bad ("%s", errmsg);
+		}
+	      else if (operand->shift >= 0)
+		insn |= (val & operand->bitm) << operand->shift;
+	      else
+		insn |= (val & operand->bitm) >> -operand->shift;
+
+	      if ((operand->flags & PPC_OPERAND_NEXT) != 0)
+		next_opindex = *opindex_ptr + 1;
+	      continue;
+	    }
 	}
 
       /* Gather the operand.  */
@@ -3436,27 +3443,28 @@ md_assemble (char *str)
 	    }
 	}
       else if ((operand->flags & PPC_OPERAND_PARENS) != 0)
-	{
-	  endc = '(';
-	  need_paren = 1;
-	}
+	endc = '(';
       else
 	endc = ',';
 
       /* The call to expression should have advanced str past any
 	 whitespace.  */
-      if (*str != endc
-	  && (endc != ',' || *str != '\0'))
+      if (*str == endc)
 	{
-	  if (*str == '\0')
-	    as_bad (_("syntax error; end of line, expected `%c'"), endc);
-	  else
-	    as_bad (_("syntax error; found `%c', expected `%c'"), *str, endc);
+	  ++str;
+	  if (endc == '(')
+	    need_paren = 1;
+	}
+      else if (*str != '\0')
+	{
+	  as_bad (_("syntax error; found `%c', expected `%c'"), *str, endc);
 	  break;
 	}
-
-      if (*str != '\0')
-	++str;
+      else if (endc == ')')
+	{
+	  as_bad (_("syntax error; end of line, expected `%c'"), endc);
+	  break;
+	}
     }
 
   while (ISSPACE (*str))
@@ -6405,6 +6413,7 @@ ppc_force_relocation (fixS *fix)
     case BFD_RELOC_PPC_BA26:
     case BFD_RELOC_PPC_B16:
     case BFD_RELOC_PPC_BA16:
+    case BFD_RELOC_PPC64_REL24_NOTOC:
       /* All branch fixups targeting a localentry symbol must
          force a relocation.  */
       if (fix->fx_addsy)
@@ -6443,6 +6452,7 @@ ppc_fix_adjustable (fixS *fix)
     case BFD_RELOC_PPC_B16_BRNTAKEN:
     case BFD_RELOC_PPC_BA16_BRTAKEN:
     case BFD_RELOC_PPC_BA16_BRNTAKEN:
+    case BFD_RELOC_PPC64_REL24_NOTOC:
       if (fix->fx_addsy)
 	{
 	  asymbol *bfdsym = symbol_get_bfdsym (fix->fx_addsy);

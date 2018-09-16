@@ -94,10 +94,6 @@ static char *inferior_io_terminal_scratch;
 
 ptid_t inferior_ptid;
 
-/* Address at which inferior stopped.  */
-
-CORE_ADDR stop_pc;
-
 /* Nonzero if stopped due to completion of a stack dummy routine.  */
 
 enum stop_stack_kind stop_stack_dummy;
@@ -448,10 +444,12 @@ post_create_inferior (struct target_ops *target, int from_tty)
   /* Now that we know the register layout, retrieve current PC.  But
      if the PC is unavailable (e.g., we're opening a core file with
      missing registers info), ignore it.  */
-  stop_pc = 0;
+  thread_info *thr = inferior_thread ();
+
+  thr->suspend.stop_pc = 0;
   TRY
     {
-      stop_pc = regcache_read_pc (get_current_regcache ());
+      thr->suspend.stop_pc = regcache_read_pc (get_current_regcache ());
     }
   CATCH (ex, RETURN_MASK_ERROR)
     {
@@ -510,7 +508,7 @@ post_create_inferior (struct target_ops *target, int from_tty)
 static void
 kill_if_already_running (int from_tty)
 {
-  if (! ptid_equal (inferior_ptid, null_ptid) && target_has_execution)
+  if (inferior_ptid != null_ptid && target_has_execution)
     {
       /* Bail out before killing the program if we will not be able to
 	 restart it.  */
@@ -723,10 +721,10 @@ proceed_thread_callback (struct thread_info *thread, void *arg)
      much.  If/when GDB gains a way to tell the target `hold this
      thread stopped until I say otherwise', then we can optimize
      this.  */
-  if (!is_stopped (thread->ptid))
+  if (thread->state != THREAD_STOPPED)
     return 0;
 
-  switch_to_thread (thread->ptid);
+  switch_to_thread (thread);
   clear_proceed_status (0);
   proceed ((CORE_ADDR) -1, GDB_SIGNAL_DEFAULT);
   return 0;
@@ -735,8 +733,8 @@ proceed_thread_callback (struct thread_info *thread, void *arg)
 static void
 ensure_valid_thread (void)
 {
-  if (ptid_equal (inferior_ptid, null_ptid)
-      || is_exited (inferior_ptid))
+  if (inferior_ptid == null_ptid
+      || inferior_thread ()->state == THREAD_EXITED)
     error (_("Cannot execute this command without a live selected thread."));
 }
 
@@ -765,7 +763,7 @@ error_is_running (void)
 static void
 ensure_not_running (void)
 {
-  if (is_running (inferior_ptid))
+  if (inferior_thread ()->state == THREAD_RUNNING)
     error_is_running ();
 }
 
@@ -855,7 +853,7 @@ continue_command (const char *args, int from_tty)
       struct thread_info *tp;
 
       if (non_stop)
-	tp = find_thread_ptid (inferior_ptid);
+	tp = inferior_thread ();
       else
 	{
 	  ptid_t last_ptid;
@@ -1148,7 +1146,7 @@ prepare_one_step (struct step_command_fsm *sm)
 
 	  /* Step at an inlined function behaves like "down".  */
 	  if (!sm->skip_subroutines
-	      && inline_skipped_frames (inferior_ptid))
+	      && inline_skipped_frames (tp))
 	    {
 	      ptid_t resume_ptid;
 
@@ -1156,7 +1154,7 @@ prepare_one_step (struct step_command_fsm *sm)
 	      resume_ptid = user_visible_resume_ptid (1);
 	      set_running (resume_ptid, 1);
 
-	      step_into_inline_frame (inferior_ptid);
+	      step_into_inline_frame (tp);
 	      sm->count--;
 	      return prepare_one_step (sm);
 	    }
@@ -1351,9 +1349,9 @@ signal_command (const char *signum_exp, int from_tty)
 
       ALL_NON_EXITED_THREADS (tp)
 	{
-	  if (ptid_equal (tp->ptid, inferior_ptid))
+	  if (tp->ptid == inferior_ptid)
 	    continue;
-	  if (!ptid_match (tp->ptid, resume_ptid))
+	  if (!tp->ptid.matches (resume_ptid))
 	    continue;
 
 	  if (tp->suspend.stop_signal != GDB_SIGNAL_0
@@ -1554,7 +1552,7 @@ until_next_command (int from_tty)
     {
       sal = find_pc_line (pc, 0);
 
-      tp->control.step_range_start = BLOCK_START (SYMBOL_BLOCK_VALUE (func));
+      tp->control.step_range_start = BLOCK_ENTRY_PC (SYMBOL_BLOCK_VALUE (func));
       tp->control.step_range_end = sal.end;
     }
   tp->control.may_range_step = 1;
@@ -2076,7 +2074,6 @@ info_program_command (const char *args, int from_tty)
 {
   bpstat bs;
   int num, stat;
-  struct thread_info *tp;
   ptid_t ptid;
 
   if (!target_has_execution)
@@ -2094,18 +2091,22 @@ info_program_command (const char *args, int from_tty)
       get_last_target_status (&ptid, &ws);
     }
 
-  if (ptid_equal (ptid, null_ptid) || is_exited (ptid))
+  if (ptid == null_ptid || ptid == minus_one_ptid)
+    error (_("No selected thread."));
+
+  thread_info *tp = find_thread_ptid (ptid);
+
+  if (tp->state == THREAD_EXITED)
     error (_("Invalid selected thread."));
-  else if (is_running (ptid))
+  else if (tp->state == THREAD_RUNNING)
     error (_("Selected thread is running."));
 
-  tp = find_thread_ptid (ptid);
   bs = tp->control.stop_bpstat;
   stat = bpstat_num (&bs, &num);
 
   target_files_info ();
   printf_filtered (_("Program stopped at %s.\n"),
-		   paddress (target_gdbarch (), stop_pc));
+		   paddress (target_gdbarch (), tp->suspend.stop_pc));
   if (tp->control.stop_step)
     printf_filtered (_("It stopped after being stepped.\n"));
   else if (stat != 0)
@@ -2591,7 +2592,7 @@ kill_command (const char *arg, int from_tty)
      It should be a distinct flag that indicates that a target is active, cuz
      some targets don't have processes!  */
 
-  if (ptid_equal (inferior_ptid, null_ptid))
+  if (inferior_ptid == null_ptid)
     error (_("The program is not being run."));
   if (!query (_("Kill the program being debugged? ")))
     error (_("Not confirmed."));
@@ -2599,7 +2600,7 @@ kill_command (const char *arg, int from_tty)
   int pid = current_inferior ()->pid;
   /* Save the pid as a string before killing the inferior, since that
      may unpush the current target, and we need the string after.  */
-  std::string pid_str = target_pid_to_str (pid_to_ptid (pid));
+  std::string pid_str = target_pid_to_str (ptid_t (pid));
   int infnum = current_inferior ()->num;
 
   target_kill ();
@@ -2637,13 +2638,13 @@ proceed_after_attach_callback (struct thread_info *thread,
 {
   int pid = * (int *) arg;
 
-  if (ptid_get_pid (thread->ptid) == pid
-      && !is_exited (thread->ptid)
-      && !is_executing (thread->ptid)
+  if (thread->ptid.pid () == pid
+      && thread->state != THREAD_EXITED
+      && !thread->executing
       && !thread->stop_requested
       && thread->suspend.stop_signal == GDB_SIGNAL_0)
     {
-      switch_to_thread (thread->ptid);
+      switch_to_thread (thread);
       clear_proceed_status (0);
       proceed ((CORE_ADDR) -1, GDB_SIGNAL_DEFAULT);
     }
@@ -2676,7 +2677,7 @@ setup_inferior (int from_tty)
   /* If no exec file is yet known, try to determine it from the
      process itself.  */
   if (get_exec_file (0) == NULL)
-    exec_file_locate_attach (ptid_get_pid (inferior_ptid), 1, from_tty);
+    exec_file_locate_attach (inferior_ptid.pid (), 1, from_tty);
   else
     {
       reopen_exec_file ();
@@ -2684,7 +2685,7 @@ setup_inferior (int from_tty)
     }
 
   /* Take any necessary post-attaching actions for this platform.  */
-  target_post_attach (ptid_get_pid (inferior_ptid));
+  target_post_attach (inferior_ptid.pid ());
 
   post_create_inferior (current_top_target (), from_tty);
 }
@@ -2750,7 +2751,7 @@ attach_post_wait (const char *args, int from_tty, enum attach_post_wait_mode mod
 	 Be sure to explicitly stop all threads of the process.  This
 	 should have no effect on already stopped threads.  */
       if (non_stop)
-	target_stop (pid_to_ptid (inferior->pid));
+	target_stop (ptid_t (inferior->pid));
       else if (target_is_non_stop_p ())
 	{
 	  struct thread_info *thread;
@@ -2765,7 +2766,7 @@ attach_post_wait (const char *args, int from_tty, enum attach_post_wait_mode mod
 	     still exists.  */
 	  ALL_NON_EXITED_THREADS (thread)
 	    {
-	      if (ptid_get_pid (thread->ptid) == pid)
+	      if (thread->ptid.pid () == pid)
 		{
 		  if (thread->inf->num < lowest->inf->num
 		      || thread->per_inf_num < lowest->per_inf_num)
@@ -2773,7 +2774,7 @@ attach_post_wait (const char *args, int from_tty, enum attach_post_wait_mode mod
 		}
 	    }
 
-	  switch_to_thread (lowest->ptid);
+	  switch_to_thread (lowest);
 	}
 
       /* Tell the user/frontend where we're stopped.  */
@@ -2896,7 +2897,7 @@ attach_command (const char *args, int from_tty)
       else
 	/* The user requested an `attach', so stop all threads of this
 	   inferior.  */
-	target_stop (pid_to_ptid (ptid_get_pid (inferior_ptid)));
+	target_stop (ptid_t (inferior_ptid.pid ()));
     }
 
   mode = async_exec ? ATTACH_POST_WAIT_RESUME : ATTACH_POST_WAIT_STOP;
@@ -2939,7 +2940,7 @@ attach_command (const char *args, int from_tty)
    as stopped.  */
 
 void
-notice_new_inferior (ptid_t ptid, int leave_running, int from_tty)
+notice_new_inferior (thread_info *thr, int leave_running, int from_tty)
 {
   enum attach_post_wait_mode mode
     = leave_running ? ATTACH_POST_WAIT_RESUME : ATTACH_POST_WAIT_NOTHING;
@@ -2951,12 +2952,12 @@ notice_new_inferior (ptid_t ptid, int leave_running, int from_tty)
 
   /* Avoid reading registers -- we haven't fetched the target
      description yet.  */
-  switch_to_thread_no_regs (find_thread_ptid (ptid));
+  switch_to_thread_no_regs (thr);
 
   /* When we "notice" a new inferior we need to do all the things we
      would normally do if we had just attached to it.  */
 
-  if (is_executing (inferior_ptid))
+  if (thr->executing)
     {
       struct attach_command_continuation_args *a;
       struct inferior *inferior = current_inferior ();
@@ -2998,7 +2999,7 @@ detach_command (const char *args, int from_tty)
 {
   dont_repeat ();		/* Not for the faint of heart.  */
 
-  if (ptid_equal (inferior_ptid, null_ptid))
+  if (inferior_ptid == null_ptid)
     error (_("The program is not being run."));
 
   query_if_trace_running (from_tty);

@@ -605,21 +605,21 @@ ppc_linux_iterate_over_regset_sections (struct gdbarch *gdbarch,
   int have_vsx = tdep->ppc_vsr0_upper_regnum != -1;
 
   if (tdep->wordsize == 4)
-    cb (".reg", 48 * 4, &ppc32_linux_gregset, NULL, cb_data);
+    cb (".reg", 48 * 4, 48 * 4, &ppc32_linux_gregset, NULL, cb_data);
   else
-    cb (".reg", 48 * 8, &ppc64_linux_gregset, NULL, cb_data);
+    cb (".reg", 48 * 8, 48 * 8, &ppc64_linux_gregset, NULL, cb_data);
 
-  cb (".reg2", 264, &ppc32_linux_fpregset, NULL, cb_data);
+  cb (".reg2", 264, 264, &ppc32_linux_fpregset, NULL, cb_data);
 
   if (have_altivec)
     {
       const struct regset *vrregset = ppc_linux_vrregset (gdbarch);
-      cb (".reg-ppc-vmx", PPC_LINUX_SIZEOF_VRREGSET, vrregset,
-	  "ppc Altivec", cb_data);
+      cb (".reg-ppc-vmx", PPC_LINUX_SIZEOF_VRREGSET, PPC_LINUX_SIZEOF_VRREGSET,
+	  vrregset, "ppc Altivec", cb_data);
     }
 
   if (have_vsx)
-    cb (".reg-ppc-vsx", PPC_LINUX_SIZEOF_VSXREGSET,
+    cb (".reg-ppc-vsx", PPC_LINUX_SIZEOF_VSXREGSET, PPC_LINUX_SIZEOF_VSXREGSET,
 	&ppc32_linux_vsxregset, "POWER7 VSX", cb_data);
 }
 
@@ -803,9 +803,9 @@ ppc_linux_trap_reg_p (struct gdbarch *gdbarch)
    r0 register.  When the function fails, it returns -1.  */
 static LONGEST
 ppc_linux_get_syscall_number (struct gdbarch *gdbarch,
-                              ptid_t ptid)
+			      thread_info *thread)
 {
-  struct regcache *regcache = get_thread_regcache (ptid);
+  struct regcache *regcache = get_thread_regcache (thread);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
 
@@ -1269,7 +1269,7 @@ ppc_linux_spe_context (int wordsize, enum bfd_endian byte_order,
     return 0;
 
   /* Look up cached address of thread-local variable.  */
-  if (!ptid_equal (spe_context_cache_ptid, inferior_ptid))
+  if (spe_context_cache_ptid != inferior_ptid)
     {
       struct target_ops *target = current_top_target ();
 
@@ -1371,9 +1371,8 @@ struct ppu2spu_data
 };
 
 static enum register_status
-ppu2spu_unwind_register (void *src, int regnum, gdb_byte *buf)
+ppu2spu_unwind_register (ppu2spu_data *data, int regnum, gdb_byte *buf)
 {
-  struct ppu2spu_data *data = (struct ppu2spu_data *) src;
   enum bfd_endian byte_order = gdbarch_byte_order (data->gdbarch);
 
   if (regnum >= 0 && regnum < SPU_NUM_GPRS)
@@ -1435,12 +1434,14 @@ ppu2spu_sniffer (const struct frame_unwind *self,
 		       data.gprs, 0, sizeof data.gprs)
 	  == sizeof data.gprs)
 	{
+	  auto cooked_read = [&data] (int regnum, gdb_byte *buf)
+	    {
+	      return ppu2spu_unwind_register (&data, regnum, buf);
+	    };
 	  struct ppu2spu_cache *cache
 	    = FRAME_OBSTACK_CALLOC (1, struct ppu2spu_cache);
 	  std::unique_ptr<readonly_detached_regcache> regcache
-	    (new readonly_detached_regcache (data.gdbarch,
-					     ppu2spu_unwind_register,
-					     &data));
+	    (new readonly_detached_regcache (data.gdbarch, cooked_read));
 
 	  cache->frame_id = frame_id_build (base, func);
 	  cache->regcache = regcache.release ();

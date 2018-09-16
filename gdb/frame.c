@@ -1024,21 +1024,19 @@ get_frame_func (struct frame_info *this_frame)
   return pc;
 }
 
-static enum register_status
-do_frame_register_read (void *src, int regnum, gdb_byte *buf)
-{
-  if (!deprecated_frame_register_read ((struct frame_info *) src, regnum, buf))
-    return REG_UNAVAILABLE;
-  else
-    return REG_VALID;
-}
-
 std::unique_ptr<readonly_detached_regcache>
 frame_save_as_regcache (struct frame_info *this_frame)
 {
+  auto cooked_read = [this_frame] (int regnum, gdb_byte *buf)
+    {
+      if (!deprecated_frame_register_read (this_frame, regnum, buf))
+	return REG_UNAVAILABLE;
+      else
+	return REG_VALID;
+    };
+
   std::unique_ptr<readonly_detached_regcache> regcache
-    (new readonly_detached_regcache (get_frame_arch (this_frame),
-				     do_frame_register_read, this_frame));
+    (new readonly_detached_regcache (get_frame_arch (this_frame), cooked_read));
 
   return regcache;
 }
@@ -1052,7 +1050,7 @@ frame_pop (struct frame_info *this_frame)
     {
       /* Popping a dummy frame involves restoring more than just registers.
 	 dummy_frame_pop does all the work.  */
-      dummy_frame_pop (get_frame_id (this_frame), inferior_ptid);
+      dummy_frame_pop (get_frame_id (this_frame), inferior_thread ());
       return;
     }
 
@@ -1093,7 +1091,7 @@ frame_pop (struct frame_info *this_frame)
 }
 
 void
-frame_register_unwind (struct frame_info *frame, int regnum,
+frame_register_unwind (frame_info *next_frame, int regnum,
 		       int *optimizedp, int *unavailablep,
 		       enum lval_type *lvalp, CORE_ADDR *addrp,
 		       int *realnump, gdb_byte *bufferp)
@@ -1108,7 +1106,7 @@ frame_register_unwind (struct frame_info *frame, int regnum,
   gdb_assert (realnump != NULL);
   /* gdb_assert (bufferp != NULL); */
 
-  value = frame_unwind_register_value (frame, regnum);
+  value = frame_unwind_register_value (next_frame, regnum);
 
   gdb_assert (value != NULL);
 
@@ -1156,7 +1154,7 @@ frame_register (struct frame_info *frame, int regnum,
 }
 
 void
-frame_unwind_register (struct frame_info *frame, int regnum, gdb_byte *buf)
+frame_unwind_register (frame_info *next_frame, int regnum, gdb_byte *buf)
 {
   int optimized;
   int unavailable;
@@ -1164,7 +1162,7 @@ frame_unwind_register (struct frame_info *frame, int regnum, gdb_byte *buf)
   int realnum;
   enum lval_type lval;
 
-  frame_register_unwind (frame, regnum, &optimized, &unavailable,
+  frame_register_unwind (next_frame, regnum, &optimized, &unavailable,
 			 &lval, &addr, &realnum, buf);
 
   if (optimized)
@@ -1183,29 +1181,31 @@ get_frame_register (struct frame_info *frame,
 }
 
 struct value *
-frame_unwind_register_value (struct frame_info *frame, int regnum)
+frame_unwind_register_value (frame_info *next_frame, int regnum)
 {
   struct gdbarch *gdbarch;
   struct value *value;
 
-  gdb_assert (frame != NULL);
-  gdbarch = frame_unwind_arch (frame);
+  gdb_assert (next_frame != NULL);
+  gdbarch = frame_unwind_arch (next_frame);
 
   if (frame_debug)
     {
       fprintf_unfiltered (gdb_stdlog,
 			  "{ frame_unwind_register_value "
 			  "(frame=%d,regnum=%d(%s),...) ",
-			  frame->level, regnum,
+			  next_frame->level, regnum,
 			  user_reg_map_regnum_to_name (gdbarch, regnum));
     }
 
   /* Find the unwinder.  */
-  if (frame->unwind == NULL)
-    frame_unwind_find_by_frame (frame, &frame->prologue_cache);
+  if (next_frame->unwind == NULL)
+    frame_unwind_find_by_frame (next_frame, &next_frame->prologue_cache);
 
   /* Ask this frame to unwind its register.  */
-  value = frame->unwind->prev_register (frame, &frame->prologue_cache, regnum);
+  value = next_frame->unwind->prev_register (next_frame,
+					     &next_frame->prologue_cache,
+					     regnum);
 
   if (frame_debug)
     {
@@ -1255,12 +1255,12 @@ get_frame_register_value (struct frame_info *frame, int regnum)
 }
 
 LONGEST
-frame_unwind_register_signed (struct frame_info *frame, int regnum)
+frame_unwind_register_signed (frame_info *next_frame, int regnum)
 {
-  struct gdbarch *gdbarch = frame_unwind_arch (frame);
+  struct gdbarch *gdbarch = frame_unwind_arch (next_frame);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   int size = register_size (gdbarch, regnum);
-  struct value *value = frame_unwind_register_value (frame, regnum);
+  struct value *value = frame_unwind_register_value (next_frame, regnum);
 
   gdb_assert (value != NULL);
 
@@ -1289,12 +1289,12 @@ get_frame_register_signed (struct frame_info *frame, int regnum)
 }
 
 ULONGEST
-frame_unwind_register_unsigned (struct frame_info *frame, int regnum)
+frame_unwind_register_unsigned (frame_info *next_frame, int regnum)
 {
-  struct gdbarch *gdbarch = frame_unwind_arch (frame);
+  struct gdbarch *gdbarch = frame_unwind_arch (next_frame);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   int size = register_size (gdbarch, regnum);
-  struct value *value = frame_unwind_register_value (frame, regnum);
+  struct value *value = frame_unwind_register_value (next_frame, regnum);
 
   gdb_assert (value != NULL);
 
@@ -1624,15 +1624,16 @@ has_stack_frames (void)
   if (get_traceframe_number () < 0)
     {
       /* No current inferior, no frame.  */
-      if (ptid_equal (inferior_ptid, null_ptid))
+      if (inferior_ptid == null_ptid)
 	return 0;
 
+      thread_info *tp = inferior_thread ();
       /* Don't try to read from a dead thread.  */
-      if (is_exited (inferior_ptid))
+      if (tp->state == THREAD_EXITED)
 	return 0;
 
       /* ... or from a spinning thread.  */
-      if (is_executing (inferior_ptid))
+      if (tp->executing)
 	return 0;
     }
 
@@ -2499,7 +2500,7 @@ find_frame_sal (frame_info *frame)
       if (next_frame)
 	sym = get_frame_function (next_frame);
       else
-	sym = inline_skipped_symbol (inferior_ptid);
+	sym = inline_skipped_symbol (inferior_thread ());
 
       /* If frame is inline, it certainly has symbols.  */
       gdb_assert (sym);

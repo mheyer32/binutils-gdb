@@ -28,6 +28,7 @@
 #include "gdbcmd.h"
 #include "regcache.h"
 #include "inferior.h"
+#include "gdbthread.h"
 #include "compile.h"
 #include "block.h"
 #include "arch-utils.h"
@@ -555,7 +556,6 @@ static void
 store_regs (struct type *regs_type, CORE_ADDR regs_base)
 {
   struct gdbarch *gdbarch = target_gdbarch ();
-  struct regcache *regcache = get_thread_regcache (inferior_ptid);
   int fieldno;
 
   for (fieldno = 0; fieldno < TYPE_NFIELDS (regs_type); fieldno++)

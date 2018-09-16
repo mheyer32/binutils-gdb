@@ -24,7 +24,7 @@
 #include <stdbool.h>
 #include <assert.h>
 
-#include "s12z.h"
+#include "opcode/s12z.h"
 
 #include "bfd.h"
 #include "dis-asm.h"
@@ -811,22 +811,22 @@ lea_reg_xys_opr (bfd_vma memaddr, struct disassemble_info* info)
   if (status < 0)
     return;
 
-  char *reg = NULL;
+  char *reg_xys = NULL;
   switch (byte & 0x03)
     {
     case 0x00:
-      reg = "x";
+      reg_xys = "x";
       break;
     case 0x01:
-      reg = "y";
+      reg_xys = "y";
       break;
     case 0x02:
-      reg = "s";
+      reg_xys = "s";
       break;
     }
 
   operand_separator (info);
-  (*info->fprintf_func) (info->stream, "%s", reg);
+  (*info->fprintf_func) (info->stream, "%s", reg_xys);
   opr_decode (memaddr, info);
 }
 
@@ -840,17 +840,17 @@ lea_reg_xys (bfd_vma memaddr, struct disassemble_info* info)
   if (status < 0)
     return;
 
-  char *reg = NULL;
+  char *reg_xys = NULL;
   switch (byte & 0x03)
     {
     case 0x00:
-      reg = "x";
+      reg_xys = "x";
       break;
     case 0x01:
-      reg = "y";
+      reg_xys = "y";
       break;
     case 0x02:
-      reg = "s";
+      reg_xys = "s";
       break;
     }
 
@@ -861,7 +861,7 @@ lea_reg_xys (bfd_vma memaddr, struct disassemble_info* info)
   int8_t v = byte;
 
   operand_separator (info);
-  (*info->fprintf_func) (info->stream, "%s, (%d,%s)", reg, v, reg);
+  (*info->fprintf_func) (info->stream, "%s, (%d,%s)", reg_xys, v, reg_xys);
 }
 
 
@@ -1677,6 +1677,12 @@ mul_n_bytes (bfd_vma memaddr, struct disassemble_info* info)
 }
 
 
+ /* The NXP documentation is vague about BM_RESERVED0 and BM_RESERVED1,
+    and contains obvious typos.
+    However the Freescale tools and experiments with the chip itself
+    seem to indicate that they behave like BM_REG_IMM and BM_OPR_REG
+    respectively.  */
+
 enum BM_MODE {
   BM_REG_IMM,
   BM_RESERVED0,
@@ -1731,6 +1737,7 @@ bm_decode (bfd_vma memaddr, struct disassemble_info* info)
   switch (mode)
     {
     case BM_REG_IMM:
+    case BM_RESERVED0:
       operand_separator (info);
       (*info->fprintf_func) (info->stream, "%s", registers[bm & 0x07].name);
       break;
@@ -1747,6 +1754,7 @@ bm_decode (bfd_vma memaddr, struct disassemble_info* info)
       opr_decode (memaddr + 1, info);
       break;
     case BM_OPR_REG:
+    case BM_RESERVED1:
       {
 	uint8_t xb;
 	read_memory (memaddr + 1, &xb, 1, info);
@@ -1756,10 +1764,6 @@ bm_decode (bfd_vma memaddr, struct disassemble_info* info)
 	opr_decode (memaddr + 1, info);
       }
       break;
-    case BM_RESERVED0:
-    case BM_RESERVED1:
-      assert (0);
-      break;
     }
 
   uint8_t imm = 0;
@@ -1768,7 +1772,7 @@ bm_decode (bfd_vma memaddr, struct disassemble_info* info)
     {
     case BM_REG_IMM:
       {
-	imm = (bm & 0xF8) >> 3;
+	imm = (bm & 0x38) >> 3;
 	(*info->fprintf_func) (info->stream, "#%d", imm);
       }
       break;
@@ -1783,10 +1787,10 @@ bm_decode (bfd_vma memaddr, struct disassemble_info* info)
       (*info->fprintf_func) (info->stream, "#%d", imm);
       break;
     case BM_OPR_REG:
+    case BM_RESERVED1:
       (*info->fprintf_func) (info->stream, "%s", registers[(bm & 0x70) >> 4].name);
       break;
     case BM_RESERVED0:
-    case BM_RESERVED1:
       assert (0);
       break;
     }
@@ -1816,6 +1820,7 @@ bm_rel_decode (bfd_vma memaddr, struct disassemble_info* info)
   switch (mode)
     {
     case BM_REG_IMM:
+    case BM_RESERVED0:
       break;
     case BM_OPR_B:
       (*info->fprintf_func) (info->stream, ".%c", 'b');
@@ -1827,6 +1832,7 @@ bm_rel_decode (bfd_vma memaddr, struct disassemble_info* info)
       (*info->fprintf_func) (info->stream, ".%c", 'l');
       break;
     case BM_OPR_REG:
+    case BM_RESERVED1:
       {
 	uint8_t xb;
 	read_memory (memaddr + 1, &xb, 1, info);
@@ -1836,16 +1842,13 @@ bm_rel_decode (bfd_vma memaddr, struct disassemble_info* info)
 				 shift_size_table[(bm & 0x0C) >> 2]);
       }
       break;
-    case BM_RESERVED0:
-    case BM_RESERVED1:
-      assert (0);
-      break;
     }
 
   int n = 1;
   switch (mode)
     {
     case BM_REG_IMM:
+    case BM_RESERVED0:
       operand_separator (info);
       (*info->fprintf_func) (info->stream, "%s", registers[bm & 0x07].name);
       break;
@@ -1856,11 +1859,8 @@ bm_rel_decode (bfd_vma memaddr, struct disassemble_info* info)
       n = 1 + opr_n_bytes (memaddr + 1, info);
       break;
     case BM_OPR_REG:
-      opr_decode (memaddr + 1, info);
-      break;
-    case BM_RESERVED0:
     case BM_RESERVED1:
-      assert (0);
+      opr_decode (memaddr + 1, info);
       break;
     }
 
@@ -1879,15 +1879,16 @@ bm_rel_decode (bfd_vma memaddr, struct disassemble_info* info)
       imm |= (bm & 0x70) >> 4;
       (*info->fprintf_func) (info->stream, "#%d", imm);
       break;
+    case BM_RESERVED0:
+      imm = (bm & 0x38) >> 3;
+      (*info->fprintf_func) (info->stream, "#%d", imm);
+      break;
     case BM_REG_IMM:
       imm = (bm & 0xF8) >> 3;
       (*info->fprintf_func) (info->stream, "#%d", imm);
       break;
-    case BM_RESERVED0:
-    case BM_RESERVED1:
-      assert (0);
-      break;
     case BM_OPR_REG:
+    case BM_RESERVED1:
       (*info->fprintf_func) (info->stream, "%s", registers[(bm & 0x70) >> 4].name);
       n += opr_n_bytes (memaddr + 1, info);
       break;
@@ -1920,6 +1921,7 @@ bm_n_bytes (bfd_vma memaddr, struct disassemble_info* info)
   switch (mode)
     {
     case BM_REG_IMM:
+    case BM_RESERVED0:
       break;
 
     case BM_OPR_B:
@@ -1928,9 +1930,8 @@ bm_n_bytes (bfd_vma memaddr, struct disassemble_info* info)
       n += opr_n_bytes (memaddr + 1, info);
       break;
     case BM_OPR_REG:
+    case BM_RESERVED1:
       n += opr_n_bytes (memaddr + 1, info);
-      break;
-    default:
       break;
   }
 
@@ -2203,7 +2204,7 @@ print_insn_loop_primitive (bfd_vma memaddr, struct disassemble_info* info)
   stpcpy (mnemonic + x, lb_condition [(lb & 0x70) >> 4]);
   x += 2;
 
-  const char *reg  = NULL;
+  const char *reg_dxy  = NULL;
   enum LP_MODE mode = -1;
   size_t i;
   for (i = 0; i < sizeof (lp_mode) / sizeof (lp_mode[0]); ++i)
@@ -2219,10 +2220,10 @@ print_insn_loop_primitive (bfd_vma memaddr, struct disassemble_info* info)
   switch (mode)
     {
     case LP_REG:
-      reg = registers [lb & 0x07].name;
+      reg_dxy = registers [lb & 0x07].name;
       break;
     case LP_XY:
-      reg = (lb & 0x1) ? "y" : "x";
+      reg_dxy = (lb & 0x1) ? "y" : "x";
       break;
     case LP_OPR:
       mnemonic[x++] = '.';
@@ -2240,7 +2241,7 @@ print_insn_loop_primitive (bfd_vma memaddr, struct disassemble_info* info)
   else
     {
       operand_separator (info);
-      (*info->fprintf_func) (info->stream, "%s", reg);
+      (*info->fprintf_func) (info->stream, "%s", reg_dxy);
     }
 
   rel_15_7 (memaddr + offs, info, offs + 1);

@@ -277,27 +277,29 @@ enum {R_ABS32=0,R_ABS16,R_ABS8,R_PC32,R_PC16,R_PC8,R_SD32,R_SD16,R_SD8,R_PC26,R_
 reloc_howto_type howto_table[R__MAX] =
 {
   {H_ABS32,   /* type */
-  0,          /* rightshift */
-  2,          /* size */
-  32,         /* bitsize */
-  FALSE,      /* pc_relative */
-  0,          /* bitpos */
-  complain_overflow_bitfield,/* complain_on_overflow */
-  0,          /* special_function */
-  "RELOC32",  /* textual name */
-  FALSE,      /* partial_inplace */
-  0xffffffff, /* src_mask */
-  0xffffffff, /* dst_mask */
-  FALSE},     /* pcrel_offset */
-  {H_ABS16,      0, 1, 16, FALSE, 0, complain_overflow_bitfield, 0, "RELOC16",      FALSE, 0x0000ffff, 0x0000ffff, FALSE},
-  {H_ABS8,       0, 0,  8, FALSE, 0, complain_overflow_bitfield, 0, "RELOC8",       FALSE, 0x000000ff, 0x000000ff, FALSE},
-  {H_PC32,       0, 2, 32, TRUE,  0, complain_overflow_signed,   0, "RELRELOC32",   FALSE, 0xffffffff, 0xffffffff, TRUE},
-  {H_PC16,       0, 1, 16, TRUE,  0, complain_overflow_signed,   0, "RELRELOC16",   FALSE, 0x0000ffff, 0x0000ffff, TRUE},
-  {H_PC8,        0, 0,  8, TRUE,  0, complain_overflow_signed,   0, "RELRELOC8",    FALSE, 0x000000ff, 0x000000ff, TRUE},
-  {H_SD32,       0, 2, 32, FALSE, 0, complain_overflow_bitfield, 0, "DREL32",       FALSE, 0xffffffff, 0xffffffff, FALSE},
-  {H_SD16,       0, 1, 16, FALSE, 0, complain_overflow_bitfield, 0, "DREL16",       FALSE, 0x0000ffff, 0x0000ffff, FALSE},
-  {H_SD8,        0, 0,  8, FALSE, 0, complain_overflow_bitfield, 0, "DREL8",        FALSE, 0x000000ff, 0x000000ff, FALSE},
-  {H_PC26,       0, 2, 26, TRUE,  0, complain_overflow_signed,   0, "RELRELOC26",   FALSE, 0x03fffffc, 0x03fffffc, TRUE},
+      2,          /* size */
+      32,         /* bitsize */
+      0,          /* rightshift */
+      0,          /* bitpos */
+      complain_overflow_bitfield,/* complain_on_overflow */
+      FALSE,	  /* negate */
+      FALSE,      /* pc_relative */
+      FALSE,      /* partial_inplace */
+      FALSE, 	/* pcrel_offset */
+      0xffffffff, /* src_mask */
+      0xffffffff, /* dst_mask */
+      0,          /* special_function */
+      "RELOC32"  /* textual name */
+  },
+  {H_ABS16,  1, 16, 0, 0, complain_overflow_bitfield, FALSE, FALSE, FALSE, FALSE, 0x0000ffff, 0x0000ffff, 0, "RELOC16"   },
+  {H_ABS8,   0,  8, 0, 0, complain_overflow_bitfield, FALSE, FALSE, FALSE, FALSE, 0x000000ff, 0x000000ff, 0, "RELOC8"    },
+  {H_PC32,   2, 32, 0, 0, complain_overflow_signed,   FALSE, TRUE,  FALSE, TRUE , 0xffffffff, 0xffffffff, 0, "RELRELOC32"},
+  {H_PC16,   1, 16, 0, 0, complain_overflow_signed,   FALSE, TRUE,  FALSE, TRUE , 0x0000ffff, 0x0000ffff, 0, "RELRELOC16"},
+  {H_PC8,    0,  8, 0, 0, complain_overflow_signed,   FALSE, TRUE,  FALSE, TRUE , 0x000000ff, 0x000000ff, 0, "RELRELOC8" },
+  {H_SD32,   2, 32, 0, 0, complain_overflow_bitfield, FALSE, FALSE, FALSE, FALSE, 0xffffffff, 0xffffffff, 0, "DREL32"    },
+  {H_SD16,   1, 16, 0, 0, complain_overflow_bitfield, FALSE, FALSE, FALSE, FALSE, 0x0000ffff, 0x0000ffff, 0, "DREL16"    },
+  {H_SD8,    0,  8, 0, 0, complain_overflow_bitfield, FALSE, FALSE, FALSE, FALSE, 0x000000ff, 0x000000ff, 0, "DREL8"     },
+  {H_PC26,   2, 26, 0, 0, complain_overflow_signed,   FALSE, TRUE,  FALSE, TRUE , 0x03fffffc, 0x03fffffc, 0, "RELRELOC26"},
 };
 
 /* Determine the on-disk relocation size.

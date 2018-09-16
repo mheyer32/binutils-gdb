@@ -106,7 +106,7 @@ public:
   void get_core_register_section (struct regcache *regcache,
 				  const struct regset *regset,
 				  const char *name,
-				  int min_size,
+				  int section_min_size,
 				  int which,
 				  const char *human_name,
 				  bool required);
@@ -260,11 +260,9 @@ core_target::close ()
 {
   if (core_bfd)
     {
-      int pid = ptid_get_pid (inferior_ptid);
       inferior_ptid = null_ptid;    /* Avoid confusion from thread
 				       stuff.  */
-      if (pid != 0)
-	exit_inferior_silent (pid);
+      exit_inferior_silent (current_inferior ());
 
       /* Clear out solib state while the bfd is still open.  See
          comments in clear_solib in solib.c.  */
@@ -312,7 +310,7 @@ add_to_thread_list (bfd *abfd, asection *asect, void *reg_sect_arg)
       inf->fake_pid_p = fake_pid_p;
     }
 
-  ptid = ptid_build (pid, lwpid, 0);
+  ptid = ptid_t (pid, lwpid, 0);
 
   add_thread (ptid);
 
@@ -360,7 +358,6 @@ core_target_open (const char *arg, int from_tty)
 {
   const char *p;
   int siggy;
-  struct cleanup *old_chain;
   int scratch_chan;
   int flags;
 
@@ -446,7 +443,7 @@ core_target_open (const char *arg, int from_tty)
   bfd_map_over_sections (core_bfd, add_to_thread_list,
 			 bfd_get_section_by_name (core_bfd, ".reg"));
 
-  if (ptid_equal (inferior_ptid, null_ptid))
+  if (inferior_ptid == null_ptid)
     {
       /* Either we found no .reg/NN section, and hence we have a
 	 non-threaded core (single-threaded, from gdb's perspective),
@@ -454,16 +451,16 @@ core_target_open (const char *arg, int from_tty)
 	 which was the "main" thread.  The latter case shouldn't
 	 usually happen, but we're dealing with input here, which can
 	 always be broken in different ways.  */
-      struct thread_info *thread = first_thread_of_process (-1);
+      thread_info *thread = first_thread_of_inferior (current_inferior ());
 
       if (thread == NULL)
 	{
 	  inferior_appeared (current_inferior (), CORELOW_PID);
-	  inferior_ptid = pid_to_ptid (CORELOW_PID);
+	  inferior_ptid = ptid_t (CORELOW_PID);
 	  add_thread_silent (inferior_ptid);
 	}
       else
-	switch_to_thread (thread->ptid);
+	switch_to_thread (thread);
     }
 
   post_create_inferior (target, from_tty);
@@ -572,7 +569,7 @@ void
 core_target::get_core_register_section (struct regcache *regcache,
 					const struct regset *regset,
 					const char *name,
-					int min_size,
+					int section_min_size,
 					int which,
 					const char *human_name,
 					bool required)
@@ -595,13 +592,13 @@ core_target::get_core_register_section (struct regcache *regcache,
     }
 
   size = bfd_section_size (core_bfd, section);
-  if (size < min_size)
+  if (size < section_min_size)
     {
       warning (_("Section `%s' in core file too small."),
 	       section_name.c_str ());
       return;
     }
-  if (size != min_size && !variable_size_section)
+  if (size != section_min_size && !variable_size_section)
     {
       warning (_("Unexpected size of section `%s' in core file."),
 	       section_name.c_str ());
@@ -639,12 +636,17 @@ struct get_core_registers_cb_data
    register note section. */
 
 static void
-get_core_registers_cb (const char *sect_name, int size,
+get_core_registers_cb (const char *sect_name, int supply_size, int collect_size,
 		       const struct regset *regset,
 		       const char *human_name, void *cb_data)
 {
   auto *data = (get_core_registers_cb_data *) cb_data;
   bool required = false;
+  bool variable_size_section = (regset != NULL
+				&& regset->flags & REGSET_VARIABLE_SIZE);
+
+  if (!variable_size_section)
+    gdb_assert (supply_size == collect_size);
 
   if (strcmp (sect_name, ".reg") == 0)
     {
@@ -661,7 +663,8 @@ get_core_registers_cb (const char *sect_name, int size,
   /* The 'which' parameter is only used when no regset is provided.
      Thus we just set it to -1. */
   data->target->get_core_register_section (data->regcache, regset, sect_name,
-					   size, -1, human_name, required);
+					   supply_size, -1, human_name,
+					   required);
 }
 
 /* Get the registers out of a core file.  This is the machine-
@@ -1007,9 +1010,9 @@ core_target::pid_to_str (ptid_t ptid)
      "process", with normal_pid_to_str.  */
 
   /* Try the LWPID field first.  */
-  pid = ptid_get_lwp (ptid);
+  pid = ptid.lwp ();
   if (pid != 0)
-    return normal_pid_to_str (pid_to_ptid (pid));
+    return normal_pid_to_str (ptid_t (pid));
 
   /* Otherwise, this isn't a "threaded" core -- use the PID field, but
      only if it isn't a fake PID.  */

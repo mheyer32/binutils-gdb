@@ -831,6 +831,14 @@ objfile_relocate1 (struct objfile *objfile,
 	  BLOCK_START (b) += ANOFFSET (delta, block_line_section);
 	  BLOCK_END (b) += ANOFFSET (delta, block_line_section);
 
+	  if (BLOCK_RANGES (b) != nullptr)
+	    for (int j = 0; j < BLOCK_NRANGES (b); j++)
+	      {
+		BLOCK_RANGE_START (b, j)
+		  += ANOFFSET (delta, block_line_section);
+		BLOCK_RANGE_END (b, j) += ANOFFSET (delta, block_line_section);
+	      }
+
 	  /* We only want to iterate over the local symbols, not any
 	     symbols in included symtabs.  */
 	  ALL_DICT_SYMBOLS (BLOCK_DICT (b), iter, sym)
@@ -841,6 +849,10 @@ objfile_relocate1 (struct objfile *objfile,
     }
   }
 
+  /* This stores relocated addresses and so must be cleared.  This
+     will cause it to be recreated on demand.  */
+  objfile->psymbol_map.clear ();
+
   /* Relocate isolated symbols.  */
   {
     struct symbol *iter;
@@ -848,13 +860,6 @@ objfile_relocate1 (struct objfile *objfile,
     for (iter = objfile->template_symbols; iter; iter = iter->hash_next)
       relocate_one_symbol (iter, objfile, delta);
   }
-
-  if (objfile->psymtabs_addrmap)
-    addrmap_relocate (objfile->psymtabs_addrmap,
-		      ANOFFSET (delta, SECT_OFF_TEXT (objfile)));
-
-  if (objfile->sf)
-    objfile->sf->qf->relocate (objfile, new_offsets, delta);
 
   {
     int i;
@@ -1455,26 +1460,11 @@ objfiles_changed (void)
 
 /* See comments in objfiles.h.  */
 
-void
+scoped_restore_tmpl<int>
 inhibit_section_map_updates (struct program_space *pspace)
 {
-  get_objfile_pspace_data (pspace)->inhibit_updates = 1;
-}
-
-/* See comments in objfiles.h.  */
-
-void
-resume_section_map_updates (struct program_space *pspace)
-{
-  get_objfile_pspace_data (pspace)->inhibit_updates = 0;
-}
-
-/* See comments in objfiles.h.  */
-
-void
-resume_section_map_updates_cleanup (void *arg)
-{
-  resume_section_map_updates ((struct program_space *) arg);
+  return scoped_restore_tmpl<int>
+    (&get_objfile_pspace_data (pspace)->inhibit_updates, 1);
 }
 
 /* Return 1 if ADDR maps into one of the sections of OBJFILE and 0

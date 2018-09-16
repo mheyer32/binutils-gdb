@@ -17,7 +17,7 @@
 # <http://www.gnu.org/licenses/>.
 #
 
-AUTOMAKE_OPTIONS = 1.11 dejagnu foreign no-dist
+AUTOMAKE_OPTIONS = dejagnu foreign no-dist subdir-objects
 ACLOCAL_AMFLAGS = -I .. -I ../config -I ../bfd
 
 SUBDIRS = doc po
@@ -43,14 +43,14 @@ AM_CFLAGS = $(WARN_CFLAGS) $(ZLIBINC)
 
 TARG_CPU = @target_cpu_type@
 TARG_CPU_C = $(srcdir)/config/tc-@target_cpu_type@.c
-TARG_CPU_O = tc-@target_cpu_type@.@OBJEXT@
+TARG_CPU_O = config/tc-@target_cpu_type@.@OBJEXT@
 TARG_CPU_H = $(srcdir)/config/tc-@target_cpu_type@.h
 OBJ_FORMAT_C = $(srcdir)/config/obj-@obj_format@.c
-OBJ_FORMAT_O = obj-@obj_format@.@OBJEXT@
+OBJ_FORMAT_O = config/obj-@obj_format@.@OBJEXT@
 OBJ_FORMAT_H = $(srcdir)/config/obj-@obj_format@.h
 TARG_ENV_H = $(srcdir)/config/te-@te_file@.h
 ATOF_TARG_C = $(srcdir)/config/atof-@atof@.c
-ATOF_TARG_O = atof-@atof@.@OBJEXT@
+ATOF_TARG_O = config/atof-@atof@.@OBJEXT@
 
 # use @target_cpu_type@ for refering to configured target name
 IT_HDRS=itbl-parse.h $(srcdir)/itbl-ops.h
@@ -138,6 +138,7 @@ TARGET_CPU_CFILES = \
 	config/tc-cr16.c \
 	config/tc-cris.c \
 	config/tc-crx.c \
+	config/tc-csky.c \
 	config/tc-d10v.c \
 	config/tc-d30v.c \
 	config/tc-dlx.c \
@@ -212,6 +213,7 @@ TARGET_CPU_HFILES = \
 	config/tc-cr16.h \
 	config/tc-cris.h \
 	config/tc-crx.h \
+	config/tc-csky.h \
 	config/tc-d10v.h \
 	config/tc-d30v.h \
 	config/tc-dlx.h \
@@ -308,6 +310,10 @@ TARG_ENV_HFILES = \
 	config/te-armfbsdeabi.h \
 	config/te-armfbsdvfp.h \
 	config/te-armlinuxeabi.h \
+	config/te-csky_abiv1.h \
+	config/te-csky_abiv1_linux.h \
+	config/te-csky_abiv2.h \
+	config/te-csky_abiv2_linux.h \
 	config/te-freebsd.h \
 	config/te-generic.h \
 	config/te-gnu.h \
@@ -425,6 +431,10 @@ check-DEJAGNU: site.exp
 		$(RUNTESTFLAGS); \
 	else echo "WARNING: could not find \`runtest'" 1>&2; :;\
 	fi
+
+development.exp: $(BFDDIR)/development.sh
+	$(EGREP) "[development|experimental]=" $(BFDDIR)/development.sh  \
+	  | $(AWK) -F= '{ print "set " $$1 " " $$2 }' > $@
 
 # The m68k operand parser.
 
@@ -585,7 +595,7 @@ cgen.@OBJEXT@: cgen.c cgen.h cgen-desc.h subsegs.h \
 
 MOSTLYCLEANFILES = $(STAGESTUFF) core \
 	testsuite/*.@OBJEXT@ testsuite/*.out testsuite/gas.log testsuite/gas.sum \
-	testsuite/site.exp site.bak site.exp stage stage1 stage2
+	testsuite/site.exp site.bak site.exp development.exp stage stage1 stage2
 
 .PHONY: install-exec-local install-data-local
 .PHONY: install-exec-bindir install-exec-tooldir
@@ -686,3 +696,5 @@ de-stage3:
 # Reconfigure if configure.tgt changes.
 # development.sh is used to determine -Werror default.
 CONFIG_STATUS_DEPENDENCIES = $(srcdir)/configure.tgt $(BFDDIR)/development.sh
+
+EXTRA_DEJAGNU_SITE_CONFIG = development.exp

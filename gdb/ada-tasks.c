@@ -288,22 +288,21 @@ get_ada_tasks_inferior_data (struct inferior *inf)
   return data;
 }
 
-/* Return the task number of the task whose ptid is PTID, or zero
+/* Return the task number of the task whose thread is THREAD, or zero
    if the task could not be found.  */
 
 int
-ada_get_task_number (ptid_t ptid)
+ada_get_task_number (thread_info *thread)
 {
   int i;
-  struct inferior *inf = find_inferior_ptid (ptid);
+  struct inferior *inf = thread->inf;
   struct ada_tasks_inferior_data *data;
 
   gdb_assert (inf != NULL);
   data = get_ada_tasks_inferior_data (inf);
 
   for (i = 0; i < VEC_length (ada_task_info_s, data->task_list); i++)
-    if (ptid_equal (VEC_index (ada_task_info_s, data->task_list, i)->ptid,
-		    ptid))
+    if (VEC_index (ada_task_info_s, data->task_list, i)->ptid == thread->ptid)
       return i + 1;
 
   return 0;  /* No matching task found.  */
@@ -370,7 +369,7 @@ ada_get_task_info_from_ptid (ptid_t ptid)
   for (i = 0; i < nb_tasks; i++)
     {
       task = VEC_index (ada_task_info_s, data->task_list, i);
-      if (ptid_equal (task->ptid, ptid))
+      if (task->ptid == ptid)
 	return task;
     }
 
@@ -1111,7 +1110,7 @@ print_ada_task_info (struct ui_out *uiout,
 
       /* Print a star if this task is the current task (or the task
          currently selected).  */
-      if (ptid_equal (task_info->ptid, inferior_ptid))
+      if (task_info->ptid == inferior_ptid)
 	uiout->field_string ("current", "*");
       else
 	uiout->field_skip ("current");
@@ -1125,10 +1124,10 @@ print_ada_task_info (struct ui_out *uiout,
       /* Print the associated Thread ID.  */
       if (uiout->is_mi_like_p ())
         {
-	  const int thread_id = ptid_to_global_thread_id (task_info->ptid);
+	  thread_info *thread = find_thread_ptid (task_info->ptid);
 
-	  if (thread_id != 0)
-	    uiout->field_int ("thread-id", thread_id);
+	  if (thread != NULL)
+	    uiout->field_int ("thread-id", thread->global_num);
 	  else
 	    /* This should never happen unless there is a bug somewhere,
 	       but be resilient when that happens.  */
@@ -1203,8 +1202,8 @@ info_task (struct ui_out *uiout, const char *taskno_str, struct inferior *inf)
     printf_filtered (_("<no name>\n"));
 
   /* Print the TID and LWP.  */
-  printf_filtered (_("Thread: %#lx\n"), ptid_get_tid (task_info->ptid));
-  printf_filtered (_("LWP: %#lx\n"), ptid_get_lwp (task_info->ptid));
+  printf_filtered (_("Thread: %#lx\n"), task_info->ptid.tid ());
+  printf_filtered (_("LWP: %#lx\n"), task_info->ptid.lwp ());
 
   /* If set, print the base CPU.  */
   if (task_info->base_cpu != 0)
@@ -1284,7 +1283,7 @@ info_tasks_command (const char *arg, int from_tty)
 static void
 display_current_task_id (void)
 {
-  const int current_task = ada_get_task_number (inferior_ptid);
+  const int current_task = ada_get_task_number (inferior_thread ());
 
   if (current_task == 0)
     printf_filtered (_("[Current task is unknown]\n"));
@@ -1327,12 +1326,13 @@ task_command_1 (const char *taskno_str, int from_tty, struct inferior *inf)
      computed if target_get_ada_task_ptid has not been implemented for
      our target (yet).  Rather than cause an assertion error in that case,
      it's nicer for the user to just refuse to perform the task switch.  */
-  if (!find_thread_ptid (task_info->ptid))
+  thread_info *tp = find_thread_ptid (task_info->ptid);
+  if (tp == NULL)
     error (_("Unable to compute thread ID for task %d.\n"
              "Cannot switch to this task."),
            taskno);
 
-  switch_to_thread (task_info->ptid);
+  switch_to_thread (tp);
   ada_find_printable_frame (get_selected_frame (NULL));
   printf_filtered (_("[Switching to task %d]\n"), taskno);
   print_stack_frame (get_selected_frame (NULL),

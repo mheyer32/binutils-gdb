@@ -73,32 +73,6 @@ run_ld_link_tests [list \
 ]
 
 
-# True if the object format is known to be 64-bit ELF.
-#
-proc is_elf64 { binary_file } {
-    global READELF
-    global READELFFLAGS
-
-    set readelf_size ""
-    catch "exec $READELF $READELFFLAGS -h $binary_file > readelf.out" got
-
-    if ![string match "" $got] then {
-	return 0
-    }
-
-    if { ![regexp "\n\[ \]*Class:\[ \]*ELF(\[0-9\]+)\n" \
-	       [file_contents readelf.out] nil readelf_size] } {
-	verbose "FAILED to determine ELF size"
-	return 0
-    }
-
-    if { $readelf_size == "64" } {
-	return 1
-    }
-
-    return 0
-}
-
 if [is_elf64 tmpdir/symbol3w.a] {
     set ASFLAGS "$ASFLAGS --defsym ALIGN=3"
 } else {
@@ -115,7 +89,7 @@ run_ld_link_tests {
       {"PR ld/21703 -r"
 	"-r --allow-multiple-definition tmpdir/pr21703-3.o tmpdir/pr21703-4.o" "" "" \
 	{pr21703-3.s pr21703-4.s} {{readelf {-s} pr21703-r.sd}} "pr21703.o" }
-} "d30v-*-*" "dlx-*-*" "pj-*-*"
+} "d30v-*-*" "dlx-*-*" "pj-*-*" "xgate-*-*"
 
 if [is_underscore_target] {
     set ASFLAGS "$ASFLAGS --defsym UNDERSCORE=1"

@@ -903,7 +903,7 @@ read_next_line (void)
   else
     prompt_ptr = NULL;
 
-  return command_line_input (prompt_ptr, from_tty, "commands");
+  return command_line_input (prompt_ptr, "commands");
 }
 
 /* Return true if CMD's name is NAME.  */
@@ -1081,7 +1081,7 @@ recurse_read_control_structure (gdb::function_view<const char * ()> read_next_li
 {
   enum misc_command_type val;
   enum command_control_type ret;
-  struct command_line **body_ptr, *child_tail, *next;
+  struct command_line *child_tail, *next;
   counted_command_line *current_body = &current_cmd->body_list_0;
 
   child_tail = NULL;

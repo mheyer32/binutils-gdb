@@ -452,26 +452,18 @@ _bfd_aarch64_elf_resolve_relocation (bfd_reloc_code_real_type r_type,
     case BFD_RELOC_AARCH64_TLSLD_ADD_DTPREL_LO12:
     case BFD_RELOC_AARCH64_TLSLD_ADD_DTPREL_LO12_NC:
     case BFD_RELOC_AARCH64_TLSLD_LDST16_DTPREL_LO12:
-    case BFD_RELOC_AARCH64_TLSLD_LDST16_DTPREL_LO12_NC:
     case BFD_RELOC_AARCH64_TLSLD_LDST32_DTPREL_LO12:
-    case BFD_RELOC_AARCH64_TLSLD_LDST32_DTPREL_LO12_NC:
     case BFD_RELOC_AARCH64_TLSLD_LDST64_DTPREL_LO12:
-    case BFD_RELOC_AARCH64_TLSLD_LDST64_DTPREL_LO12_NC:
     case BFD_RELOC_AARCH64_TLSLD_LDST8_DTPREL_LO12:
-    case BFD_RELOC_AARCH64_TLSLD_LDST8_DTPREL_LO12_NC:
     case BFD_RELOC_AARCH64_TLSLD_MOVW_DTPREL_G0:
     case BFD_RELOC_AARCH64_TLSLD_MOVW_DTPREL_G0_NC:
     case BFD_RELOC_AARCH64_TLSLD_MOVW_DTPREL_G1:
     case BFD_RELOC_AARCH64_TLSLD_MOVW_DTPREL_G1_NC:
     case BFD_RELOC_AARCH64_TLSLD_MOVW_DTPREL_G2:
     case BFD_RELOC_AARCH64_TLSLE_LDST16_TPREL_LO12:
-    case BFD_RELOC_AARCH64_TLSLE_LDST16_TPREL_LO12_NC:
     case BFD_RELOC_AARCH64_TLSLE_LDST32_TPREL_LO12:
-    case BFD_RELOC_AARCH64_TLSLE_LDST32_TPREL_LO12_NC:
     case BFD_RELOC_AARCH64_TLSLE_LDST64_TPREL_LO12:
-    case BFD_RELOC_AARCH64_TLSLE_LDST64_TPREL_LO12_NC:
     case BFD_RELOC_AARCH64_TLSLE_LDST8_TPREL_LO12:
-    case BFD_RELOC_AARCH64_TLSLE_LDST8_TPREL_LO12_NC:
       value = value + addend;
       break;
 
@@ -521,7 +513,15 @@ _bfd_aarch64_elf_resolve_relocation (bfd_reloc_code_real_type r_type,
     case BFD_RELOC_AARCH64_TLSGD_ADD_LO12_NC:
     case BFD_RELOC_AARCH64_TLSIE_LD32_GOTTPREL_LO12_NC:
     case BFD_RELOC_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC:
+    case BFD_RELOC_AARCH64_TLSLD_LDST16_DTPREL_LO12_NC:
+    case BFD_RELOC_AARCH64_TLSLD_LDST32_DTPREL_LO12_NC:
+    case BFD_RELOC_AARCH64_TLSLD_LDST64_DTPREL_LO12_NC:
+    case BFD_RELOC_AARCH64_TLSLD_LDST8_DTPREL_LO12_NC:
     case BFD_RELOC_AARCH64_TLSLE_ADD_TPREL_LO12_NC:
+    case BFD_RELOC_AARCH64_TLSLE_LDST16_TPREL_LO12_NC:
+    case BFD_RELOC_AARCH64_TLSLE_LDST32_TPREL_LO12_NC:
+    case BFD_RELOC_AARCH64_TLSLE_LDST64_TPREL_LO12_NC:
+    case BFD_RELOC_AARCH64_TLSLE_LDST8_TPREL_LO12_NC:
       value = PG_OFFSET (value + addend);
       break;
 
@@ -640,16 +640,18 @@ _bfd_aarch64_elf_write_core_note (bfd *abfd, char *buf, int *bufsiz, int note_ty
 	va_start (ap, note_type);
 	memset (data, 0, sizeof (data));
 	strncpy (data + 40, va_arg (ap, const char *), 16);
+#if GCC_VERSION == 8000 || GCC_VERSION == 8001
 	DIAGNOSTIC_PUSH;
-	/* GCC 8.1 warns about 80 equals destination size with
+	/* GCC 8.0 and 8.1 warn about 80 equals destination size with
 	   -Wstringop-truncation:
 	   https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85643
 	 */
-#if GCC_VERSION == 8001
 	DIAGNOSTIC_IGNORE_STRINGOP_TRUNCATION;
 #endif
 	strncpy (data + 56, va_arg (ap, const char *), 80);
+#if GCC_VERSION == 8000 || GCC_VERSION == 8001
 	DIAGNOSTIC_POP;
+#endif
 	va_end (ap);
 
 	return elfcore_write_note (abfd, buf, bufsiz, "CORE",

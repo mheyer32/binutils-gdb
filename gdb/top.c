@@ -171,7 +171,7 @@ int remote_timeout = 2;
 int remote_debug = 0;
 
 /* Sbrk location on entry to main.  Used for statistics only.  */
-#ifdef HAVE_SBRK
+#ifdef HAVE_USEFUL_SBRK
 char *lim_at_start;
 #endif
 
@@ -418,7 +418,7 @@ read_command_file (FILE *stream)
       char *command;
 
       /* Get a command-line.  This calls the readline package.  */
-      command = command_line_input (NULL, 0, NULL);
+      command = command_line_input (NULL, NULL);
       if (command == NULL)
 	break;
       command_handler (command);
@@ -646,7 +646,7 @@ execute_command (const char *p, int from_tty)
      we just finished executing did not resume the inferior's execution.
      If it did resume the inferior, we will do that check after
      the inferior stopped.  */
-  if (has_stack_frames () && !is_running (inferior_ptid))
+  if (has_stack_frames () && inferior_thread ()->state != THREAD_RUNNING)
     check_frame_language_change ();
 
   discard_cleanups (cleanup_if_error);
@@ -1161,16 +1161,11 @@ gdb_safe_append_history (void)
 
    NULL is returned for end of file.
 
-   *If* input is from an interactive stream (stdin), the line read is
-   copied into the global 'saved_command_line' so that it can be
-   repeated.
-
    This routine either uses fancy command line editing or simple input
    as the user has requested.  */
 
 char *
-command_line_input (const char *prompt_arg, int repeat,
-		    const char *annotation_suffix)
+command_line_input (const char *prompt_arg, const char *annotation_suffix)
 {
   static struct buffer cmd_line_buffer;
   static int cmd_line_buffer_initialized;
@@ -1255,7 +1250,7 @@ command_line_input (const char *prompt_arg, int repeat,
 	}
 
       cmd = handle_line_of_input (&cmd_line_buffer, rl,
-				  repeat, annotation_suffix);
+				  0, annotation_suffix);
       if (cmd == (char *) EOF)
 	{
 	  cmd = NULL;
@@ -1505,15 +1500,14 @@ static int
 kill_or_detach (struct inferior *inf, void *args)
 {
   struct qt_args *qt = (struct qt_args *) args;
-  struct thread_info *thread;
 
   if (inf->pid == 0)
     return 0;
 
-  thread = any_thread_of_process (inf->pid);
+  thread_info *thread = any_thread_of_inferior (inf);
   if (thread != NULL)
     {
-      switch_to_thread (thread->ptid);
+      switch_to_thread (thread);
 
       /* Leave core files alone.  */
       if (target_has_execution)
@@ -1543,11 +1537,11 @@ print_inferior_quit_action (struct inferior *inf, void *arg)
   if (inf->attach_flag)
     fprintf_filtered (stb,
 		      _("\tInferior %d [%s] will be detached.\n"), inf->num,
-		      target_pid_to_str (pid_to_ptid (inf->pid)));
+		      target_pid_to_str (ptid_t (inf->pid)));
   else
     fprintf_filtered (stb,
 		      _("\tInferior %d [%s] will be killed.\n"), inf->num,
-		      target_pid_to_str (pid_to_ptid (inf->pid)));
+		      target_pid_to_str (ptid_t (inf->pid)));
 
   return 0;
 }

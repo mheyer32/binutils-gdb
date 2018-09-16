@@ -42,6 +42,7 @@
 #include "value.h"
 #include "infcall.h"
 #include "gdbthread.h"
+#include "inferior.h"
 #include "regcache.h"
 #include "bcache.h"
 #include "gdb_bfd.h"
@@ -840,7 +841,7 @@ amiga_gnu_ifunc_resolver_stop (struct breakpoint *b)
   struct frame_info *prev_frame = get_prev_frame (get_current_frame ());
   struct frame_id prev_frame_id = get_stack_frame_id (prev_frame);
   CORE_ADDR prev_pc = get_frame_pc (prev_frame);
-  int thread_id = ptid_to_global_thread_id (inferior_ptid);
+  int thread_id = inferior_thread ()->global_num;
 
   gdb_assert (b->type == bp_gnu_ifunc_resolver);
 
@@ -887,10 +888,11 @@ amiga_gnu_ifunc_resolver_stop (struct breakpoint *b)
 static void
 amiga_gnu_ifunc_resolver_return_stop (struct breakpoint *b)
 {
+  thread_info *thread = inferior_thread ();
   struct gdbarch *gdbarch = get_frame_arch (get_current_frame ());
   struct type *func_func_type = builtin_type (gdbarch)->builtin_func_func;
   struct type *value_type = TYPE_TARGET_TYPE (func_func_type);
-  struct regcache *regcache = get_thread_regcache (inferior_ptid);
+  struct regcache *regcache = get_thread_regcache (thread);
   struct value *func_func;
   struct value *value;
   CORE_ADDR resolved_address, resolved_pc;
@@ -1241,7 +1243,6 @@ static void
 amiga_new_init (struct objfile *ignore)
 {
   stabsread_new_init ();
-  buildsym_new_init ();
 }
 
 /* Perform any local cleanups required when we are done with a particular
@@ -1252,7 +1253,7 @@ amiga_new_init (struct objfile *ignore)
 static void
 amiga_symfile_finish (struct objfile *objfile)
 {
-  dwarf2_free_objfile (objfile);
+//  dwarf2_free_objfile (objfile);
 }
 
 /* ELF specific initialization routine for reading symbols.  */

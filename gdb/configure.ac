@@ -18,7 +18,6 @@ dnl along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 dnl Process this file with autoconf to produce a configure script.
 
-AC_PREREQ(2.59)dnl
 AC_INIT(main.c)
 AC_CONFIG_HEADER(config.h:config.in)
 AM_MAINTAINER_MODE
@@ -300,29 +299,6 @@ if test "x$targ_defvec" != x; then
     [Define to BFD's default target vector. ])
 fi
 
-# The CLI cannot be disabled yet, but may be in the future.
-
-# Enable CLI.
-AC_ARG_ENABLE(gdbcli,
-AS_HELP_STRING([--disable-gdbcli], [disable command-line interface (CLI)]),
-  [case $enableval in
-    yes)
-      ;;
-    no)
-      AC_MSG_ERROR([the command-line interface cannot be disabled yet]) ;;
-    *)
-      AC_MSG_ERROR([bad value $enableval for --enable-gdbcli]) ;;
-  esac],
-  [enable_gdbcli=yes])
-if test x"$enable_gdbcli" = xyes; then
-  if test -d $srcdir/cli; then
-    CONFIG_OBS="$CONFIG_OBS \$(SUBDIR_CLI_OBS)"
-    CONFIG_DEPS="$CONFIG_DEPS \$(SUBDIR_CLI_DEPS)"
-    CONFIG_SRCS="$CONFIG_SRCS \$(SUBDIR_CLI_SRCS)"
-    ENABLE_CFLAGS="$ENABLE_CFLAGS \$(SUBDIR_CLI_CFLAGS)"
-  fi
-fi
-
 # Enable MI.
 AC_ARG_ENABLE(gdbmi,
 AS_HELP_STRING([--disable-gdbmi], [disable machine-interface (MI)]),
@@ -471,6 +447,13 @@ if test "$enable_profiling" = yes ; then
 
   CFLAGS="$OLD_CFLAGS"
 fi
+
+CODESIGN_CERT=
+AC_ARG_ENABLE([codesign],
+  AS_HELP_STRING([--enable-codesign=CERT],
+                 [sign gdb with 'codesign -s CERT']),
+  [CODESIGN_CERT=$enableval])
+AC_SUBST([CODESIGN_CERT])
 
 ACX_PKGVERSION([GDB])
 ACX_BUGURL([http://www.gnu.org/software/gdb/bugs/])
@@ -734,8 +717,8 @@ AC_DEFUN([AC_TRY_LIBPYTHON],
   CPPFLAGS="$CPPFLAGS $new_CPPFLAGS"
   LIBS="$new_LIBS $LIBS"
   found_usable_python=no
-  AC_LINK_IFELSE(AC_LANG_PROGRAM([[#include "Python.h"]],
-                                 [[Py_Initialize ();]]),
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include "Python.h"]],
+                                 [[Py_Initialize ();]])],
                  [have_libpython_var=${version}
                   found_usable_python=yes
                   PYTHON_CPPFLAGS=$new_CPPFLAGS
@@ -1021,12 +1004,12 @@ if test "${have_libpython}" != no; then
   CPPFLAGS="${PYTHON_CPPFLAGS}"
   # Note that the test is reversed so that python_has_threads=yes on
   # unexpected failures.
-  AC_PREPROC_IFELSE(AC_LANG_SOURCE([[
+  AC_PREPROC_IFELSE([AC_LANG_SOURCE([[
 #include <Python.h>
 #ifdef WITH_THREAD
 # error
 #endif
-  ]]), [python_has_threads=no], [python_has_threads=yes])
+  ]])], [python_has_threads=no], [python_has_threads=yes])
   AC_MSG_RESULT(${python_has_threads})
   CPPFLAGS="${saved_CPPFLAGS}"
 else
@@ -1100,8 +1083,8 @@ AC_DEFUN([AC_TRY_LIBGUILE],
     save_LIBS=$LIBS
     CPPFLAGS="$CPPFLAGS $new_CPPFLAGS"
     LIBS="$LIBS $new_LIBS"
-    AC_LINK_IFELSE(AC_LANG_PROGRAM([[#include "libguile.h"]],
-                                   [[scm_init_guile ();]]),
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include "libguile.h"]],
+                                   [[scm_init_guile ();]])],
                    [have_libguile_var=yes
                     GUILE_CPPFLAGS=$new_CPPFLAGS
                     GUILE_LIBS=$new_LIBS],
@@ -1271,12 +1254,12 @@ if test "${with_intel_pt}" = no; then
   AC_MSG_WARN([Intel Processor Trace support disabled; some features may be unavailable.])
   HAVE_LIBIPT=no
 else
-  AC_PREPROC_IFELSE(AC_LANG_SOURCE([[
+  AC_PREPROC_IFELSE([AC_LANG_SOURCE([[
 #include <linux/perf_event.h>
 #ifndef PERF_ATTR_SIZE_VER5
 # error
 #endif
-  ]]), [perf_event=yes], [perf_event=no])
+  ]])], [perf_event=yes], [perf_event=no])
   if test "$perf_event" != yes; then
     if test "$with_intel_pt" = yes; then
       AC_MSG_ERROR([linux/perf_event.h missing or too old])
@@ -1334,7 +1317,7 @@ AC_CHECK_HEADERS(term.h, [], [],
 
 libiberty_INIT
 
-AC_CHECK_DECLS([free, malloc, realloc, snprintf])
+AC_CHECK_DECLS([snprintf])
 AM_LC_MESSAGES
 
 # ----------------------- #
@@ -1720,13 +1703,13 @@ if test "${gdb_native}" = yes; then
      old_CPPFLAGS="$CPPFLAGS"
      CPPFLAGS="$CPPFLAGS $PYTHON_CPPFLAGS"
      AC_RUN_IFELSE(
-       AC_LANG_PROGRAM(
+       [AC_LANG_PROGRAM(
          [#include "Python.h"],
          [int err;
           Py_Initialize ();
           err = PyRun_SimpleString ("import itertools\n");
           Py_Finalize ();
-          return err == 0 ? 0 : 1;]),
+          return err == 0 ? 0 : 1;])],
        [dynamic_list=true], [], [true])
      LIBS="$old_LIBS"
      CFLAGS="$old_CFLAGS"
@@ -2319,7 +2302,7 @@ fi
 GDB_AC_TRANSFORM([gdb], [GDB_TRANSFORM_NAME])
 GDB_AC_TRANSFORM([gcore], [GCORE_TRANSFORM_NAME])
 AC_CONFIG_FILES([gcore], [chmod +x gcore])
-AC_CONFIG_FILES([Makefile gdb-gdb.gdb doc/Makefile data-directory/Makefile],
+AC_CONFIG_FILES([Makefile gdb-gdb.gdb gdb-gdb.py doc/Makefile data-directory/Makefile],
 [
 case x$CONFIG_HEADERS in
 xconfig.h:config.in)
