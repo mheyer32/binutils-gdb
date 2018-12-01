@@ -180,7 +180,7 @@ typedef struct amiga_ardata_struct {
 aout_symbol_type  **
 amiga_load_stab_symbols (bfd *abfd);
 bfd_boolean
-aout_32_find_nearest_line (bfd *abfd, struct aout_symbol **symbols, sec_ptr section, 
+aout_32_find_nearest_line (bfd *abfd, struct aout_symbol **symbols, sec_ptr section,
      bfd_vma offset, const char **filename_ptr, const char **functionname_ptr,
      unsigned int *line_ptr, unsigned int * discriminator_ptr);
 bfd_boolean
@@ -257,7 +257,7 @@ static bfd *amiga_openr_next_archived_file PARAMS ((bfd *, bfd *));
 static PTR amiga_read_ar_hdr PARAMS ((bfd *));
 static int amiga_generic_stat_arch_elt PARAMS ((bfd *, struct stat *));
 
-/*#define DEBUG_AMIGA 1*/
+/* #define DEBUG_AMIGA 1 */
 #if DEBUG_AMIGA
 #include <stdarg.h>
 static void
@@ -961,6 +961,9 @@ amiga_read_unit (
 	    return FALSE;
 	  break;
 
+	case HUNK_END:
+		break;
+
 	default:
 	  /* Something very nasty happened: invalid hunk occured... */
 	  bfd_set_error (bfd_error_wrong_format);
@@ -1656,14 +1659,14 @@ amiga_write_object_contents (
   if (AMIGA_DATA(abfd)->IsLoadFile)
     {
       // remove .stab and .stabstr
-      for (q = abfd->sections, p = q->next; p; p = p->next)
+      for (q = abfd->sections, p = q ? q->next : 0; p; p = p->next)
 	{
 	  if (0 == strcmp (p->name, ".stab"))
 	    {
 	      stab = p;
-		  q->next = p->next;
+	      q->next = p->next;
 	      if (!p->next)
-	      break;
+		break;
 	      continue;
 	    }
 	  if (0 == strcmp (p->name, ".stabstr"))
@@ -1729,7 +1732,7 @@ amiga_write_object_contents (
 	  remove_section_index (p, index_map);
       }
       n[3] = 0;
-      n[4] = n[2]-1;
+      n[4] = n[2] > 0 ? n[2]-1 : 0;
       if (!write_longs (n, 5, abfd))
 	return FALSE;
 
@@ -1821,14 +1824,28 @@ amiga_write_object_contents (
 		  break;
 		}
 	    }
-	break;
-      }
+	  break;
+        }
 
       for (p = abfd->sections; p != NULL; p = p->next)
 	{
 	  if (p->rawsize == 0 && p->size == 0 && strcmp (".text", p->name))
-	  remove_section_index (p, index_map);
-      }
+	    {
+	      // remove only if there are no symbols
+	      bfd_boolean remove = TRUE;
+	      for (i = 0; i < bfd_get_symcount(abfd); i++)
+		{
+		  asymbol *sym_p = abfd->outsymbols[i];
+		  if (sym_p->section == p)
+		    {
+		      remove = FALSE;
+		      break;
+		    }
+		}
+	      if (remove)
+		remove_section_index (p, index_map);
+	    }
+        }
     }
 
   /* Compute the maximum hunk number of the ouput file */
@@ -3572,7 +3589,7 @@ amiga_slurp_armap (
 	return FALSE;
 
       n = GL(symblock);
-	
+
       symblock += 4;
       len = n & 0xffffff;
       len <<= 2;
@@ -3581,7 +3598,7 @@ amiga_slurp_armap (
       csym->file_offset = syms->unit_offset;
       ++csym;
     }
-    
+
   if(csym != defsyms + symcount)
     {
       fprintf(stderr, "slurp_armap: read not enough symbols\n");
