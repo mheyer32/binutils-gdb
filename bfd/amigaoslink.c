@@ -836,7 +836,6 @@ amiga_perform_reloc (
 		     r->address));
 
 	  relocation -= (AMIGA_DATA(target_section->output_section->owner))->a4init;
-	  flags|=ADDEND_UNSIGNED;
 	}
       break;
 
@@ -1029,7 +1028,6 @@ aout_perform_reloc (
 		     r->address));
 
 	  relocation -= (AMIGA_DATA(target_section->output_section->owner))->a4init;
-	  flags|=ADDEND_UNSIGNED;
 	}
       DPRINT(10,("target->out=%s(%lx), sec->out=%s(%lx), symbol=%s\n",
 		 target_section->output_section->name,
