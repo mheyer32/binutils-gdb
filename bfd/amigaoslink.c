@@ -142,6 +142,12 @@ static struct rel_chain * rel_jumps;
 static unsigned rel_jumps_count;
 static unsigned rel_jumps_max;
 
+/* handle datadata_reloc*/
+static amiga_reloc_type ** r_datadata;
+static unsigned r_datadata_count;
+static unsigned r_datadata_max;
+static int datadata_addend;
+
 static void insert_long_jumps(bfd *abfd, bfd *input_bfd, asection *input_section, struct bfd_link_order *link_order, bfd_byte *data)
 {
   /**
@@ -209,6 +215,26 @@ static void insert_long_jumps(bfd *abfd, bfd *input_bfd, asection *input_section
 		      signed from;
 		      signed to;
 		      signed dist;
+
+		      // track all accesses to ___datadata_relocs
+		      if (src->relent.howto->type == H_ABS32 && 0 == strcmp("___datadata_relocs", src->symbol->name))
+			{
+			  unsigned ri = 0;
+			  for (; ri < r_datadata_count; ++ri)
+			    if (r_datadata[ri] == src)
+			      break;
+			  if (ri == r_datadata_count)
+			    {
+			      if (r_datadata_count == r_datadata_max)
+				{
+				  r_datadata_max += r_datadata_max + 2;
+				  r_datadata = (amiga_reloc_type **)realloc(r_datadata, r_datadata_max * sizeof(amiga_reloc_type *));
+				}
+			      r_datadata[r_datadata_count++] = src;
+			    }
+			  continue;
+			}
+
 		      if (src->relent.howto->type != H_PC16 || strcmp(src->symbol->section->name, ".text"))
 			continue;
 
@@ -270,6 +296,30 @@ static void insert_long_jumps(bfd *abfd, bfd *input_bfd, asection *input_section
 		  unsigned delta = s->rawsize - cursize;
 		  if (delta == 0)
 		    continue;
+
+
+		  // patch all datadata_reloc refs
+		  for (unsigned ri = 0; ri < r_datadata_count; ++ri)
+		    {
+		      amiga_reloc_type * rsrc = r_datadata[ri];
+		      asymbol * sym = rsrc->symbol;
+		      sym->value += delta;
+		      struct bfd_link_hash_entry * blh = (struct bfd_link_hash_entry*)sym->udata.p;
+		      blh->u.def.value += delta;
+		    }
+
+		  // patch __etext
+		  for (unsigned oi = 0; oi < abfd->symcount; ++oi)
+		    {
+		      asymbol * sym = abfd->outsymbols[oi];
+		      if (strcmp("__etext", sym->name))
+		        continue;
+
+		      sym->value += delta;
+		      break;
+		    }
+
+		  datadata_addend += delta;
 
 		  struct bfd_link_order * lo;
 
