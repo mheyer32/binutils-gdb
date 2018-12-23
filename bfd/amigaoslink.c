@@ -297,32 +297,6 @@ static void insert_long_jumps(bfd *abfd, bfd *input_bfd, asection *input_section
 		  if (delta == 0)
 		    continue;
 
-
-		  // patch all datadata_reloc refs
-		  {unsigned ri = 0;
-		  for (; ri < r_datadata_count; ++ri)
-		    {
-		      amiga_reloc_type * rsrc = r_datadata[ri];
-		      asymbol * sym = rsrc->symbol;
-		      sym->value += delta;
-		      struct bfd_link_hash_entry * blh = (struct bfd_link_hash_entry*)sym->udata.p;
-		      blh->u.def.value += delta;
-		    }
-		  }
-
-		  // patch __etext
-		  {unsigned oi = 0;
-		  for (; oi < abfd->symcount; ++oi)
-		    {
-		      asymbol * sym = abfd->outsymbols[oi];
-		      if (strcmp("__etext", sym->name))
-		        continue;
-
-		      sym->value += delta;
-		      break;
-		    }
-		  }
-
 		  datadata_addend += delta;
 
 		  struct bfd_link_order * lo;
@@ -338,7 +312,6 @@ static void insert_long_jumps(bfd *abfd, bfd *input_bfd, asection *input_section
 			    lo->u.reloc.p->addend += delta;
 			}
 		   }
-
 
 		  s->output_section->rawsize += delta;
 		  s->size = s->rawsize;
@@ -377,6 +350,31 @@ static void insert_long_jumps(bfd *abfd, bfd *input_bfd, asection *input_section
 	  /**
 	   * Now all sections have its final offset and size plus the old size in compressed_size.
 	   */
+	  if (datadata_addend)
+	    {
+		// patch all datadata_reloc refs
+		unsigned ri = 0;
+		for (; ri < r_datadata_count; ++ri)
+		  {
+		    amiga_reloc_type * rsrc = r_datadata[ri];
+		    asymbol * sym = rsrc->symbol;
+		    sym->value += (datadata_addend + 7) & ~7;
+		    struct bfd_link_hash_entry * blh = (struct bfd_link_hash_entry*)sym->udata.p;
+		    blh->u.def.value += (datadata_addend + 7) & ~7;
+		  }
+
+		// patch __etext
+		unsigned oi = 0;
+		for (; oi < abfd->symcount; ++oi)
+		  {
+		    asymbol * sym = abfd->outsymbols[oi];
+		    if (strcmp("__etext", sym->name))
+		      continue;
+
+		    sym->value += datadata_addend;
+		    break;
+		  }
+	    }
 	}
 
       /**
