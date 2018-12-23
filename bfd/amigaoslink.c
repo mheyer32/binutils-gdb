@@ -299,7 +299,8 @@ static void insert_long_jumps(bfd *abfd, bfd *input_bfd, asection *input_section
 
 
 		  // patch all datadata_reloc refs
-		  for (unsigned ri = 0; ri < r_datadata_count; ++ri)
+		  {unsigned ri = 0;
+		  for (; ri < r_datadata_count; ++ri)
 		    {
 		      amiga_reloc_type * rsrc = r_datadata[ri];
 		      asymbol * sym = rsrc->symbol;
@@ -307,9 +308,11 @@ static void insert_long_jumps(bfd *abfd, bfd *input_bfd, asection *input_section
 		      struct bfd_link_hash_entry * blh = (struct bfd_link_hash_entry*)sym->udata.p;
 		      blh->u.def.value += delta;
 		    }
+		  }
 
 		  // patch __etext
-		  for (unsigned oi = 0; oi < abfd->symcount; ++oi)
+		  {unsigned oi = 0;
+		  for (; oi < abfd->symcount; ++oi)
 		    {
 		      asymbol * sym = abfd->outsymbols[oi];
 		      if (strcmp("__etext", sym->name))
@@ -318,6 +321,7 @@ static void insert_long_jumps(bfd *abfd, bfd *input_bfd, asection *input_section
 		      sym->value += delta;
 		      break;
 		    }
+		  }
 
 		  datadata_addend += delta;
 
