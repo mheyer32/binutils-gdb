@@ -71,10 +71,16 @@ filename_cmp (const char *s1, const char *s2)
 
 #if defined (HAVE_DOS_BASED_FILE_SYSTEM)
       /* On DOS-based file systems, the '/' and the '\' are equivalent.  */
-      if (c1 == '/')
-        c1 = '\\';
-      if (c2 == '/')
-        c2 = '\\';
+      if (c1 == '\\') {
+        if (s1[1] == '\\')
+          ++s1;
+        c1 = '/';
+      }
+      if (c2 == '\\') {
+        if (s2[1] == '\\')
+          ++s2;
+        c2 = '/';
+      }
 #endif
 
       if (c1 != c2)

@@ -321,6 +321,10 @@ compare_filenames_for_search (const char *filename, const char *search_name)
   int len = strlen (filename);
   size_t search_len = strlen (search_name);
 
+  /* Handle identity with escaped backslashes. */
+  if (FILENAME_CMP (filename, search_name) == 0)
+    return 1;
+
   if (len < search_len)
     return 0;
 
