@@ -19,6 +19,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
 #include "as.h"
+#include "subsegs.h"
 
 enum {
   N_UNDF=0,
@@ -44,6 +45,7 @@ static void obj_amiga_line (int);
 static void obj_amiga_weak (int);
 static void obj_amiga_section (int);
 static char * obj_amiga_section_name (void);
+static void s_gnu_lto(char const * secname);
 
 const pseudo_typeS obj_pseudo_table[] =
 {
@@ -69,6 +71,47 @@ const pseudo_typeS obj_pseudo_table[] =
 };
 
 #if 1 // BFD_ASSEMBLER
+
+extern segT data_chip_section, data_fast_section, data_far_section, bss_chip_section, bss_fast_section, bss_far_section;
+
+void s_data_amiga (int which)
+{
+  int temp = get_absolute_expression ();
+  switch (which) {
+    case 0:
+      subseg_set (data_chip_section, (subsegT) temp);
+      break;
+    case 1:
+      subseg_set (data_fast_section, (subsegT) temp);
+      break;
+    case 2:
+      subseg_set (data_far_section, (subsegT) temp);
+      break;
+    case 8:
+      subseg_set (bss_chip_section, (subsegT) temp);
+      break;
+    case 9:
+      subseg_set (bss_fast_section, (subsegT) temp);
+      break;
+    case 10:
+      subseg_set (bss_far_section, (subsegT) temp);
+      break;
+  }
+  demand_empty_rest_of_line ();
+}
+
+
+static void s_gnu_lto(char const * secname)
+{
+  segT seg = subseg_new(secname, 0);
+
+  if (!seg_info (seg)->hadone)
+    {
+      bfd_set_section_flags (stdoutput, seg, SEC_READONLY | SEC_DEBUGGING);
+      seg_info (seg)->hadone = 1;
+      seg->name = xstrdup(secname);
+    }
+}
 
 void
 obj_amiga_frob_symbol (
@@ -230,6 +273,9 @@ static void obj_amiga_section(int push) {
 	if (name == NULL)
 		return;
 
+	if (0 == strncmp(".gnu.lto_", name, 9))
+	  s_gnu_lto(name);
+	else
 	if (0 == strcmp(".rodata", name))
 		s_text(push);
 	else

@@ -28,7 +28,7 @@
 		<link>
 			<name>_build</name>
 			<type>2</type>
-			<location>D:/develop/workspaces/c1/amiga-gcc/build/binutils</location>
+			<location>D:/develop/workspaces/c1/amiga-gcc/build-CYGWIN_NT-10.0-WOW/binutils</location>
 		</link>
 	</linkedResources>
 </projectDescription>
