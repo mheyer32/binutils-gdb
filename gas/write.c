@@ -2679,7 +2679,7 @@ relax_segment (struct frag *segment_frag_root, segT segment, int pass)
 
 	    if (offset % fragP->fr_var != 0)
 	      {
-		as_bad_where (fragP->fr_file, fragP->fr_line,
+		as_warn_where (fragP->fr_file, fragP->fr_line,
 			      ngettext ("alignment padding (%lu byte) "
 					"not a multiple of %ld",
 					"alignment padding (%lu bytes) "
