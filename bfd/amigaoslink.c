@@ -358,9 +358,9 @@ static void insert_long_jumps(bfd *abfd, bfd *input_bfd, asection *input_section
 		  {
 		    amiga_reloc_type * rsrc = r_datadata[ri];
 		    asymbol * sym = rsrc->symbol;
-		    sym->value += (datadata_addend + 7) & ~7;
+		    sym->value += (datadata_addend + 3) & ~3;
 		    struct bfd_link_hash_entry * blh = (struct bfd_link_hash_entry*)sym->udata.p;
-		    blh->u.def.value += (datadata_addend + 7) & ~7;
+		    blh->u.def.value += (datadata_addend + 3) & ~3;
 		  }
 
 		// patch __etext
