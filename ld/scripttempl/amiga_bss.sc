@@ -36,6 +36,6 @@ SECTIONS
     ${RELOCATING+__end = .;}
   }
   ${RELOCATING+___data_size = SIZEOF(.data) + SIZEOF(.bss);}
-  ${RELOCATING+___bss_size = 0x0;}
+  ${RELOCATING+___bss_size = SIZEOF(.bss);}
 }
 EOF
