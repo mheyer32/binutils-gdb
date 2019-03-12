@@ -28,6 +28,7 @@ SECTIONS
     ${RELOCATING+___a4_init = 0x7ffe;}
     ${RELOCATING+__edata = .;}
   }
+  ${RELOCATING+___data_size = SIZEOF(.data);}
   .bss :
   {
     ${RELOCATING+__bss_start = .;}
@@ -35,7 +36,14 @@ SECTIONS
     *(COMMON)
     ${RELOCATING+__end = .;}
   }
-  ${RELOCATING+___data_size = SIZEOF(.data) + SIZEOF(.bss);}
   ${RELOCATING+___bss_size = SIZEOF(.bss);}
+  .data_chip :
+  {
+    *(.data_chip)
+  }
+  .bss_chip :
+  {
+    *(.bss_chip)
+  }
 }
 EOF
