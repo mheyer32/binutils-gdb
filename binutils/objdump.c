@@ -368,6 +368,11 @@ nonfatal (const char *msg)
   exit_status = 1;
 }
 
+
+static int dummy_fprintf(void * v ATTRIBUTE_UNUSED, char const *f ATTRIBUTE_UNUSED, ...) {
+  return 0;
+}
+
 /* Returns TRUE if the specified section should be dumped.  */
 
 static bfd_boolean
@@ -1130,6 +1135,87 @@ find_symbol_for_address (bfd_vma vma,
 
   return sorted_syms[thisplace];
 }
+
+/**
+ * Create a symbol for the label in text section, if none exists
+ */
+
+static void
+create_label_address_func (bfd_vma vma, struct disassemble_info *inf)
+{
+  struct objdump_disasm_info *aux;
+  asymbol *sym = NULL;
+  bfd_boolean skip_find = FALSE;
+
+  aux = (struct objdump_disasm_info *) inf->application_data;
+
+  if (sorted_symcount < 1)
+    return;
+
+  if (aux->reloc != NULL
+      && aux->reloc->sym_ptr_ptr != NULL
+      && * aux->reloc->sym_ptr_ptr != NULL)
+    {
+      sym = * aux->reloc->sym_ptr_ptr;
+
+      /* Adjust the vma to the reloc.  */
+      vma += bfd_asymbol_value (sym);
+
+      if (bfd_is_und_section (bfd_get_section (sym)))
+	skip_find = TRUE;
+    }
+
+  if (!skip_find)
+    sym = find_symbol_for_address (vma, inf, NULL);
+
+  if (vma == 0 || (vma&1) || vma >= inf->buffer_length || !sym || sym->section != aux->sec || sym->value == vma)
+    return;
+
+  // only branch insns
+  if (*aux->buffer < 0x60 || *aux->buffer > 0x6f)
+    return;
+
+  // find the index
+  int index;
+  for (index = 0; index < inf->symtab_size; ++ index)
+    if (inf->symtab[index] == sym)
+      break;
+
+  // skip all with same value
+  do {
+      ++index;
+  } while (inf->symtab[index]->value == sym->value);
+
+  int tomove = inf->symtab_size - index;
+  // make room for the new symbol
+  ++inf->symtab_size;
+  inf->symtab = (asymbol **) xrealloc (inf->symtab, inf->symtab_size * sizeof (asymbol *));
+
+  memmove(&inf->symtab[index + 1], &inf->symtab[index], tomove * sizeof(asymbol *));
+
+  asymbol * nsym = (asymbol *)xmalloc(sizeof(asymbol));
+  inf->symtab[index] = nsym;
+
+  // copy common
+  nsym->flags = sym->flags;
+  nsym->section = sym->section;
+  nsym->the_bfd = sym->the_bfd;
+  nsym->udata = sym->udata;
+
+  // set vma
+  nsym->value = vma;
+  char lab[16];
+  static unsigned n;
+  snprintf(lab, 32, "_L%d", ++n);
+  char * name = (char *)xmalloc(16);
+  strcpy(name, lab);
+  nsym->name = name;
+
+  sorted_syms = inf->symtab;
+  sorted_symcount = inf->symtab_size - synthcount;
+
+}
+
 
 /* Print an address and the offset to the nearest symbol.  */
 
@@ -2265,6 +2351,33 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
     ++rel_pp;
 
   printf (_("\nDisassembly of section %s:\n"), section->name);
+
+#ifdef TARGET_AMIGA
+  /**
+   * Run over the data and create labels/symbols.
+   */
+  struct disassemble_info * dinf = (struct disassemble_info *)inf;
+  void (*tmp_print_address_func)
+    (bfd_vma addr, struct disassemble_info *dinfo) = dinf->print_address_func;
+  fprintf_ftype tmp_fprintf = dinf->fprintf_func;
+  arelent ** tmp_rel_pp = rel_pp;
+
+  dinf->print_address_func = create_label_address_func;
+  dinf->fprintf_func = dummy_fprintf;
+
+  bfd_size_type pos;
+  for (pos = 0; pos < datasize;)
+    {
+      paux->vma = section->vma + pos;
+      pos += (*paux->disassemble_fn) (section->vma + pos, inf);
+    }
+
+  // restore the real print functions
+  dinf->print_address_func = tmp_print_address_func;
+  dinf->fprintf_func = tmp_fprintf;
+  rel_pp = tmp_rel_pp;
+
+#endif
 
   /* Find the nearest symbol forwards from our current position.  */
   paux->require_sec = TRUE;
