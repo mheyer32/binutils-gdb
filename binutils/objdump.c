@@ -1134,7 +1134,8 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
 			     bfd_vma vma, struct disassemble_info *inf,
 			     bfd_boolean skip_zeroes)
 {
-  objdump_print_value (vma, inf, skip_zeroes);
+  if (!omit_offsets)
+    objdump_print_value (vma, inf, skip_zeroes);
 
   if (sym == NULL)
     {
