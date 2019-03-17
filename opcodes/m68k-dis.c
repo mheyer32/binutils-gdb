@@ -37,11 +37,21 @@
 
 #ifdef TARGET_AMIGA
 /* Extra info to pass to the disassembler address printing function.  */
+/* Extra info to pass to the section disassembler and address printing
+   function.  */
 struct objdump_disasm_info
 {
-  bfd *abfd;
-  asection *sec;
-  bfd_boolean require_sec;
+  bfd *              abfd;
+  asection *         sec;
+  bfd_boolean        require_sec;
+  arelent **         dynrelbuf;
+  long               dynrelcount;
+  disassembler_ftype disassemble_fn;
+  arelent *          reloc;
+  arelent ***        relppp; // pointer to relocations
+  bfd_vma            vma; // code position
+  unsigned char *    buffer; // vma + *pp - buffer determines relppp usage
+  unsigned char **   pp; // current position in buffer
 };
 
 /* Support display of symbols in baserel offsets. */
@@ -776,6 +786,11 @@ print_insn_arg (const char *d,
   int flt_p;
   bfd_signed_vma disp;
   unsigned int uval;
+
+  struct objdump_disasm_info * aux = (struct objdump_disasm_info *) info->application_data;
+  aux->buffer = buffer;
+  aux->pp = &p;
+
 
   switch (*d)
     {

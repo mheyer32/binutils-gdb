@@ -146,6 +146,10 @@ struct objdump_disasm_info
   long               dynrelcount;
   disassembler_ftype disassemble_fn;
   arelent *          reloc;
+  arelent ***        relppp; // pointer to relocations
+  bfd_vma            vma; // code position
+  unsigned char *    buffer; // vma + *pp - buffer determines relppp usage
+  unsigned char **   pp; // current position in buffer
 };
 
 /* Architecture to disassemble for, or default if NULL.  */
@@ -1137,11 +1141,33 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
   if (!omit_offsets)
     objdump_print_value (vma, inf, skip_zeroes);
 
+  struct objdump_disasm_info *aux =
+      (struct objdump_disasm_info *) inf->application_data;
+
+  if (aux->relppp && *aux->relppp && **aux->relppp)
+    {
+      arelent * r = **aux->relppp;
+      bfd_vma offset = aux->vma + *aux->pp - aux->buffer;
+      if (r->address <= offset)
+	{
+	  sym = *r->sym_ptr_ptr;
+	  // search the correct section
+	  sec = aux->sec;
+	  aux->sec = sym->section;
+	  sym = find_symbol_for_address(vma, inf, NULL);
+	  aux->sec = sec;
+
+	  // update vma and section and move relppp
+	  sec = sym->section;
+	  ++*aux->relppp;
+	}
+    }
+
   if (sym == NULL)
     {
       bfd_vma secaddr;
 
-      (*inf->fprintf_func) (inf->stream, " <%s",
+      (*inf->fprintf_func) (inf->stream, " %s",
 			    bfd_get_section_name (abfd, sec));
       secaddr = bfd_get_section_vma (abfd, sec);
       if (vma < secaddr)
@@ -1154,11 +1180,11 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
 	  (*inf->fprintf_func) (inf->stream, "+0x");
 	  objdump_print_value (vma - secaddr, inf, TRUE);
 	}
-      (*inf->fprintf_func) (inf->stream, ">");
+//      (*inf->fprintf_func) (inf->stream, ">");
     }
   else
     {
-      (*inf->fprintf_func) (inf->stream, " <");
+      (*inf->fprintf_func) (inf->stream, " ");
 
       objdump_print_symname (abfd, inf, sym);
 
@@ -1184,7 +1210,7 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
 	  objdump_print_value (vma - bfd_asymbol_value (sym), inf, TRUE);
 	}
 
-      (*inf->fprintf_func) (inf->stream, ">");
+//      (*inf->fprintf_func) (inf->stream, ">");
     }
 
   if (display_file_offsets)
@@ -1831,7 +1857,7 @@ disassemble_bytes (struct disassemble_info * inf,
 	      else
 		{
 		  bfd_sprintf_vma (aux->abfd, buf, section->vma + addr_offset);
-		  for (s = buf + skip_addr_chars; *s; s++)
+		   for (s = buf + skip_addr_chars; *s == '0'; s++)
 		    *s = ' ';
 		  if (*s == '\0')
 		    *--s = '0';
@@ -1898,7 +1924,10 @@ disassemble_bytes (struct disassemble_info * inf,
 		   disassembling code of course, and when -D is in effect.  */
 		inf->stop_vma = section->vma + stop_offset;
 
+	      aux->relppp = relppp;
+	      aux->vma = section->vma + addr_offset;
 	      octets = (*disassemble_fn) (section->vma + addr_offset, inf);
+	      aux->relppp = 0;
 
 	      inf->stop_vma = 0;
 	      inf->fprintf_func = (fprintf_ftype) fprintf;
@@ -1938,7 +1967,7 @@ disassemble_bytes (struct disassemble_info * inf,
 
 	  if (prefix_addresses
 	      ? show_raw_insn > 0
-	      : show_raw_insn >= 0)
+	      : show_raw_insn > 0)
 	    {
 	      bfd_vma j;
 
@@ -1997,7 +2026,7 @@ disassemble_bytes (struct disassemble_info * inf,
 
 	  if (prefix_addresses
 	      ? show_raw_insn > 0
-	      : show_raw_insn >= 0)
+	      : show_raw_insn > 0)
 	    {
 	      while (pb < octets)
 		{
@@ -2177,7 +2206,7 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 
   /* Decide which set of relocs to use.  Load them if necessary.  */
   paux = (struct objdump_disasm_info *) pinfo->application_data;
-  if (paux->dynrelbuf && dump_dynamic_reloc_info)
+  if (paux->dynrelbuf)// && dump_dynamic_reloc_info)
     {
       rel_pp = paux->dynrelbuf;
       rel_count = paux->dynrelcount;
@@ -2193,7 +2222,8 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
       rel_offset = 0;
 
       if ((section->flags & SEC_RELOC) != 0
-	  && (dump_reloc_info || pinfo->disassembler_needs_relocs))
+//	  && (dump_reloc_info || pinfo->disassembler_needs_relocs)
+	  )
 	{
 	  long relsize;
 
@@ -2289,6 +2319,7 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
       if (! prefix_addresses)
 	{
 	  pinfo->fprintf_func (pinfo->stream, "\n");
+	  paux->relppp = 0;
 	  objdump_print_addr_with_sym (abfd, section, sym, addr,
 				       pinfo, FALSE);
 	  pinfo->fprintf_func (pinfo->stream, ":\n");
@@ -2402,6 +2433,7 @@ disassemble_data (bfd *abfd)
   aux.dynrelbuf = NULL;
   aux.dynrelcount = 0;
   aux.reloc = NULL;
+  aux.relppp = NULL;
 
   disasm_info.print_address_func = objdump_print_address;
   disasm_info.symbol_at_address_func = objdump_symbol_at_address;
