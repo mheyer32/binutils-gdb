@@ -1924,7 +1924,7 @@ disassemble_bytes (struct disassemble_info * inf,
 		   disassembling code of course, and when -D is in effect.  */
 		inf->stop_vma = section->vma + stop_offset;
 
-	      aux->relppp = relppp;
+	      aux->relppp = *relppp < relppend ? relppp : 0;
 	      aux->vma = section->vma + addr_offset;
 	      octets = (*disassemble_fn) (section->vma + addr_offset, inf);
 	      aux->relppp = 0;
