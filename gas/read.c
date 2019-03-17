@@ -3748,9 +3748,11 @@ demand_empty_rest_of_line (void)
     input_line_pointer++;
   else
     {
-      if (ISPRINT (*input_line_pointer))
-	as_bad (_("junk at end of line, first unrecognized character is `%c'"),
+      if (ISPRINT (*input_line_pointer)) {
+	if (*input_line_pointer != '|')
+	  as_bad (_("junk at end of line, first unrecognized character is `%c'"),
 		 *input_line_pointer);
+      }
       else
 	as_bad (_("junk at end of line, first unrecognized character valued 0x%x"),
 		 *input_line_pointer);
