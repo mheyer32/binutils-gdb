@@ -117,7 +117,8 @@ static bfd_boolean display_file_offsets;/* -F */
 static const char *prefix;		/* --prefix */
 static int prefix_strip;		/* --prefix-strip */
 static size_t prefix_length;
-static bfd_boolean unwind_inlines;	/* --inlines.  */
+static bfd_boolean unwind_inlines;	/* --inlines  */
+static bfd_boolean omit_offsets;	/* -N */
 
 /* A structure to record the sections mentioned in -j switches.  */
 struct only
@@ -239,6 +240,7 @@ usage (FILE *stream, int status)
   -m, --architecture=MACHINE     Specify the target architecture as MACHINE\n\
   -j, --section=NAME             Only display information for section NAME\n\
   -M, --disassembler-options=OPT Pass text OPT on to the disassembler\n\
+  -N                             Omit the offsets\n\
   -EB --endian=big               Assume big endian format when disassembling\n\
   -EL --endian=little            Assume little endian format when disassembling\n\
       --file-start-context       Include context from start of file (with -S)\n\
@@ -1823,12 +1825,17 @@ disassemble_bytes (struct disassemble_info * inf,
 	    {
 	      char *s;
 
-	      bfd_sprintf_vma (aux->abfd, buf, section->vma + addr_offset);
-	      for (s = buf + skip_addr_chars; *s == '0'; s++)
-		*s = ' ';
-	      if (*s == '\0')
-		*--s = '0';
-	      printf ("%s:\t", buf + skip_addr_chars);
+	      if (omit_offsets)
+		printf("\t");
+	      else
+		{
+		  bfd_sprintf_vma (aux->abfd, buf, section->vma + addr_offset);
+		  for (s = buf + skip_addr_chars; *s; s++)
+		    *s = ' ';
+		  if (*s == '\0')
+		    *--s = '0';
+		  printf ("%s:\t", buf + skip_addr_chars);
+		}
 	    }
 	  else
 	    {
@@ -3848,7 +3855,7 @@ main (int argc, char **argv)
   set_default_bfd_target ();
 
   while ((c = getopt_long (argc, argv,
-			   "pP:ib:m:M:VvCdDlfFaHhrRtTxsSI:j:wE:zgeGW::",
+			   "pP:ib:m:NM:VvCdDlfFaHhrRtTxsSI:j:wE:zgeGW::",
 			   long_options, (int *) 0))
 	 != EOF)
     {
@@ -3858,6 +3865,9 @@ main (int argc, char **argv)
 	  break;		/* We've been given a long option.  */
 	case 'm':
 	  machine = optarg;
+	  break;
+	case 'N':
+	  omit_offsets = TRUE;
 	  break;
 	case 'M':
 	  {
