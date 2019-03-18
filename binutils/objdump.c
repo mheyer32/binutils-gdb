@@ -121,6 +121,10 @@ static bfd_boolean unwind_inlines;	/* --inlines  */
 static bfd_boolean omit_offsets;	/* -N */
 static bfd_boolean create_labels;       /* -L */
 
+#define SBF_VISITED (1<<30)
+#define SBF_PENDING (1<<31)
+
+
 /* A structure to record the sections mentioned in -j switches.  */
 struct only
 {
@@ -1139,7 +1143,9 @@ find_symbol_for_address (bfd_vma vma,
 }
 
 
-
+/**
+ * search the sorted_syms plus the closest symbol of the same section.
+ */
 static int
 find_closest_symbol_index(bfd_vma vma, asection * section)
 {
@@ -1169,7 +1175,7 @@ create_label(bfd_vma vma, struct disassemble_info *inf)
   if (sym->value == vma)
     return;
 
-  // symbol at index is less or equal vma
+  // insert correctly regardless of section
   while (index + 1 < sorted_symcount && sorted_syms[index + 1]->value < vma)
     ++index;
 
@@ -1190,8 +1196,8 @@ create_label(bfd_vma vma, struct disassemble_info *inf)
   asymbol * nsym = (asymbol *)xmalloc(sizeof(asymbol));
   sorted_syms[index] = nsym;
 
-  // copy common
-  nsym->flags = (sym->flags & ((1<<30) - 1)) | BSF_SYNTHETIC;
+  // copy common and mark the flags - clear SBF_VISITED flag, set SBF_PENDING
+  nsym->flags = (sym->flags & ~SBF_VISITED) | SBF_PENDING;
   nsym->section = sym->section;
   nsym->the_bfd = sym->the_bfd;
   nsym->udata = sym->udata;
@@ -2425,10 +2431,10 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
       for (index = 0; index < sorted_symcount; ++index)
 	{
 	  asym = sorted_syms[index];
-	  if (asym->flags & (1<<30))
+	  if (asym->flags & SBF_VISITED)
 	      continue;
 
-	  asym->flags |= (1<<30);
+	  asym->flags |= SBF_VISITED;
 
 	  if (asym->name && strstr(asym->name, "lto_pri"))
 	    continue;
@@ -2465,7 +2471,8 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 
 		      // search the limit
 		      unsigned limit = 0;
-		      for (int k = -4; k > -22; k -= 2)
+		      int k;
+		      for (k = -4; k > -22; k -= 2)
 			{
 			  if ((data[pos + k] & 0xf0) == 0x70 && (data[pos + k] & 0x1) == 0)
 			    {
