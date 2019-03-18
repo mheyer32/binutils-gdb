@@ -121,9 +121,7 @@ static bfd_boolean unwind_inlines;	/* --inlines  */
 static bfd_boolean omit_offsets;	/* -N */
 static bfd_boolean create_labels;       /* -L */
 
-#define SBF_VISITED (1<<30)
-#define SBF_PENDING (1<<31)
-
+#define SBF_PENDING (1<<30)
 
 /* A structure to record the sections mentioned in -j switches.  */
 struct only
@@ -177,6 +175,9 @@ static asymbol **sorted_syms;
 
 /* Number of symbols in `sorted_syms'.  */
 static long sorted_symcount = 0;
+
+/* Lookup map for insn starts. */
+static bfd_byte * lookup;
 
 /* The dynamic symbol table.  */
 static asymbol **dynsyms;
@@ -1149,16 +1150,36 @@ find_symbol_for_address (bfd_vma vma,
 static int
 find_closest_symbol_index(bfd_vma vma, asection * section)
 {
-  static int last_index;
+  long min = 0;
+  long max_count = sorted_symcount;
+  long thisplace;
+
+  while (min + 1 < max_count)
+    {
+      asymbol *sym;
+
+      thisplace = (max_count + min) / 2;
+      sym = sorted_syms[thisplace];
+
+      if (bfd_asymbol_value (sym) > vma)
+	max_count = thisplace;
+      else if (bfd_asymbol_value (sym) < vma)
+	min = thisplace;
+      else
+	{
+	  min = thisplace;
+	  break;
+	}
+    }
+
 
   // find the index
-  int index = last_index;
+  int index = thisplace;
   while (index + 1 < sorted_symcount && (sorted_syms[index]->value < vma || sorted_syms[index]->section != section))
     ++index;
   while (index > 0 && (sorted_syms[index]->value > vma || sorted_syms[index]->section != section))
     --index;
 
-  last_index = index;
 
   return index;
 }
@@ -1174,6 +1195,14 @@ create_label(bfd_vma vma, struct disassemble_info *inf)
 
   if (sym->value == vma)
     return;
+
+  // was previous visited and label is insied?
+  if (sym->udata.i && vma < sym->udata.i)
+    {
+      int bit = 1 << vma % 15 / 2;
+      if (!(lookup[(vma + 15) / 16] & bit))
+	return;
+    }
 
   // insert correctly regardless of section
   while (index + 1 < sorted_symcount && sorted_syms[index + 1]->value < vma)
@@ -1196,16 +1225,19 @@ create_label(bfd_vma vma, struct disassemble_info *inf)
   asymbol * nsym = (asymbol *)xmalloc(sizeof(asymbol));
   sorted_syms[index] = nsym;
 
-  // copy common and mark the flags - clear SBF_VISITED flag, set SBF_PENDING
-  nsym->flags = (sym->flags & ~SBF_VISITED) | SBF_PENDING;
+  // copy common and mark the flags
+  nsym->value = vma;
+  nsym->flags = sym->flags | SBF_PENDING;
   nsym->section = sym->section;
   nsym->the_bfd = sym->the_bfd;
-  nsym->udata = sym->udata;
+  if (sym->udata.i >= vma)
+    nsym->udata.i = sym->udata.i;
+  else
+    nsym->udata.i = 0;
 
   // set vma
-  nsym->value = vma;
   nsym->name = 0;
-#if 0
+#if 1
   char lab[16];
   static unsigned n;
   snprintf(lab, 32, "_L%d", ++n);
@@ -2420,26 +2452,30 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
   dinf->print_address_func = create_label_address_func;
   dinf->fprintf_func = dummy_fprintf;
 
+  // create a lookup map where insns start.
+  // do not create labels in a section having such a lookup map
+  //   if the label is not at insn start
+  lookup = (bfd_byte *)xmalloc((section->size + 15) / 16);
+
   int index;
   asymbol * asym;
   int seen;
-//  int pass = 0;
+  int pass = 0;
   do
     {
-//      fprintf(stderr, "pass %d\n", ++pass);
+      fprintf(stderr, "pass %d:", ++pass);
       seen = 0;
       for (index = 0; index < sorted_symcount; ++index)
 	{
 	  asym = sorted_syms[index];
-	  if (asym->flags & SBF_VISITED)
+	  if (asym->udata.i || (asym->flags & SBF_PENDING))
 	      continue;
-
-	  asym->flags |= SBF_VISITED;
 
 	  if (asym->name && strstr(asym->name, "lto_pri"))
 	    continue;
 
-	  seen = 1;
+	  if (!(++seen & 127))
+	    fprintf(stderr, " %d/%ld", index, sorted_symcount);
 
 //	  fprintf(stderr, "at %0lx\n", asym->value);
 
@@ -2447,10 +2483,16 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 	  for (pos = asym->value; pos < section->size;)
 	    {
 	      paux->vma = pos;
+
+	      // set the insn bit.
+	      int bit = 1 << (pos%15/2);
+	      lookup[(pos + 15) / 16] |= bit;
+
 	      bfd_vma add = (*paux->disassemble_fn) (pos, inf);
 
 	      if (add == 0)
 		break;
+
 
 	      // bra
 	      if (data[pos] == 0x60)
@@ -2464,7 +2506,7 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 		))
 		{
 
-		  if (data[pos + 1] == 0xfb && 0)
+		  if (data[pos + 1] == 0xfb )
 		    {
 		      // add labels based on jump table
 		      bfd_vma base = pos + add;
@@ -2492,46 +2534,56 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 			{
 			  limit += base + limit;
 
-			  while(base < limit)
+			  bfd_vma entry = base;
+			  while(entry <= limit)
 			    {
-			      int jndex = find_closest_symbol_index(base, section);
+			      int jndex = find_closest_symbol_index(entry, section);
 			      asymbol * ssym = sorted_syms[jndex];
-			      if (ssym->value == base)
+			      if (ssym->value == entry) // stop if there is a label
 				break;
 
-			      bfd_vma offset = (data[base] << 8) | data[base + 1];
+			      bfd_vma offset = ((char)data[entry] << 8) | data[entry + 1];
 			      if (offset&1)
 				break;
-			      create_label(base + offset, pinfo);
-			      base += 2;
+//			      fprintf(stderr, "jump to %08lx\n", base + offset);
+			      bfd_vma at = base + offset;
+			      create_label(at, pinfo);
+			      entry += 2;
 			    }
 			}
 		    }
 
 		  break;
 		}
-
 	      pos += add;
 	    }
+	  asym->udata.i = pos; // store end for this symbol
 	}
+
+      // create the symbol names and clear SBF_PENDING
+      bfd_vma end = 0;
+      for (index = 0; index < sorted_symcount; ++index)
+        {
+          asym = sorted_syms[index];
+          if (asym->udata.i > end)
+            end = asym->udata.i;
+          else if (end > asym->value)
+            asym->udata.i = end;
+          if (asym->name == 0)
+	    {
+		static int n;
+		char lab[16];
+		snprintf(lab, 32, "_L%d", ++n);
+		char * name = (char *)xmalloc(16);
+		strcpy(name, lab);
+		asym->name = name;
+	    }
+          asym->flags &= ~SBF_PENDING;
+        }
+      fprintf(stderr, " %d/%ld\n", seen, sorted_symcount);
     }
   while (seen);
 
-  // create the symbol names
-  for (index = 0; index < sorted_symcount; ++index)
-    {
-      asym = sorted_syms[index];
-      if (asym->name == 0 && (asym->flags & BSF_SYNTHETIC))
-	{
-	    char lab[16];
-	    static unsigned n;
-	    snprintf(lab, 32, "_L%d", ++n);
-	    char * name = (char *)xmalloc(16);
-	    strcpy(name, lab);
-	    asym->name = name;
-	}
-//	printf("%0lx: %s\n", asym->value, asym->name); fflush(stdout);
-      }
   // restore the real print functions
   dinf->print_address_func = tmp_print_address_func;
   dinf->fprintf_func = tmp_fprintf;
