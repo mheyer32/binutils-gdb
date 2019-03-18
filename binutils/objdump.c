@@ -1237,7 +1237,7 @@ create_label(bfd_vma vma, struct disassemble_info *inf)
 
   // set vma
   nsym->name = 0;
-#if 1
+#if 0
   char lab[16];
   static unsigned n;
   snprintf(lab, 32, "_L%d", ++n);
@@ -2569,20 +2569,28 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
             end = asym->udata.i;
           else if (end > asym->value)
             asym->udata.i = end;
-          if (asym->name == 0)
-	    {
-		static int n;
-		char lab[16];
-		snprintf(lab, 32, "_L%d", ++n);
-		char * name = (char *)xmalloc(16);
-		strcpy(name, lab);
-		asym->name = name;
-	    }
           asym->flags &= ~SBF_PENDING;
         }
       fprintf(stderr, " %d/%ld\n", seen, sorted_symcount);
     }
   while (seen);
+
+  for (index = 0; index < sorted_symcount; ++index)
+    {
+      static int n;
+      asym = sorted_syms[index];
+      if (asym->name == 0)
+	{
+	  char lab[16];
+	  snprintf(lab, 32, ".L%d", ++n);
+	  char * name = (char *)xmalloc(16);
+	  strcpy(name, lab);
+	  asym->name = name;
+	} else if (asym->section == section)
+	  n = 0;
+      asym->flags &= ~SBF_PENDING;
+    }
+
 
   // restore the real print functions
   dinf->print_address_func = tmp_print_address_func;
