@@ -380,7 +380,7 @@ static const pseudo_typeS potable[] = {
   {"appfile", s_app_file, 1},
   {"appline", s_app_line, 1},
   {"fail", s_fail, 0},
-  {"file", s_app_file, 0},
+  {"file", s_ignore, 0},
   {"fill", s_fill, 0},
   {"float", float_cons, 'f'},
   {"format", s_ignore, 0},
@@ -418,6 +418,7 @@ static const pseudo_typeS potable[] = {
   {"list", listing_list, 1},	/* Turn listing on.  */
   {"llen", listing_psize, 1},
   {"long", cons, 4},
+  {"loc", s_ignore, 0},
   {"lsym", s_lsym, 0},
   {"macro", s_macro, 0},
   {"mexit", s_mexit, 0},
