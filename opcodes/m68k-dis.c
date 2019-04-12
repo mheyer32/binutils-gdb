@@ -1954,7 +1954,7 @@ print_insn_m68k (bfd_vma memaddr, disassemble_info *info)
       val = m68k_scan_mask (memaddr, info, arch_mask);
     }
 
-  if (val == 0)
+  if (val <= 0)
     /* Handle undefined instructions.  */
     info->fprintf_func (info->stream, ".short 0x%04x", (buffer[0] << 8) + buffer[1]);
 

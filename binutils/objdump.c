@@ -122,6 +122,7 @@ static bfd_boolean omit_offsets;	/* -N */
 static bfd_boolean create_labels;       /* -L */
 
 #define SBF_PENDING (1<<30)
+#define SBF_DATA (1<<31)
 
 /* A structure to record the sections mentioned in -j switches.  */
 struct only
@@ -1175,9 +1176,9 @@ find_closest_symbol_index(bfd_vma vma, asection * section)
 
   // find the index
   int index = thisplace;
-  while (index + 1 < sorted_symcount && (sorted_syms[index]->value < vma || sorted_syms[index]->section != section))
+  while (index + 1 < sorted_symcount && (sorted_syms[index]->value < vma || sorted_syms[index]->section != section || (sorted_syms[index]->flags & SBF_DATA)))
     ++index;
-  while (index > 0 && (sorted_syms[index]->value > vma || sorted_syms[index]->section != section))
+  while (index > 0 && (sorted_syms[index]->value > vma || sorted_syms[index]->section != section || (sorted_syms[index]->flags & SBF_DATA)))
     --index;
 
 
@@ -1188,7 +1189,7 @@ find_closest_symbol_index(bfd_vma vma, asection * section)
  * Create the label and insert it.
  */
 static void
-create_label(bfd_vma vma, struct disassemble_info *inf)
+create_label(bfd_vma vma, struct disassemble_info *inf, int is_data)
 {
   int index = find_closest_symbol_index(vma, inf->section);
   asymbol * sym = sorted_syms[index];
@@ -1196,8 +1197,8 @@ create_label(bfd_vma vma, struct disassemble_info *inf)
   if (sym->value == vma)
     return;
 
-  // was previous visited and label is insied?
-  if (sym->udata.i && vma < sym->udata.i)
+  // was previous visited and label is inside?
+  if (sym->udata.i && vma < sym->udata.i && !(sym->flags & SBF_DATA) && !is_data)
     {
       int bit = 1 << vma % 15 / 2;
       if (!(lookup[(vma + 15) / 16] & bit))
@@ -1220,7 +1221,8 @@ create_label(bfd_vma vma, struct disassemble_info *inf)
       total_size = sorted_symcount * 2;
       sorted_syms = (asymbol **) xrealloc (sorted_syms, total_size * sizeof (asymbol *));
     }
-  memmove(&sorted_syms[index + 1], &sorted_syms[index], tomove * sizeof(asymbol *));
+  if (tomove > 0)
+    memmove(&sorted_syms[index + 1], &sorted_syms[index], tomove * sizeof(asymbol *));
 
   asymbol * nsym = (asymbol *)xmalloc(sizeof(asymbol));
   sorted_syms[index] = nsym;
@@ -1228,19 +1230,22 @@ create_label(bfd_vma vma, struct disassemble_info *inf)
   // copy common and mark the flags
   nsym->value = vma;
   nsym->flags = sym->flags | SBF_PENDING;
+  if (is_data)
+    nsym->flags |= SBF_DATA;
   nsym->section = sym->section;
   nsym->the_bfd = sym->the_bfd;
-  if (sym->udata.i >= vma)
-    nsym->udata.i = sym->udata.i;
-  else
-    nsym->udata.i = 0;
+  nsym->udata.i = 0;
 
   // set vma
   nsym->name = 0;
 #if 0
   char lab[16];
   static unsigned n;
-  snprintf(lab, 32, "_L%d", ++n);
+  static unsigned m;
+  if (nsym->flags & SBF_DATA)
+    snprintf(lab, 32, "_D%d", ++m);
+  else
+    snprintf(lab, 32, "_L%d", ++n);
   char * name = (char *)xmalloc(16);
   strcpy(name, lab);
   nsym->name = name;
@@ -1257,17 +1262,25 @@ create_label_address_func (bfd_vma vma, struct disassemble_info *inf)
 {
   struct objdump_disasm_info *aux;
 
-  if ((vma&1) || vma >= inf->buffer_length)
+  if (vma >= inf->buffer_length)
       return;
 
   aux = (struct objdump_disasm_info *) inf->application_data;
 
   // only branch insns
-  if ((*aux->buffer < 0x60 || *aux->buffer > 0x6f)
-      && !(aux->buffer[0] == 0x51 && aux->buffer[1] == 0xc9))
-    return;
-
-  create_label(vma, inf);
+  if ((aux->buffer[0] == 0x48 && aux->buffer[1] == 0x7a) // pea ...(pc)
+	||((aux->buffer[0] & 0xf1) == 0x41 && aux->buffer[1] == 0xfa) // lea ...(pc)
+	)
+	create_label(vma, inf, 1);
+  else if (!(vma & 1)
+      && (
+         (*aux->buffer >= 0x60 && *aux->buffer <= 0x6f)
+      || (aux->buffer[0] == 0x51 && aux->buffer[1] == 0xc9)
+      || (aux->buffer[0] == 0x4e && aux->buffer[1] == 0xf9) // jmp
+      || (aux->buffer[0] == 0x4e && aux->buffer[1] == 0xb9) // jsr
+      || (aux->buffer[0] == 0x4e && aux->buffer[1] == 0xba) // jsr
+      ))
+    create_label(vma, inf, 0);
 }
 
 
@@ -1292,10 +1305,12 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
 	  // search the correct section
 	  sec = aux->sec;
 	  aux->sec = sym->section;
-	  sym = find_symbol_for_address(vma, inf, NULL);
+	  asymbol * sym2 = find_symbol_for_address(vma, inf, NULL);
 	  aux->sec = sec;
 
 	  // update vma and section and move relppp
+	  if (sym2)
+	    sym = sym2;
 	  sec = sym->section;
 	  ++*aux->relppp;
 	}
@@ -1308,7 +1323,7 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
 //      (*inf->fprintf_func) (inf->stream, do_demangle ? " <%s" : " %s",
 //			    bfd_get_section_name (abfd, sec));
 
-      (*inf->fprintf_func) (inf->stream, "#");
+//      (*inf->fprintf_func) (inf->stream, "#");
       secaddr = bfd_get_section_vma (abfd, sec);
       if (vma < secaddr)
 	{
@@ -1889,7 +1904,8 @@ disassemble_bytes (struct disassemble_info * inf,
 		   bfd_vma                   stop_offset,
 		   bfd_vma		     rel_offset,
 		   arelent ***               relppp,
-		   arelent **                relppend)
+		   arelent **                relppend
+		   )
 {
   struct objdump_disasm_info *aux;
   asection *section;
@@ -1902,7 +1918,7 @@ disassemble_bytes (struct disassemble_info * inf,
   int octets = opb;
   SFILE sfile;
   bfd_boolean is_text = 0 == strcmp(".text", inf->section->name);
-  bfd_boolean insn_end = FALSE;
+  bfd_boolean insn_end = !insns;
 
   aux = (struct objdump_disasm_info *) inf->application_data;
   section = aux->sec;
@@ -1915,6 +1931,8 @@ disassemble_bytes (struct disassemble_info * inf,
     octets_per_line = insn_width;
   else if (insns)
     octets_per_line = 4;
+  else if (create_labels)
+    octets_per_line = 32;
   else
     octets_per_line = 16;
 
@@ -1961,7 +1979,7 @@ disassemble_bytes (struct disassemble_info * inf,
       for (z = addr_offset * opb; z < stop_offset * opb; z++)
 	if (data[z] != 0)
 	  break;
-      if (! disassemble_zeroes
+      if (! disassemble_zeroes && !create_labels
 	  && (inf->insn_info_valid == 0
 	      || inf->branch_delay_insns == 0)
 	  && (z - addr_offset * opb >= skip_zeroes
@@ -1990,7 +2008,7 @@ disassemble_bytes (struct disassemble_info * inf,
 	}
       else
 	{
-	  char buf[50];
+	  char buf[256];
 	  int bpc = 0;
 	  int pb = 0;
 
@@ -2114,25 +2132,102 @@ disassemble_bytes (struct disassemble_info * inf,
 	    }
 	  else
 	    {
-	      bfd_vma j;
+	      bfd_vma j, k;
 
 	      octets = octets_per_line;
 	      if (addr_offset + octets / opb > stop_offset)
 		octets = (stop_offset - addr_offset) * opb;
 
-	      for (j = addr_offset * opb; j < addr_offset * opb + octets; ++j)
+	      k = addr_offset * opb;
+	      if (create_labels)
 		{
-		  if (ISPRINT (data[j]))
-		    buf[j - addr_offset * opb] = data[j];
+		  int i;
+		  if (ISPRINT(data[k]))
+		    {
+		      strcpy(buf, ".ascii \"");
+		      i = 8;
+		      for (j = k; j < k + octets; ++j)
+			{
+			  if (ISPRINT (data[j]))
+			    buf[i++] = data[j];
+			  else
+			    {
+			      switch (data[j]) {
+				case 0:
+				      buf[i++] = '\\';
+				      buf[i++] = '0';
+				      break;
+				case 8:
+				      buf[i++] = '\\';
+				      buf[i++] = 't';
+				      break;
+				case 0xa:
+				      buf[i++] = '\\';
+				      buf[i++] = 'n';
+				      break;
+				case 0xd:
+				      buf[i++] = '\\';
+				      buf[i++] = 'r';
+				      break;
+				default:
+				      buf[i++] = '\\';
+				      buf[i++] = 'x';
+				      sprintf(buf + i, "%02x", data[j]);
+				      i += 2;
+			      }
+			    }
+			}
+		      buf[i++] = '"';
+		      buf[i] = 0;
+		    }
 		  else
-		    buf[j - addr_offset * opb] = '.';
+		    {
+		      i = 6;
+		      if (octets & 1)
+			{
+			  strcpy(buf, ".byte ");
+			  for (j = k; j < k + octets; ++j)
+			    {
+			      if (j != k)
+				buf[i++] = ',';
+			      buf[i++] = '0';
+			      buf[i++] = 'x';
+			      sprintf(buf + i, "%02x", data[j]);
+			      i += 2;
+			    }
+			}
+		      else
+			{
+			  strcpy(buf, ".word ");
+			  for (j = k; j < k + octets; j += 2)
+			    {
+			      if (j != k)
+				buf[i++] = ',';
+			      buf[i++] = '0';
+			      buf[i++] = 'x';
+			      sprintf(buf + i, "%04x", (data[j]<<8)  | data[j+1]);
+			      i += 4;
+			    }
+			}
+		  }
 		}
-	      buf[j - addr_offset * opb] = '\0';
+	      else
+		{
+		  for (j = k; j < k + octets; ++j)
+		    {
+		      if (ISPRINT (data[j]))
+			buf[j - k] = data[j];
+		      else
+			buf[j - k] = '.';
+		    }
+
+		  buf[j - k] = '\0';
+		}
 	    }
 
-	  if (prefix_addresses
+	  if (prefix_addresses || create_labels
 	      ? show_raw_insn > 0
-	      : show_raw_insn > 0)
+	      : show_raw_insn >= 0)
 	    {
 	      bfd_vma j;
 
@@ -2189,9 +2284,9 @@ disassemble_bytes (struct disassemble_info * inf,
 	  else if (sfile.pos)
 	    printf ("%s", sfile.buffer);
 
-	  if (prefix_addresses
+	  if (prefix_addresses || create_labels
 	      ? show_raw_insn > 0
-	      : show_raw_insn > 0)
+	      : show_raw_insn >= 0)
 	    {
 	      while (pb < octets)
 		{
@@ -2312,7 +2407,10 @@ disassemble_bytes (struct disassemble_info * inf,
       if (insn_end)
 	{
 	  insns = FALSE;
-	  octets_per_line = 16;
+	  if (create_labels)
+	    octets_per_line = 32;
+	  else
+	    octets_per_line = 16;
 	}
     }
 
@@ -2457,19 +2555,42 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
   //   if the label is not at insn start
   lookup = (bfd_byte *)xmalloc((section->size + 15) / 16);
 
+  if (sorted_symcount == 0)
+    {
+      // insert at least one symbol
+      asymbol * nsym = (asymbol *)xmalloc(sizeof(asymbol));
+
+      // copy common and mark the flags
+      nsym->value = 0;
+      nsym->flags = 0;
+      nsym->section = dinf->section;
+      nsym->the_bfd = abfd;
+        nsym->udata.i = 0;
+
+      // set vma
+      nsym->name = ".text";
+
+      sorted_syms = (asymbol **)xmalloc(sizeof(asymbol*));
+      sorted_syms[0] = nsym;
+      dinf->symtab_size = sorted_symcount = 1;
+    }
+
   int index;
   asymbol * asym;
-  int seen;
+  int seen, oldcount;
   int pass = 0;
   do
     {
       fprintf(stderr, "pass %d:", ++pass);
       seen = 0;
+      oldcount = sorted_symcount;
       for (index = 0; index < sorted_symcount; ++index)
 	{
 	  asym = sorted_syms[index];
-	  if (asym->udata.i || (asym->flags & SBF_PENDING))
+	  if (asym->udata.i || (asym->flags & (SBF_PENDING | SBF_DATA)))
 	      continue;
+	  if (strcmp(asym->section->name, ".text"))
+	    continue;
 
 	  if (asym->name && strstr(asym->name, "lto_pri"))
 	    continue;
@@ -2510,6 +2631,7 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 		    {
 		      // add labels based on jump table
 		      bfd_vma base = pos + add;
+		      create_label(base, pinfo, 1);
 
 		      // search the limit
 		      unsigned limit = 0;
@@ -2539,7 +2661,7 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 			    {
 			      int jndex = find_closest_symbol_index(entry, section);
 			      asymbol * ssym = sorted_syms[jndex];
-			      if (ssym->value == entry) // stop if there is a label
+			      if (entry > base && ssym->value == entry) // stop if there is a label
 				break;
 
 			      bfd_vma offset = ((char)data[entry] << 8) | data[entry + 1];
@@ -2547,12 +2669,12 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 				break;
 //			      fprintf(stderr, "jump to %08lx\n", base + offset);
 			      bfd_vma at = base + offset;
-			      create_label(at, pinfo);
+			      create_label(at, pinfo, 0);
 			      entry += 2;
 			    }
 			}
 		    }
-
+		  pos += add;
 		  break;
 		}
 	      pos += add;
@@ -2565,24 +2687,31 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
       for (index = 0; index < sorted_symcount; ++index)
         {
           asym = sorted_syms[index];
+          if (asym->value > end)
+            end = asym->value;
           if (asym->udata.i > end)
             end = asym->udata.i;
-          else if (end > asym->value)
+          if (end > asym->value && end < asym->udata.i)
             asym->udata.i = end;
           asym->flags &= ~SBF_PENDING;
         }
       fprintf(stderr, " %d/%ld\n", seen, sorted_symcount);
     }
-  while (seen);
+  while (seen || oldcount != sorted_symcount);
 
   for (index = 0; index < sorted_symcount; ++index)
     {
       static int n;
+      static int m;
+
       asym = sorted_syms[index];
       if (asym->name == 0)
 	{
 	  char lab[16];
-	  snprintf(lab, 32, ".L%d", ++n);
+	  if (asym->flags & SBF_DATA)
+	    snprintf(lab, 32, ".D%d", ++m);
+	  else
+	    snprintf(lab, 32, ".L%d", ++n);
 	  char * name = (char *)xmalloc(16);
 	  strcpy(name, lab);
 	  asym->name = name;
@@ -2596,6 +2725,8 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
   dinf->print_address_func = tmp_print_address_func;
   dinf->fprintf_func = tmp_fprintf;
   rel_pp = tmp_rel_pp;
+
+  dinf->memory_error_func = dummy_fprintf;
     }
 #endif
 
@@ -2709,6 +2840,9 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 	  || (sym->flags & BSF_FUNCTION) != 0)
 	insns = TRUE;
       else
+	insns = FALSE;
+
+      if (sym && sym->flags & SBF_DATA)
 	insns = FALSE;
 
       disassemble_bytes (pinfo, paux->disassemble_fn, insns, data,
