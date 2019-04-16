@@ -2557,22 +2557,27 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 
   if (sorted_symcount == 0)
     {
-      // insert at least one symbol
-      asymbol * nsym = (asymbol *)xmalloc(sizeof(asymbol));
+      sorted_syms = (asymbol **)xmalloc(sizeof(asymbol*) * abfd->section_count);
+      asection * asec = abfd->sections;
+      while (sorted_symcount < abfd->section_count)
+	{
+	  // insert at least one symbol
+	  asymbol * nsym = (asymbol *)xmalloc(sizeof(asymbol) );
 
-      // copy common and mark the flags
-      nsym->value = 0;
-      nsym->flags = 0;
-      nsym->section = dinf->section;
-      nsym->the_bfd = abfd;
-        nsym->udata.i = 0;
+	  // copy common and mark the flags
+	  nsym->value = 0;
+	  nsym->flags = 0;
+	  nsym->section = asec;
+	  nsym->the_bfd = abfd;
+	    nsym->udata.i = 0;
 
-      // set vma
-      nsym->name = ".text";
+	  // set vma
+	  nsym->name = asec->name;
+	  sorted_syms[sorted_symcount] = nsym;
 
-      sorted_syms = (asymbol **)xmalloc(sizeof(asymbol*));
-      sorted_syms[0] = nsym;
-      dinf->symtab_size = sorted_symcount = 1;
+	  dinf->symtab_size = ++sorted_symcount;
+	  asec = asec->next;
+	}
     }
 
   int index;
@@ -2840,6 +2845,9 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 	  || (sym->flags & BSF_FUNCTION) != 0)
 	insns = TRUE;
       else
+	insns = FALSE;
+
+      if (strcmp(".text", pinfo->section->name))
 	insns = FALSE;
 
       if (sym && sym->flags & SBF_DATA)
