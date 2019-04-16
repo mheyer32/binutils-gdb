@@ -2142,7 +2142,7 @@ disassemble_bytes (struct disassemble_info * inf,
 	      if (create_labels)
 		{
 		  int i;
-		  if (ISPRINT(data[k]))
+		  if (ISPRINT(data[k]) || data[k] == '\r' || data[k] == '\n' || data[k] == '\t' || data[k] == ' ')
 		    {
 		      strcpy(buf, ".ascii \"");
 		      i = 8;
@@ -2196,9 +2196,9 @@ disassemble_bytes (struct disassemble_info * inf,
 			      i += 2;
 			    }
 			}
-		      else
+		      else if (octets&3)
 			{
-			  strcpy(buf, ".word ");
+			  strcpy(buf, ".short ");
 			  for (j = k; j < k + octets; j += 2)
 			    {
 			      if (j != k)
@@ -2207,6 +2207,19 @@ disassemble_bytes (struct disassemble_info * inf,
 			      buf[i++] = 'x';
 			      sprintf(buf + i, "%04x", (data[j]<<8)  | data[j+1]);
 			      i += 4;
+			    }
+			}
+		      else
+			{
+			  strcpy(buf, ".long ");
+			  for (j = k; j < k + octets; j += 4)
+			    {
+			      if (j != k)
+				buf[i++] = ',';
+			      buf[i++] = '0';
+			      buf[i++] = 'x';
+			      sprintf(buf + i, "%08x", (data[j]<<8)  | data[j+1]);
+			      i += 8;
 			    }
 			}
 		  }
