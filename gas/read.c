@@ -300,7 +300,7 @@ static struct hash_control *po_hash;
 
 static const pseudo_typeS potable[] = {
   {"abort", s_abort, 0},
-  {"align", s_align_ptwo, 0},
+  {"align", s_align_bytes, 0},
   {"altmacro", s_altmacro, 1},
   {"ascii", stringer, 8+0},
   {"asciz", stringer, 8+1},
@@ -1541,7 +1541,10 @@ s_align (signed int arg, int bytes_p)
   if (align > align_limit)
     {
       align = align_limit;
+      // Do not warn for to large alignment on Amiga
+#ifndef OBJ_AMIGAHUNK
       as_warn (_("alignment too large: %u assumed"), align);
+#endif
     }
 
   if (*input_line_pointer != ',')
