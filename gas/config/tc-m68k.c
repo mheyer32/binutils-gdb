@@ -7475,12 +7475,15 @@ s_m68k_arch (int ignored ATTRIBUTE_UNUSED)
   char saved_char;
   char *name;
 
-  if (initialized)
-    {
-      as_bad (_("already assembled instructions"));
-      ignore_rest_of_line ();
-      return;
-    }
+  current_architecture = 0;
+  not_current_architecture = 0;
+
+//  if (initialized)
+//    {
+//      as_bad (_("already assembled instructions"));
+//      ignore_rest_of_line ();
+//      return;
+//    }
 
   name = input_line_pointer;
   while (*input_line_pointer && *input_line_pointer != ','
@@ -7509,6 +7512,9 @@ s_m68k_arch (int ignored ATTRIBUTE_UNUSED)
 
   *input_line_pointer = saved_char;
   demand_empty_rest_of_line ();
+
+  m68k_init_arch();
+
   return;
 }
 
@@ -7758,6 +7764,8 @@ md_parse_option (int c, const char *arg)
 	;
       else
 	return 0;
+
+      m68k_init_arch();
       break;
 
     default:
