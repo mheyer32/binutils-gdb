@@ -3006,7 +3006,7 @@ m68k_ip (char *instring)
 		addword (baseo);
 
 	      if (siz2 != SIZE_UNSPEC && isvar (&opP->odisp))
-		add_fix (siz2 == SIZE_LONG ? 'l' : 'w', &opP->odisp, 0, 0, opP->disp.baserel);
+		add_fix (siz2 == SIZE_LONG ? 'l' : 'w', &opP->odisp, 0, 0, opP->odisp.baserel);
 	      if (siz2 == SIZE_LONG)
 		addword (outro >> 16);
 	      if (siz2 != SIZE_UNSPEC)
