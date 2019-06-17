@@ -4152,8 +4152,6 @@ remote_target::get_offsets ()
   else
     lose = 1;
 
-  printf("Text=%08x,Data=%08x,Bss=%08x\n", text_addr, data_addr, bss_addr);
-
   if (lose)
     error (_("Malformed response to offset query, %s"), buf);
   else if (*ptr != '\0')
@@ -4196,8 +4194,6 @@ remote_target::get_offsets ()
   /* There's no way to relocate by segment.  */
   else
     do_segments = 0;
-
-  printf("num=%d, %08x\n", num_segments, segments[0]);
 
   if (do_segments)
     {
