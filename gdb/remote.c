@@ -4152,6 +4152,8 @@ remote_target::get_offsets ()
   else
     lose = 1;
 
+  printf("Text=%08x,Data=%08x,Bss=%08x\n", text_addr, data_addr, bss_addr);
+
   if (lose)
     error (_("Malformed response to offset query, %s"), buf);
   else if (*ptr != '\0')
@@ -4195,6 +4197,8 @@ remote_target::get_offsets ()
   else
     do_segments = 0;
 
+  printf("num=%d, %08x\n", num_segments, segments[0]);
+
   if (do_segments)
     {
       int ret = symfile_map_offsets_to_segments (symfile_objfile->obfd, data,
@@ -4221,10 +4225,11 @@ remote_target::get_offsets ()
 	 don't have time to do right now.  */
 
       offs->offsets[SECT_OFF_DATA (symfile_objfile)] = data_addr;
-      offs->offsets[SECT_OFF_BSS (symfile_objfile)] = data_addr;
+      if (SECT_OFF_BSS (symfile_objfile))
+	offs->offsets[SECT_OFF_BSS (symfile_objfile)] = data_addr;
     }
 #if (DEFAULT_BFD_VEC == amiga_vec)
-  text_offset = offs->offsets[0];
+  text_offset = offs->offsets[SECT_OFF_TEXT (symfile_objfile)];
 #endif
   objfile_relocate (symfile_objfile, offs);
 }
