@@ -1,6 +1,6 @@
 /* Target-dependent code for GNU/Linux x86-64.
 
-   Copyright (C) 2001-2018 Free Software Foundation, Inc.
+   Copyright (C) 2001-2019 Free Software Foundation, Inc.
    Contributed by Jiri Smid, SuSE Labs.
 
    This file is part of GDB.
@@ -33,7 +33,7 @@
 #include "amd64-linux-tdep.h"
 #include "i386-linux-tdep.h"
 #include "linux-tdep.h"
-#include "x86-xstate.h"
+#include "common/x86-xstate.h"
 
 #include "amd64-tdep.h"
 #include "solib-svr4.h"
@@ -1735,7 +1735,7 @@ amd64_dtrace_disable_probe (struct gdbarch *gdbarch, CORE_ADDR addr)
 
 static void
 amd64_dtrace_parse_probe_argument (struct gdbarch *gdbarch,
-				   struct parser_state *pstate,
+				   struct expr_builder *builder,
 				   int narg)
 {
   struct stoken str;
@@ -1758,11 +1758,11 @@ amd64_dtrace_parse_probe_argument (struct gdbarch *gdbarch,
       int regno = arg_reg_map[narg];
       const char *regname = user_reg_map_regnum_to_name (gdbarch, regno);
 
-      write_exp_elt_opcode (pstate, OP_REGISTER);
+      write_exp_elt_opcode (builder, OP_REGISTER);
       str.ptr = regname;
       str.length = strlen (regname);
-      write_exp_string (pstate, str);
-      write_exp_elt_opcode (pstate, OP_REGISTER);
+      write_exp_string (builder, str);
+      write_exp_elt_opcode (builder, OP_REGISTER);
     }
   else
     {
@@ -1770,27 +1770,27 @@ amd64_dtrace_parse_probe_argument (struct gdbarch *gdbarch,
       const char *regname = user_reg_map_regnum_to_name (gdbarch, AMD64_RSP_REGNUM);
 
       /* Displacement.  */
-      write_exp_elt_opcode (pstate, OP_LONG);
-      write_exp_elt_type (pstate, builtin_type (gdbarch)->builtin_long);
-      write_exp_elt_longcst (pstate, narg - 6);
-      write_exp_elt_opcode (pstate, OP_LONG);
+      write_exp_elt_opcode (builder, OP_LONG);
+      write_exp_elt_type (builder, builtin_type (gdbarch)->builtin_long);
+      write_exp_elt_longcst (builder, narg - 6);
+      write_exp_elt_opcode (builder, OP_LONG);
 
       /* Register: SP.  */
-      write_exp_elt_opcode (pstate, OP_REGISTER);
+      write_exp_elt_opcode (builder, OP_REGISTER);
       str.ptr = regname;
       str.length = strlen (regname);
-      write_exp_string (pstate, str);
-      write_exp_elt_opcode (pstate, OP_REGISTER);
+      write_exp_string (builder, str);
+      write_exp_elt_opcode (builder, OP_REGISTER);
 
-      write_exp_elt_opcode (pstate, BINOP_ADD);
+      write_exp_elt_opcode (builder, BINOP_ADD);
 
       /* Cast to long. */
-      write_exp_elt_opcode (pstate, UNOP_CAST);
-      write_exp_elt_type (pstate,
+      write_exp_elt_opcode (builder, UNOP_CAST);
+      write_exp_elt_type (builder,
 			  lookup_pointer_type (builtin_type (gdbarch)->builtin_long));
-      write_exp_elt_opcode (pstate, UNOP_CAST);
+      write_exp_elt_opcode (builder, UNOP_CAST);
 
-      write_exp_elt_opcode (pstate, UNOP_IND);
+      write_exp_elt_opcode (builder, UNOP_IND);
     }
 }
 

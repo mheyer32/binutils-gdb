@@ -1,5 +1,5 @@
 /* as.c - GAS main program.
-   Copyright (C) 1987-2018 Free Software Foundation, Inc.
+   Copyright (C) 1987-2019 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -685,7 +685,7 @@ parse_args (int * pargc, char *** pargv)
 	case OPTION_VERSION:
 	  /* This output is intended to follow the GNU standards document.  */
 	  printf (_("GNU assembler %s\n"), BFD_VERSION_STRING);
-	  printf (_("Copyright (C) 2018 Free Software Foundation, Inc.\n"));
+	  printf (_("Copyright (C) 2019 Free Software Foundation, Inc.\n"));
 	  printf (_("\
 This program is free software; you may redistribute it under the terms of\n\
 the GNU General Public License version 3 or later.\n\
@@ -1112,16 +1112,14 @@ close_output_file (void)
 static size_t
 macro_expr (const char *emsg, size_t idx, sb *in, offsetT *val)
 {
-  char *hold;
   expressionS ex;
 
   sb_terminate (in);
 
-  hold = input_line_pointer;
-  input_line_pointer = in->ptr + idx;
+  temp_ilp (in->ptr + idx);
   expression_and_evaluate (&ex);
   idx = input_line_pointer - in->ptr;
-  input_line_pointer = hold;
+  restore_ilp ();
 
   if (ex.X_op != O_constant)
     as_bad ("%s", emsg);
@@ -1272,7 +1270,8 @@ main (int argc, char ** argv)
   out_file_name = OBJ_DEFAULT_OUTPUT_FILE_NAME;
 
   hex_init ();
-  bfd_init ();
+  if (bfd_init () != BFD_INIT_MAGIC)
+    as_fatal (_("libbfd ABI mismatch"));
   bfd_set_error_program_name (myname);
 
 #ifdef USE_EMULATIONS

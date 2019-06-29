@@ -1,6 +1,6 @@
 /* Shared general utility routines for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2018 Free Software Foundation, Inc.
+   Copyright (C) 1986-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,8 +17,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef COMMON_UTILS_H
-#define COMMON_UTILS_H
+#ifndef COMMON_COMMON_UTILS_H
+#define COMMON_COMMON_UTILS_H
 
 #include <string>
 #include <vector>
@@ -146,11 +146,6 @@ in_inclusive_range (T value, T low, T high)
   return value >= low && value <= high;
 }
 
-/* Return true if the file NAME exists and is a regular file.
-   If the result is false then *ERRNO_PTR is set to a useful value assuming
-   we're expecting a regular file.  */
-extern bool is_regular_file (const char *name, int *errno_ptr);
-
 /* Ensure that V is aligned to an N byte boundary (B's assumed to be a
    power of 2).  Round up/down when necessary.  Examples of correct
    use include:
@@ -183,4 +178,4 @@ extern bool is_regular_file (const char *name, int *errno_ptr);
 extern ULONGEST align_up (ULONGEST v, int n);
 extern ULONGEST align_down (ULONGEST v, int n);
 
-#endif
+#endif /* COMMON_COMMON_UTILS_H */

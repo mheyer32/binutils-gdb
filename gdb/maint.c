@@ -1,6 +1,6 @@
 /* Support for GDB maintenance commands.
 
-   Copyright (C) 1992-2018 Free Software Foundation, Inc.
+   Copyright (C) 1992-2019 Free Software Foundation, Inc.
 
    Written by Fred Fish at Cygnus Support.
 
@@ -38,27 +38,13 @@
 #include "value.h"
 #include "top.h"
 #include "maint.h"
-#include "selftest.h"
+#include "common/selftest.h"
 
 #include "cli/cli-decode.h"
 #include "cli/cli-utils.h"
 #include "cli/cli-setshow.h"
 
 static void maintenance_do_deprecate (const char *, int);
-
-/* Set this to the maximum number of seconds to wait instead of waiting forever
-   in target_wait().  If this timer times out, then it generates an error and
-   the command is aborted.  This replaces most of the need for timeouts in the
-   GDB test suite, and makes it possible to distinguish between a hung target
-   and one with slow communications.  */
-
-int watchdog = 0;
-static void
-show_watchdog (struct ui_file *file, int from_tty,
-	       struct cmd_list_element *c, const char *value)
-{
-  fprintf_filtered (file, _("Watchdog timer is %s.\n"), value);
-}
 
 /* Access the maintenance subcommands.  */
 
@@ -348,7 +334,6 @@ maintenance_info_sections (const char *arg, int from_tty)
       printf_filtered (_("file type %s.\n"), bfd_get_target (exec_bfd));
       if (arg && *arg && match_substring (arg, "ALLOBJ"))
 	{
-	  struct objfile *ofile;
 	  struct obj_section *osect;
 
 	  /* Only this function cares about the 'ALLOBJ' argument; 
@@ -358,7 +343,7 @@ maintenance_info_sections (const char *arg, int from_tty)
 	  if (strcmp (arg, "ALLOBJ") == 0)
 	    arg = NULL;
 
-	  ALL_OBJFILES (ofile)
+	  for (objfile *ofile : current_program_space->objfiles ())
 	    {
 	      printf_filtered (_("  Object file: %s\n"), 
 			       bfd_get_filename (ofile->obfd));
@@ -431,7 +416,6 @@ maintenance_translate_address (const char *arg, int from_tty)
   struct obj_section *sect;
   const char *p;
   struct bound_minimal_symbol sym;
-  struct objfile *objfile;
 
   if (arg == NULL || *arg == 0)
     error (_("requires argument (address or section + address)"));
@@ -444,19 +428,20 @@ maintenance_translate_address (const char *arg, int from_tty)
       while (*p && !isspace (*p))	/* Find end of section name.  */
 	p++;
       if (*p == '\000')		/* End of command?  */
-	error (_("Need to specify <section-name> and <address>"));
+	error (_("Need to specify section name and address"));
 
       int arg_len = p - arg;
       p = skip_spaces (p + 1);
 
-      ALL_OBJSECTIONS (objfile, sect)
-      {
-	if (strncmp (sect->the_bfd_section->name, arg, arg_len) == 0)
-	  break;
-      }
+      for (objfile *objfile : current_program_space->objfiles ())
+	ALL_OBJFILE_OSECTIONS (objfile, sect)
+	  {
+	    if (strncmp (sect->the_bfd_section->name, arg, arg_len) == 0)
+	      goto found;
+	  }
 
-      if (!objfile)
-	error (_("Unknown section %s."), arg);
+      error (_("Unknown section %s."), arg);
+    found: ;
     }
 
   address = parse_and_eval_address (p);
@@ -763,9 +748,6 @@ static void
 count_symtabs_and_blocks (int *nr_symtabs_ptr, int *nr_compunit_symtabs_ptr,
 			  int *nr_blocks_ptr)
 {
-  struct objfile *o;
-  struct compunit_symtab *cu;
-  struct symtab *s;
   int nr_symtabs = 0;
   int nr_compunit_symtabs = 0;
   int nr_blocks = 0;
@@ -775,12 +757,15 @@ count_symtabs_and_blocks (int *nr_symtabs_ptr, int *nr_compunit_symtabs_ptr,
      current_program_space may be NULL.  */
   if (current_program_space != NULL)
     {
-      ALL_COMPUNITS (o, cu)
+      for (objfile *o : current_program_space->objfiles ())
 	{
-	  ++nr_compunit_symtabs;
-	  nr_blocks += BLOCKVECTOR_NBLOCKS (COMPUNIT_BLOCKVECTOR (cu));
-	  ALL_COMPUNIT_FILETABS (cu, s)
-	    ++nr_symtabs;
+	  for (compunit_symtab *cu : o->compunits ())
+	    {
+	      ++nr_compunit_symtabs;
+	      nr_blocks += BLOCKVECTOR_NBLOCKS (COMPUNIT_BLOCKVECTOR (cu));
+	      nr_symtabs += std::distance (compunit_filetabs (cu).begin (),
+					   compunit_filetabs (cu).end ());
+	    }
 	}
     }
 
@@ -809,6 +794,8 @@ scoped_command_stats::~scoped_command_stats ()
 
   if (m_time_enabled && per_command_time)
     {
+      print_time (_("command finished"));
+
       using namespace std::chrono;
 
       run_time_clock::duration cmd_time
@@ -882,6 +869,9 @@ scoped_command_stats::scoped_command_stats (bool msg_type)
       m_start_cpu_time = run_time_clock::now ();
       m_start_wall_time = steady_clock::now ();
       m_time_enabled = 1;
+
+      if (per_command_time)
+	print_time (_("command started"));
     }
   else
     m_time_enabled = 0;
@@ -901,6 +891,26 @@ scoped_command_stats::scoped_command_stats (bool msg_type)
 
   /* Initialize timer to keep track of how long we waited for the user.  */
   reset_prompt_for_continue_wait_time ();
+}
+
+/* See maint.h.  */
+
+void
+scoped_command_stats::print_time (const char *msg)
+{
+  using namespace std::chrono;
+
+  auto now = system_clock::now ();
+  auto ticks = now.time_since_epoch ().count () / (1000 * 1000);
+  auto millis = ticks % 1000;
+
+  std::time_t as_time = system_clock::to_time_t (now);
+  struct tm *tm = localtime (&as_time);
+
+  char out[100];
+  strftime (out, sizeof (out), "%F %H:%M:%S", tm);
+
+  printf_unfiltered ("%s.%03d - %s\n", out, (int) millis, msg);
 }
 
 /* Handle unknown "mt set per-command" arguments.
@@ -943,7 +953,7 @@ maintenance_selftest (const char *args, int from_tty)
   selftests::run_tests (args);
 #else
   printf_filtered (_("\
-Selftests are not available in a non-development build.\n"));
+Selftests have been disabled for this build.\n"));
 #endif
 }
 
@@ -957,7 +967,7 @@ maintenance_info_selftests (const char *arg, int from_tty)
   });
 #else
   printf_filtered (_("\
-Selftests are not available in a non-development build.\n"));
+Selftests have been disabled for this build.\n"));
 #endif
 }
 
@@ -1148,16 +1158,6 @@ If a filter is given, only the tests with that value in their name will ran."),
 
   add_cmd ("selftests", class_maintenance, maintenance_info_selftests,
 	 _("List the registered selftests."), &maintenanceinfolist);
-
-  add_setshow_zinteger_cmd ("watchdog", class_maintenance, &watchdog, _("\
-Set watchdog timer."), _("\
-Show watchdog timer."), _("\
-When non-zero, this timeout is used instead of waiting forever for a target\n\
-to finish a low-level step or continue operation.  If the specified amount\n\
-of time passes without a response from the target, an error occurs."),
-			    NULL,
-			    show_watchdog,
-			    &setlist, &showlist);
 
   add_setshow_boolean_cmd ("profile", class_maintenance,
 			   &maintenance_profile_p, _("\

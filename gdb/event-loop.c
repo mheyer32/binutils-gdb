@@ -1,5 +1,5 @@
 /* Event loop machinery for GDB, the GNU debugger.
-   Copyright (C) 1999-2018 Free Software Foundation, Inc.
+   Copyright (C) 1999-2019 Free Software Foundation, Inc.
    Written by Elena Zannoni <ezannoni@cygnus.com> of Cygnus Solutions.
 
    This file is part of GDB.
@@ -20,7 +20,6 @@
 #include "defs.h"
 #include "event-loop.h"
 #include "event-top.h"
-#include "queue.h"
 #include "ser-event.h"
 
 #ifdef __CYGWIN__
@@ -38,7 +37,7 @@ gdb_exception_RETURN_MASK_ERROR ex;
 #endif
 
 #include <sys/types.h>
-#include "gdb_sys_time.h"
+#include "common/gdb_sys_time.h"
 #include "gdb_select.h"
 #include "observable.h"
 #include "top.h"
@@ -378,11 +377,11 @@ start_event_loop (void)
     	  result = gdb_do_one_event ();
       } else
 #else
-      TRY
+      try
 	{
 	  result = gdb_do_one_event ();
 	}
-      CATCH (ex, RETURN_MASK_ALL)
+       catch (const gdb_exception &ex)
 #endif
 	{
 	  exception_print (gdb_stderr, ex);
@@ -407,9 +406,6 @@ start_event_loop (void)
 	  /* Maybe better to set a flag to be checked somewhere as to
 	     whether display the prompt or not.  */
 	}
-#ifndef __CYGWIN__
-      END_CATCH
-#endif
 
       if (result < 0)
 	break;

@@ -1,6 +1,6 @@
 /* Python frame filters
 
-   Copyright (C) 2013-2018 Free Software Foundation, Inc.
+   Copyright (C) 2013-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -30,7 +30,6 @@
 #include "demangle.h"
 #include "mi/mi-cmds.h"
 #include "python-internal.h"
-#include "py-ref.h"
 #include "common/gdb_optional.h"
 
 enum mi_print_types
@@ -55,7 +54,7 @@ enum mi_print_types
 
 static enum ext_lang_bt_status
 extract_sym (PyObject *obj, gdb::unique_xmalloc_ptr<char> *name,
-	     struct symbol **sym, struct block **sym_block,
+	     struct symbol **sym, const struct block **sym_block,
 	     const struct language_defn **language)
 {
   gdbpy_ref<> result (PyObject_CallMethod (obj, "symbol", NULL));
@@ -450,7 +449,7 @@ enumerate_args (PyObject *iter,
       const struct language_defn *language;
       gdb::unique_xmalloc_ptr<char> sym_name;
       struct symbol *sym;
-      struct block *sym_block;
+      const struct block *sym_block;
       struct value *val;
       enum ext_lang_bt_status success = EXT_LANG_BT_ERROR;
 
@@ -482,7 +481,8 @@ enumerate_args (PyObject *iter,
 	      return EXT_LANG_BT_ERROR;
 	    }
 
-	  read_frame_arg (sym, frame, &arg, &entryarg);
+	  read_frame_arg (user_frame_print_options,
+			  sym, frame, &arg, &entryarg);
 
 	  gdb::unique_xmalloc_ptr<char> arg_holder (arg.error);
 	  gdb::unique_xmalloc_ptr<char> entry_holder (entryarg.error);
@@ -568,7 +568,7 @@ enumerate_locals (PyObject *iter,
       struct value *val;
       enum ext_lang_bt_status success = EXT_LANG_BT_ERROR;
       struct symbol *sym;
-      struct block *sym_block;
+      const struct block *sym_block;
       int local_indent = 8 + (8 * indent);
       gdb::optional<ui_out_emit_tuple> tuple;
 
@@ -898,7 +898,7 @@ py_print_frame (PyObject *filter, frame_filter_flags flags,
 	  if (function == NULL)
 	    out->field_skip ("func");
 	  else
-	    out->field_string ("func", function);
+	    out->field_string ("func", function, ui_out_style_kind::FUNCTION);
 	}
     }
 
@@ -934,7 +934,8 @@ py_print_frame (PyObject *filter, frame_filter_flags flags,
 	      out->wrap_hint ("   ");
 	      out->text (" at ");
 	      annotate_frame_source_file ();
-	      out->field_string ("file", filename.get ());
+	      out->field_string ("file", filename.get (),
+				 ui_out_style_kind::FILE);
 	      annotate_frame_source_file_end ();
 	    }
 	}
@@ -958,6 +959,9 @@ py_print_frame (PyObject *filter, frame_filter_flags flags,
 	      out->field_int ("line", line);
 	    }
 	}
+      if (out->is_mi_like_p ())
+        out->field_string ("arch",
+                           (gdbarch_bfd_arch_info (gdbarch))->printable_name);
     }
 
   /* For MI we need to deal with the "children" list population of
@@ -1051,21 +1055,6 @@ bootstrap_python_frame_filters (struct frame_info *frame,
     return iterable.release ();
 }
 
-/* A helper function that will either print an exception or, if it is
-   a KeyboardException, throw a quit.  This can only be called when
-   the Python exception is set.  */
-
-static void
-throw_quit_or_print_exception ()
-{
-  if (PyErr_ExceptionMatches (PyExc_KeyboardInterrupt))
-    {
-      PyErr_Clear ();
-      throw_quit ("Quit");
-    }
-  gdbpy_print_stack ();
-}
-
 /*  This is the only publicly exported function in this file.  FRAME
     is the source frame to start frame-filter invocation.  FLAGS is an
     integer holding the flags for printing.  The following elements of
@@ -1093,16 +1082,15 @@ gdbpy_apply_frame_filter (const struct extension_language_defn *extlang,
   if (!gdb_python_initialized)
     return EXT_LANG_BT_NO_FILTERS;
 
-  TRY
+  try
     {
       gdbarch = get_frame_arch (frame);
     }
-  CATCH (except, RETURN_MASK_ERROR)
+  catch (const gdb_exception_error &except)
     {
       /* Let gdb try to print the stack trace.  */
       return EXT_LANG_BT_NO_FILTERS;
     }
-  END_CATCH
 
   gdbpy_enter enter_py (gdbarch, current_language);
 
@@ -1136,7 +1124,7 @@ gdbpy_apply_frame_filter (const struct extension_language_defn *extlang,
 	 initialization error.  This return code will trigger a
 	 default backtrace.  */
 
-      throw_quit_or_print_exception ();
+      gdbpy_print_stack_or_quit ();
       return EXT_LANG_BT_NO_FILTERS;
     }
 
@@ -1159,7 +1147,7 @@ gdbpy_apply_frame_filter (const struct extension_language_defn *extlang,
 	{
 	  if (PyErr_Occurred ())
 	    {
-	      throw_quit_or_print_exception ();
+	      gdbpy_print_stack_or_quit ();
 	      return EXT_LANG_BT_ERROR;
 	    }
 	  break;
@@ -1178,22 +1166,21 @@ gdbpy_apply_frame_filter (const struct extension_language_defn *extlang,
 	    }
 	}
 
-      TRY
+      try
 	{
 	  success = py_print_frame (item.get (), flags, args_type, out, 0,
 				    levels_printed.get ());
 	}
-      CATCH (except, RETURN_MASK_ERROR)
+      catch (const gdb_exception_error &except)
 	{
 	  gdbpy_convert_exception (except);
 	  success = EXT_LANG_BT_ERROR;
 	}
-      END_CATCH
 
       /* Do not exit on error printing a single frame.  Print the
 	 error and continue with other frames.  */
       if (success == EXT_LANG_BT_ERROR)
-	throw_quit_or_print_exception ();
+	gdbpy_print_stack_or_quit ();
     }
 
   return success;

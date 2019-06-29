@@ -1,6 +1,6 @@
 /* Inline frame unwinder for GDB.
 
-   Copyright (C) 2008-2018 Free Software Foundation, Inc.
+   Copyright (C) 2008-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -27,7 +27,7 @@
 #include "gdbthread.h"
 #include "regcache.h"
 #include "symtab.h"
-#include "vec.h"
+#include "common/vec.h"
 #include "frame.h"
 #include <algorithm>
 
@@ -266,13 +266,14 @@ static int
 block_starting_point_at (CORE_ADDR pc, const struct block *block)
 {
   const struct blockvector *bv;
-  struct block *new_block;
+  const struct block *new_block;
 
   bv = blockvector_for_pc (pc, NULL);
   if (BLOCKVECTOR_MAP (bv) == NULL)
     return 0;
 
-  new_block = (struct block *) addrmap_find (BLOCKVECTOR_MAP (bv), pc - 1);
+  new_block = (const struct block *) addrmap_find (BLOCKVECTOR_MAP (bv),
+						   pc - 1);
   if (new_block == NULL)
     return 1;
 

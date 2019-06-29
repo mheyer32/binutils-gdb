@@ -1,6 +1,6 @@
 /* Output generating routines for GDB.
 
-   Copyright (C) 1999-2018 Free Software Foundation, Inc.
+   Copyright (C) 1999-2019 Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions.
    Written by Fernando Nasser for Cygnus.
@@ -49,9 +49,10 @@ enum ui_align
 
 /* flags enum */
 enum ui_out_flag
-  {
-    ui_source_list = (1 << 0),
-  };
+{
+  ui_source_list = (1 << 0),
+  fix_multi_location_breakpoint_output = (1 << 1),
+};
 
 DEF_ENUM_FLAGS_TYPE (ui_out_flag, ui_out_flags);
 
@@ -65,6 +66,22 @@ enum ui_out_type
     ui_out_type_tuple,
     ui_out_type_list
   };
+
+/* Possible kinds of styling.  */
+
+enum class ui_out_style_kind
+{
+  /* The default (plain) style.  */
+  DEFAULT,
+  /* File name.  */
+  FILE,
+  /* Function name.  */
+  FUNCTION,
+  /* Variable name.  */
+  VARIABLE,
+  /* Address.  */
+  ADDRESS
+};
 
 class ui_out
 {
@@ -95,9 +112,11 @@ class ui_out
 		      int value);
   void field_core_addr (const char *fldname, struct gdbarch *gdbarch,
 			CORE_ADDR address);
-  void field_string (const char *fldname, const char *string);
+  void field_string (const char *fldname, const char *string,
+		     ui_out_style_kind style = ui_out_style_kind::DEFAULT);
   void field_string (const char *fldname, const std::string &string);
-  void field_stream (const char *fldname, string_file &stream);
+  void field_stream (const char *fldname, string_file &stream,
+		     ui_out_style_kind style = ui_out_style_kind::DEFAULT);
   void field_skip (const char *fldname);
   void field_fmt (const char *fldname, const char *format, ...)
     ATTRIBUTE_PRINTF (3, 4);
@@ -141,7 +160,8 @@ class ui_out
   virtual void do_field_skip (int fldno, int width, ui_align align,
 			      const char *fldname) = 0;
   virtual void do_field_string (int fldno, int width, ui_align align,
-				const char *fldname, const char *string) = 0;
+				const char *fldname, const char *string,
+				ui_out_style_kind style) = 0;
   virtual void do_field_fmt (int fldno, int width, ui_align align,
 			     const char *fldname, const char *format,
 			     va_list args)
@@ -176,11 +196,9 @@ class ui_out
   ui_out_level *current_level () const;
 };
 
-/* This is similar to make_cleanup_ui_out_tuple_begin_end and
-   make_cleanup_ui_out_list_begin_end, but written as an RAII template
-   class.  It takes the ui_out_type as a template parameter.  Normally
-   this is used via the typedefs ui_out_emit_tuple and
-   ui_out_emit_list.  */
+/* Start a new tuple or list on construction, and end it on
+   destruction.  Normally this is used via the typedefs
+   ui_out_emit_tuple and ui_out_emit_list.  */
 template<ui_out_type Type>
 class ui_out_emit_type
 {

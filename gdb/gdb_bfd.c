@@ -1,6 +1,6 @@
 /* Definitions for BFD wrappers used by GDB.
 
-   Copyright (C) 2011-2018 Free Software Foundation, Inc.
+   Copyright (C) 2011-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,8 +22,8 @@
 #include "ui-out.h"
 #include "gdbcmd.h"
 #include "hashtab.h"
-#include "filestuff.h"
-#include "vec.h"
+#include "common/filestuff.h"
+#include "common/vec.h"
 #ifdef HAVE_MMAP
 #include <sys/mman.h>
 #ifndef MAP_FAILED
@@ -709,7 +709,7 @@ gdb_bfd_map_section (asection *sectp, bfd_size_type *size)
       /* Set size to 0 to prevent further attempts to read the invalid
 	 section.  */
       *size = 0;
-      return (const gdb_byte *) NULL;
+      return NULL;
     }
   descriptor->data = data;
 
@@ -872,16 +872,6 @@ gdb_bfd_record_inclusion (bfd *includer, bfd *includee)
 
   gdata = (struct gdb_bfd_data *) bfd_usrdata (includer);
   gdata->included_bfds.push_back (gdb_bfd_ref_ptr::new_reference (includee));
-}
-
-/* See gdb_bfd.h.  */
-
-gdb_bfd_ref_ptr
-gdb_bfd_fdopenr (const char *filename, const char *target, int fd)
-{
-  bfd *result = bfd_fdopenr (filename, target, fd);
-
-  return gdb_bfd_ref_ptr::new_reference (result);
 }
 
 

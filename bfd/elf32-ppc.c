@@ -1,5 +1,5 @@
 /* PowerPC-specific support for 32-bit ELF
-   Copyright (C) 1994-2018 Free Software Foundation, Inc.
+   Copyright (C) 1994-2019 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -649,8 +649,8 @@ static reloc_howto_type ppc_elf_howto_raw[] = {
        ppc_elf_unhandled_reloc),
 
   /* e_li split20 format.  */
-  HOW (R_PPC_VLE_ADDR20, 2, 20, 0x1f07ff, 16, FALSE, dont,
-       bfd_elf_generic_reloc),
+  HOW (R_PPC_VLE_ADDR20, 2, 20, 0x1f7fff, 0, FALSE, dont,
+       ppc_elf_unhandled_reloc),
 
   HOW (R_PPC_IRELATIVE, 2, 32, 0xffffffff, 0, FALSE, dont,
        ppc_elf_unhandled_reloc),
@@ -3316,9 +3316,7 @@ ppc_elf_check_relocs (bfd *abfd,
 	  /* This relocation describes which C++ vtable entries are actually
 	     used.  Record for later use during GC.  */
 	case R_PPC_GNU_VTENTRY:
-	  BFD_ASSERT (h != NULL);
-	  if (h != NULL
-	      && !bfd_elf_gc_record_vtentry (abfd, sec, h, rel->r_addend))
+	  if (!bfd_elf_gc_record_vtentry (abfd, sec, h, rel->r_addend))
 	    return FALSE;
 	  break;
 
@@ -3886,10 +3884,10 @@ ppc_elf_vle_split16 (bfd *input_bfd,
 		     split16_format_type split16_format,
 		     bfd_boolean fixup)
 {
-  unsigned int insn, opcode, top5;
+  unsigned int insn, opcode;
 
   insn = bfd_get_32 (input_bfd, loc);
-  opcode = insn & 0xfc00f800;
+  opcode = insn & E_OPCODE_MASK;
   if (opcode == E_OR2I_INSN
       || opcode == E_AND2I_DOT_INSN
       || opcode == E_OR2IS_INSN
@@ -3926,10 +3924,22 @@ ppc_elf_vle_split16 (bfd *input_bfd,
 	       input_bfd, input_section, offset, opcode);
 	}
     }
-  top5 = value & 0xf800;
-  top5 = top5 << (split16_format == split16a_type ? 5 : 10);
-  insn &= (split16_format == split16a_type ? ~0x1f07ff : ~0x3e007ff);
-  insn |= top5;
+  if (split16_format == split16a_type)
+    {
+      insn &= ~((0xf800 << 5) | 0x7ff);
+      insn |= (value & 0xf800) << 5;
+      if ((insn & E_LI_MASK) == E_LI_INSN)
+	{
+	  /* Hack for e_li.  Extend sign.  */
+	  insn &= ~(0xf0000 >> 5);
+	  insn |= (-(value & 0x8000) & 0xf0000) >> 5;
+	}
+    }
+  else
+    {
+      insn &= ~((0xf800 << 10) | 0x7ff);
+      insn |= (value & 0xf800) << 10;
+    }
   insn |= value & 0x7ff;
   bfd_put_32 (input_bfd, insn, loc);
 }
@@ -7013,6 +7023,12 @@ ppc_elf_relocate_section (bfd *output_bfd,
 		      (bfd_link_relocatable (info)) ? " (relocatable)" : "");
 #endif
 
+  if (!is_ppc_elf (input_bfd))
+    {
+      bfd_set_error (bfd_error_wrong_format);
+      return FALSE;
+    }
+
   got2 = bfd_get_section_by_name (input_bfd, ".got2");
 
   /* Initialize howto table if not already done.  */
@@ -7090,7 +7106,7 @@ ppc_elf_relocate_section (bfd *output_bfd,
 	    howto = ppc_elf_howto_table[r_type];
 
 	  _bfd_clear_contents (howto, input_bfd, input_section,
-			       contents + rel->r_offset);
+			       contents, rel->r_offset);
 	  wrel->r_offset = rel->r_offset;
 	  wrel->r_info = 0;
 	  wrel->r_addend = 0;
@@ -8638,6 +8654,19 @@ ppc_elf_relocate_section (bfd *output_bfd,
 		addend -= SYM_VAL (sda);
 	      }
 
+	    if (r_type == R_PPC_EMB_RELSDA)
+	      break;
+
+	    /* The PowerPC Embedded Application Binary Interface
+	       version 1.0 insanely chose to specify R_PPC_EMB_SDA21
+	       operating on a 24-bit field at r_offset.  GNU as and
+	       GNU ld have always assumed R_PPC_EMB_SDA21 operates on
+	       a 32-bit bit insn at r_offset.  Cope with object file
+	       producers that possibly comply with the EABI in
+	       generating an odd r_offset for big-endian objects.  */
+	    if (r_type == R_PPC_EMB_SDA21)
+	      rel->r_offset &= ~1;
+
 	    insn = bfd_get_32 (input_bfd, contents + rel->r_offset);
 	    if (reg == 0
 		&& (r_type == R_PPC_VLE_SDA21
@@ -8665,13 +8694,8 @@ ppc_elf_relocate_section (bfd *output_bfd,
 		  goto overflow;
 		goto copy_reloc;
 	      }
-	    else if (r_type == R_PPC_EMB_SDA21
-		     || r_type == R_PPC_VLE_SDA21
-		     || r_type == R_PPC_VLE_SDA21_LO)
-	      {
-		/* Fill in register field.  */
-		insn = (insn & ~RA_REGISTER_MASK) | (reg << RA_REGISTER_SHIFT);
-	      }
+	    /* Fill in register field.  */
+	    insn = (insn & ~RA_REGISTER_MASK) | (reg << RA_REGISTER_SHIFT);
 	    bfd_put_32 (input_bfd, insn, contents + rel->r_offset);
 	  }
 	  break;
@@ -8834,7 +8858,7 @@ ppc_elf_relocate_section (bfd *output_bfd,
 	    }
 	  else if (htab->plt_type != PLT_NEW)
 	    info->callbacks->einfo
-	      (_("%P: %H: %s relocation unsupported for bss-plt\n"),
+	      (_("%X%P: %H: %s relocation unsupported for bss-plt\n"),
 	       input_bfd, input_section, rel->r_offset,
 	       howto->name);
 	  break;
@@ -8852,7 +8876,7 @@ ppc_elf_relocate_section (bfd *output_bfd,
 	    }
 	  else if (htab->plt_type != PLT_NEW)
 	    info->callbacks->einfo
-	      (_("%P: %H: %s relocation unsupported for bss-plt\n"),
+	      (_("%X%P: %H: %s relocation unsupported for bss-plt\n"),
 	       input_bfd, input_section, rel->r_offset,
 	       howto->name);
 	  break;
@@ -9686,6 +9710,7 @@ ppc_finish_symbols (struct bfd_link_info *info)
 		bfd_byte *loc;
 		bfd_vma val;
 		Elf_Internal_Rela rela;
+		unsigned char *p;
 
 		if (!get_sym_h (NULL, &sym, &sym_sec, NULL, &local_syms,
 				lplt - local_plt, ibfd))
@@ -9730,14 +9755,9 @@ ppc_finish_symbols (struct bfd_link_info *info)
 		loc = relplt->contents + (relplt->reloc_count++
 					  * sizeof (Elf32_External_Rela));
 		bfd_elf32_swap_reloca_out (info->output_bfd, &rela, loc);
-	      }
-	    if ((ent->glink_offset & 1) == 0)
-	      {
-		unsigned char *p = ((unsigned char *) htab->glink->contents
-				    + ent->glink_offset);
 
+		p = (unsigned char *) htab->glink->contents + ent->glink_offset;
 		write_glink_stub (NULL, ent, htab->elf.iplt, p, info);
-		ent->glink_offset |= 1;
 	      }
 	  }
 

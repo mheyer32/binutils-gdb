@@ -1,5 +1,5 @@
 /* tc-m68k.c -- Assemble for the m68k family
-   Copyright (C) 1987-2018 Free Software Foundation, Inc.
+   Copyright (C) 1987-2019 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -24,7 +24,6 @@
 #include "subsegs.h"
 #include "dwarf2dbg.h"
 #include "dw2gencfi.h"
-#include "struc-symbol.h"
 
 #include "opcode/m68k.h"
 #include "m68k-parse.h"

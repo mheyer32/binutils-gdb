@@ -1,5 +1,5 @@
 /* Xtensa-specific support for 32-bit ELF.
-   Copyright (C) 2003-2018 Free Software Foundation, Inc.
+   Copyright (C) 2003-2019 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -1102,9 +1102,7 @@ elf_xtensa_check_relocs (bfd *abfd,
 	case R_XTENSA_GNU_VTENTRY:
 	  /* This relocation describes which C++ vtable entries are actually
 	     used.  Record for later use during GC.  */
-	  BFD_ASSERT (h != NULL);
-	  if (h != NULL
-	      && !bfd_elf_gc_record_vtentry (abfd, sec, h, rel->r_addend))
+	  if (!bfd_elf_gc_record_vtentry (abfd, sec, h, rel->r_addend))
 	    return FALSE;
 	  continue;
 
@@ -1957,8 +1955,9 @@ elf_xtensa_do_reloc (reloc_howto_type *howto,
 	}
       else if (opcode == get_const16_opcode ())
 	{
-	  /* ALT used for high 16 bits.  */
-	  newval = relocation >> 16;
+	  /* ALT used for high 16 bits.
+	     Ignore 32-bit overflow.  */
+	  newval = (relocation >> 16) & 0xffff;
 	  opnd = 1;
 	}
       else
@@ -2458,7 +2457,11 @@ elf_xtensa_relocate_section (bfd *output_bfd,
   if (!xtensa_default_isa)
     xtensa_default_isa = xtensa_isa_init (0, 0);
 
-  BFD_ASSERT (is_xtensa_elf (input_bfd));
+  if (!is_xtensa_elf (input_bfd))
+    {
+      bfd_set_error (bfd_error_wrong_format);
+      return FALSE;
+    }
 
   htab = elf_xtensa_hash_table (info);
   if (htab == NULL)
@@ -7190,6 +7193,11 @@ is_resolvable_asm_expansion (bfd *abfd,
 			     bfd_boolean *is_reachable_p)
 {
   asection *target_sec;
+  asection *s;
+  bfd_vma first_vma;
+  bfd_vma last_vma;
+  unsigned int first_align;
+  unsigned int adjust;
   bfd_vma target_offset;
   r_reloc r_rel;
   xtensa_opcode opcode, direct_call_opcode;
@@ -7276,6 +7284,56 @@ is_resolvable_asm_expansion (bfd *abfd,
 		      + sec->output_offset + irel->r_offset + 3);
       dest_address = (target_sec->output_section->vma
 		      + target_sec->output_offset + target_offset);
+    }
+
+  /* Adjust addresses with alignments for the worst case to see if call insn
+     can fit.  Don't relax l32r + callx to call if the target can be out of
+     range due to alignment.
+     Caller and target addresses are highest and lowest address.
+     Search all sections between caller and target, looking for max alignment.
+     The adjustment is max alignment bytes.  If the alignment at the lowest
+     address is less than the adjustment, apply the adjustment to highest
+     address.  */
+
+  /* Start from lowest address.
+     Lowest address aligmnet is from input section.
+     Initial alignment (adjust) is from input section.  */
+  if (dest_address > self_address)
+    {
+      s = sec->output_section;
+      last_vma = dest_address;
+      first_align = sec->alignment_power;
+      adjust = target_sec->alignment_power;
+    }
+  else
+    {
+      s = target_sec->output_section;
+      last_vma = self_address;
+      first_align = target_sec->alignment_power;
+      adjust = sec->alignment_power;
+    }
+
+  first_vma = s->vma;
+
+  /* Find the largest alignment in output section list.  */
+  for (; s && s->vma >= first_vma && s->vma <= last_vma ; s = s->next)
+    {
+      if (s->alignment_power > adjust)
+	adjust = s->alignment_power;
+    }
+
+  if (adjust > first_align)
+    {
+      /* Alignment may enlarge the range, adjust highest address.  */
+      adjust = 1 << adjust;
+      if (dest_address > self_address)
+	{
+	  dest_address += adjust;
+	}
+      else
+	{
+	  self_address += adjust;
+	}
     }
 
   *is_reachable_p = pcrel_reloc_fits (direct_call_opcode, 0,
@@ -10023,7 +10081,8 @@ shrink_dynamic_reloc_sections (struct bfd_link_info *info,
       && (input_section->flags & SEC_ALLOC) != 0
       && (dynamic_symbol || bfd_link_pic (info))
       && (!h || h->root.type != bfd_link_hash_undefweak
-	  || (dynamic_symbol && bfd_link_dll (info))))
+	  || (dynamic_symbol
+	      && (bfd_link_dll (info) || info->export_dynamic))))
     {
       asection *srel;
       bfd_boolean is_plt = FALSE;

@@ -1,6 +1,6 @@
 /* Cache and manage the values of registers
 
-   Copyright (C) 2014-2018 Free Software Foundation, Inc.
+   Copyright (C) 2014-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,8 +17,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef COMMON_REGCACHE_H
-#define COMMON_REGCACHE_H
+#ifndef COMMON_COMMON_REGCACHE_H
+#define COMMON_COMMON_REGCACHE_H
 
 /* This header is a stopgap until we have an independent regcache.  */
 
@@ -82,4 +82,4 @@ struct reg_buffer_common
   virtual bool raw_compare (int regnum, const void *buf, int offset) const = 0;
 };
 
-#endif /* COMMON_REGCACHE_H */
+#endif /* COMMON_COMMON_REGCACHE_H */

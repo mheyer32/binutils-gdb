@@ -1,7 +1,7 @@
 # Test that the linker reports undefined symbol errors correctly.
 # By Ian Lance Taylor, Cygnus Support
 #
-#   Copyright (C) 1995-2018 Free Software Foundation, Inc.
+#   Copyright (C) 1995-2019 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -24,7 +24,7 @@ set testund "undefined"
 set testfn "undefined function"
 set testline "undefined line"
 
-if { ![is_remote host] && [which $CC] == 0 } {
+if { ![check_compiler_available] } {
     verbose "Could not find C compiler!" 1
     untested $testund
     untested $testfn

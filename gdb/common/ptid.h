@@ -1,6 +1,6 @@
 /* The ptid_t type and common functions operating on it.
 
-   Copyright (C) 1986-2018 Free Software Foundation, Inc.
+   Copyright (C) 1986-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,8 +17,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef PTID_H
-#define PTID_H
+#ifndef COMMON_PTID_H
+#define COMMON_PTID_H
 
 /* The ptid struct is a collection of the various "ids" necessary for
    identifying the inferior process/thread being debugged.  This
@@ -145,11 +145,11 @@ private:
 
 /* The null or zero ptid, often used to indicate no process. */
 
-extern ptid_t null_ptid;
+extern const ptid_t null_ptid;
 
 /* The (-1,0,0) ptid, often used to indicate either an error condition
    or a "don't care" condition, i.e, "run all threads."  */
 
-extern ptid_t minus_one_ptid;
+extern const ptid_t minus_one_ptid;
 
-#endif
+#endif /* COMMON_PTID_H */

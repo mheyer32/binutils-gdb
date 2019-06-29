@@ -1,5 +1,5 @@
 /* linker.c -- BFD linker routines
-   Copyright (C) 1993-2018 Free Software Foundation, Inc.
+   Copyright (C) 1993-2019 Free Software Foundation, Inc.
    Written by Steve Chamberlain and Ian Lance Taylor, Cygnus Support
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -960,7 +960,7 @@ _bfd_generic_link_add_archive_symbols
 
 	  if (arsym->name == NULL)
 	    goto error_return;
-				  
+
 	  h = bfd_link_hash_lookup (info->hash, arsym->name,
 				    FALSE, FALSE, TRUE);
 
@@ -2135,12 +2135,11 @@ _bfd_generic_link_output_symbols (bfd *output_bfd,
 	    }
 	}
 
-      /* This switch is straight from the old code in
-	 write_file_locals in ldsym.c.  */
-      if (info->strip == strip_all
-	  || (info->strip == strip_some
-	      && bfd_hash_lookup (info->keep_hash, bfd_asymbol_name (sym),
-				  FALSE, FALSE) == NULL))
+      if ((sym->flags & BSF_KEEP) == 0
+	  && (info->strip == strip_all
+	      || (info->strip == strip_some
+		  && bfd_hash_lookup (info->keep_hash, bfd_asymbol_name (sym),
+				      FALSE, FALSE) == NULL)))
 	output = FALSE;
       else if ((sym->flags & (BSF_GLOBAL | BSF_WEAK | BSF_GNU_UNIQUE)) != 0)
 	{
@@ -2154,6 +2153,8 @@ _bfd_generic_link_output_symbols (bfd *output_bfd,
 	  else
 	    output = FALSE;
 	}
+      else if ((sym->flags & BSF_KEEP) != 0)
+	output = TRUE;
       else if (bfd_is_ind_section (sym->section))
 	output = FALSE;
       else if ((sym->flags & BSF_DEBUGGING) != 0)
@@ -3142,7 +3143,7 @@ bfd_generic_define_common_symbol (bfd *output_bfd,
   /* Make sure the section is allocated in memory, and make sure that
      it is no longer a common section.  */
   section->flags |= SEC_ALLOC;
-  section->flags &= ~SEC_IS_COMMON;
+  section->flags &= ~(SEC_IS_COMMON | SEC_HAS_CONTENTS);
   return TRUE;
 }
 

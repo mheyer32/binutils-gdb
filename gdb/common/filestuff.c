@@ -1,5 +1,5 @@
 /* Low-level file-handling.
-   Copyright (C) 2012-2018 Free Software Foundation, Inc.
+   Copyright (C) 2012-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -36,12 +36,21 @@
 #define HAVE_SOCKETS 1
 #endif
 
+#ifdef HAVE_KINFO_GETFILE
+#include <sys/user.h>
+#include <libutil.h>
+#endif
+
 #ifdef HAVE_SYS_RESOURCE_H
 #include <sys/resource.h>
 #endif /* HAVE_SYS_RESOURCE_H */
 
 #ifndef O_CLOEXEC
 #define O_CLOEXEC 0
+#endif
+
+#ifndef O_NOINHERIT
+#define O_NOINHERIT 0
 #endif
 
 #ifndef SOCK_CLOEXEC
@@ -80,7 +89,6 @@ fdwalk (int (*func) (void *, int), void *arg)
 	{
 	  long fd;
 	  char *tail;
-	  int result;
 
 	  errno = 0;
 	  fd = strtol (entry->d_name, &tail, 10);
@@ -102,6 +110,25 @@ fdwalk (int (*func) (void *, int), void *arg)
 
       closedir (dir);
       return result;
+    }
+  /* We may fall through to the next case.  */
+#endif
+#ifdef HAVE_KINFO_GETFILE
+  int nfd;
+  gdb::unique_xmalloc_ptr<struct kinfo_file[]> fdtbl
+    (kinfo_getfile (getpid (), &nfd));
+  if (fdtbl != NULL)
+    {
+      for (int i = 0; i < nfd; i++)
+	{
+	  if (fdtbl[i].kf_fd >= 0)
+	    {
+	      int result = func (arg, fdtbl[i].kf_fd);
+	      if (result != 0)
+		return result;
+	    }
+	}
+      return 0;
     }
   /* We may fall through to the next case.  */
 #endif
@@ -301,8 +328,10 @@ gdb_fopen_cloexec (const char *filename, const char *opentype)
      skip it.  E.g., the Windows runtime issues an "Invalid parameter
      passed to C runtime function" OutputDebugString warning for
      unknown modes.  Assume that if O_CLOEXEC is zero, then "e" isn't
-     supported.  */
-  static int fopen_e_ever_failed_einval = O_CLOEXEC == 0;
+     supported.  On MinGW, O_CLOEXEC is an alias of O_NOINHERIT, and
+     "e" isn't supported.  */
+  static int fopen_e_ever_failed_einval =
+    O_CLOEXEC == 0 || O_CLOEXEC == O_NOINHERIT;
 
   if (!fopen_e_ever_failed_einval)
     {
@@ -397,23 +426,78 @@ gdb_pipe_cloexec (int filedes[2])
   return result;
 }
 
-/* Helper function which does the work for make_cleanup_close.  */
+/* See common/filestuff.h.  */
 
-static void
-do_close_cleanup (void *arg)
+bool
+is_regular_file (const char *name, int *errno_ptr)
 {
-  int *fd = (int *) arg;
+  struct stat st;
+  const int status = stat (name, &st);
 
-  close (*fd);
+  /* Stat should never fail except when the file does not exist.
+     If stat fails, analyze the source of error and return true
+     unless the file does not exist, to avoid returning false results
+     on obscure systems where stat does not work as expected.  */
+
+  if (status != 0)
+    {
+      if (errno != ENOENT)
+	return true;
+      *errno_ptr = ENOENT;
+      return false;
+    }
+
+  if (S_ISREG (st.st_mode))
+    return true;
+
+  if (S_ISDIR (st.st_mode))
+    *errno_ptr = EISDIR;
+  else
+    *errno_ptr = EINVAL;
+  return false;
 }
 
-/* See filestuff.h.  */
+/* See common/filestuff.h.  */
 
-struct cleanup *
-make_cleanup_close (int fd)
+bool
+mkdir_recursive (const char *dir)
 {
-  int *saved_fd = XNEW (int);
+  auto holder = make_unique_xstrdup (dir);
+  char * const start = holder.get ();
+  char *component_start = start;
+  char *component_end = start;
 
-  *saved_fd = fd;
-  return make_cleanup_dtor (do_close_cleanup, saved_fd, xfree);
+  while (1)
+    {
+      /* Find the beginning of the next component.  */
+      while (*component_start == '/')
+	component_start++;
+
+      /* Are we done?  */
+      if (*component_start == '\0')
+	return true;
+
+      /* Find the slash or null-terminator after this component.  */
+      component_end = component_start;
+      while (*component_end != '/' && *component_end != '\0')
+	component_end++;
+
+      /* Temporarily replace the slash with a null terminator, so we can create
+         the directory up to this component.  */
+      char saved_char = *component_end;
+      *component_end = '\0';
+
+      /* If we get EEXIST and the existing path is a directory, then we're
+         happy.  If it exists, but it's a regular file and this is not the last
+         component, we'll fail at the next component.  If this is the last
+         component, the caller will fail with ENOTDIR when trying to
+         open/create a file under that path.  */
+      if (mkdir (start, 0700) != 0)
+	if (errno != EEXIST)
+	  return false;
+
+      /* Restore the overwritten char.  */
+      *component_end = saved_char;
+      component_start = component_end;
+    }
 }

@@ -1,5 +1,5 @@
 /* SPU target-dependent code for GDB, the GNU debugger.
-   Copyright (C) 2006-2018 Free Software Foundation, Inc.
+   Copyright (C) 2006-2019 Free Software Foundation, Inc.
 
    Contributed by Ulrich Weigand <uweigand@de.ibm.com>.
    Based on a port by Sid Manning <sid@us.ibm.com>.
@@ -1401,7 +1401,8 @@ static CORE_ADDR
 spu_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 		     struct regcache *regcache, CORE_ADDR bp_addr,
 		     int nargs, struct value **args, CORE_ADDR sp,
-		     int struct_return, CORE_ADDR struct_addr)
+		     function_call_return_method return_method,
+		     CORE_ADDR struct_addr)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   CORE_ADDR sp_delta;
@@ -1418,7 +1419,7 @@ spu_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   /* If STRUCT_RETURN is true, then the struct return address (in
      STRUCT_ADDR) will consume the first argument-passing register.
      Both adjust the register count and store that value.  */
-  if (struct_return)
+  if (return_method == return_method_struct)
     {
       memset (buf, 0, sizeof buf);
       store_unsigned_integer (buf, 4, byte_order, SPUADDR_ADDR (struct_addr));
@@ -1882,11 +1883,10 @@ spu_overlay_update (struct obj_section *osect)
   /* All sections.  */
   else
     {
-      struct objfile *objfile;
-
-      ALL_OBJSECTIONS (objfile, osect)
-	if (section_is_overlay (osect))
-	  spu_overlay_update_osect (osect);
+      for (objfile *objfile : current_program_space->objfiles ())
+	ALL_OBJFILE_OSECTIONS (objfile, osect)
+	  if (section_is_overlay (osect))
+	    spu_overlay_update_osect (osect);
     }
 }
 
@@ -1963,7 +1963,7 @@ spu_catch_start (struct objfile *objfile)
   if (cust != NULL)
     {
       const struct blockvector *bv = COMPUNIT_BLOCKVECTOR (cust);
-      struct block *block = BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK);
+      const struct block *block = BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK);
       struct symbol *sym;
       struct symtab_and_line sal;
 
@@ -1999,12 +1999,11 @@ spu_objfile_from_frame (struct frame_info *frame)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  struct objfile *obj;
 
   if (gdbarch_bfd_arch_info (gdbarch)->arch != bfd_arch_spu)
     return NULL;
 
-  ALL_OBJFILES (obj)
+  for (objfile *obj : current_program_space->objfiles ())
     {
       if (obj->sections != obj->sections_end
 	  && SPUADDR_SPU (obj_section_addr (obj->sections)) == tdep->id)
@@ -2040,7 +2039,7 @@ flush_ea_cache (void)
       type = lookup_pointer_type (type);
       addr = BMSYMBOL_VALUE_ADDRESS (msymbol);
 
-      call_function_by_hand (value_from_pointer (type, addr), NULL, 0, NULL);
+      call_function_by_hand (value_from_pointer (type, addr), NULL, {});
     }
 }
 
@@ -2819,18 +2818,18 @@ Use \"off\" to never automatically flush the software-managed cache."),
 
   /* Add various "info spu" commands.  */
   add_cmd ("event", class_info, info_spu_event_command,
-	   _("Display SPU event facility status.\n"),
+	   _("Display SPU event facility status."),
 	   &infospucmdlist);
   add_cmd ("signal", class_info, info_spu_signal_command,
-	   _("Display SPU signal notification facility status.\n"),
+	   _("Display SPU signal notification facility status."),
 	   &infospucmdlist);
   add_cmd ("mailbox", class_info, info_spu_mailbox_command,
-	   _("Display SPU mailbox facility status.\n"),
+	   _("Display SPU mailbox facility status."),
 	   &infospucmdlist);
   add_cmd ("dma", class_info, info_spu_dma_command,
-	   _("Display MFC DMA status.\n"),
+	   _("Display MFC DMA status."),
 	   &infospucmdlist);
   add_cmd ("proxydma", class_info, info_spu_proxydma_command,
-	   _("Display MFC Proxy-DMA status.\n"),
+	   _("Display MFC Proxy-DMA status."),
 	   &infospucmdlist);
 }

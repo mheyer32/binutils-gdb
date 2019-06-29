@@ -1,6 +1,6 @@
 /* Common target dependent code for GDB on ARM systems.
 
-   Copyright (C) 1988-2018 Free Software Foundation, Inc.
+   Copyright (C) 1988-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -55,7 +55,7 @@
 #include "coff/internal.h"
 #include "elf/arm.h"
 
-#include "vec.h"
+#include "common/vec.h"
 
 #include "record.h"
 #include "record-full.h"
@@ -70,7 +70,7 @@
 #include "features/arm/arm-with-neon.c"
 
 #if GDB_SELF_TEST
-#include "selftest.h"
+#include "common/selftest.h"
 #endif
 
 static int arm_debug;
@@ -88,21 +88,43 @@ static int arm_debug;
 #define MSYMBOL_IS_SPECIAL(msym)				\
 	MSYMBOL_TARGET_FLAG_1 (msym)
 
-/* Per-objfile data used for mapping symbols.  */
-static const struct objfile_data *arm_objfile_data_key;
-
 struct arm_mapping_symbol
 {
   bfd_vma value;
   char type;
+
+  bool operator< (const arm_mapping_symbol &other) const
+  { return this->value < other.value; }
 };
-typedef struct arm_mapping_symbol arm_mapping_symbol_s;
-DEF_VEC_O(arm_mapping_symbol_s);
+
+typedef std::vector<arm_mapping_symbol> arm_mapping_symbol_vec;
 
 struct arm_per_objfile
 {
-  VEC(arm_mapping_symbol_s) **section_maps;
+  explicit arm_per_objfile (size_t num_sections)
+  : section_maps (new arm_mapping_symbol_vec[num_sections]),
+    section_maps_sorted (new bool[num_sections] ())
+  {}
+
+  DISABLE_COPY_AND_ASSIGN (arm_per_objfile);
+
+  /* Information about mapping symbols ($a, $d, $t) in the objfile.
+
+     The format is an array of vectors of arm_mapping_symbols, there is one
+     vector for each section of the objfile (the array is index by BFD section
+     index).
+
+     For each section, the vector of arm_mapping_symbol is sorted by
+     symbol value (address).  */
+  std::unique_ptr<arm_mapping_symbol_vec[]> section_maps;
+
+  /* For each corresponding element of section_maps above, is this vector
+     sorted.  */
+  std::unique_ptr<bool[]> section_maps_sorted;
 };
+
+/* Per-objfile data used for mapping symbols.  */
+static objfile_key<arm_per_objfile> arm_objfile_data_key;
 
 /* The list of available "set arm ..." and "show arm ..." commands.  */
 static struct cmd_list_element *setarmcmdlist = NULL;
@@ -321,15 +343,6 @@ arm_frame_is_thumb (struct frame_info *frame)
   return (cpsr & t_bit) != 0;
 }
 
-/* Callback for VEC_lower_bound.  */
-
-static inline int
-arm_compare_mapping_symbols (const struct arm_mapping_symbol *lhs,
-			     const struct arm_mapping_symbol *rhs)
-{
-  return lhs->value < rhs->value;
-}
-
 /* Search for the mapping symbol covering MEMADDR.  If one is found,
    return its type.  Otherwise, return 0.  If START is non-NULL,
    set *START to the location of the mapping symbol.  */
@@ -343,46 +356,47 @@ arm_find_mapping_symbol (CORE_ADDR memaddr, CORE_ADDR *start)
   sec = find_pc_section (memaddr);
   if (sec != NULL)
     {
-      struct arm_per_objfile *data;
-      VEC(arm_mapping_symbol_s) *map;
-      struct arm_mapping_symbol map_key = { memaddr - obj_section_addr (sec),
-					    0 };
-      unsigned int idx;
-
-      data = (struct arm_per_objfile *) objfile_data (sec->objfile,
-						      arm_objfile_data_key);
+      arm_per_objfile *data = arm_objfile_data_key.get (sec->objfile);
       if (data != NULL)
 	{
-	  map = data->section_maps[sec->the_bfd_section->index];
-	  if (!VEC_empty (arm_mapping_symbol_s, map))
+	  unsigned int section_idx = sec->the_bfd_section->index;
+	  arm_mapping_symbol_vec &map
+	    = data->section_maps[section_idx];
+
+	  /* Sort the vector on first use.  */
+	  if (!data->section_maps_sorted[section_idx])
 	    {
-	      struct arm_mapping_symbol *map_sym;
+	      std::sort (map.begin (), map.end ());
+	      data->section_maps_sorted[section_idx] = true;
+	    }
 
-	      idx = VEC_lower_bound (arm_mapping_symbol_s, map, &map_key,
-				     arm_compare_mapping_symbols);
+	  struct arm_mapping_symbol map_key
+	    = { memaddr - obj_section_addr (sec), 0 };
+	  arm_mapping_symbol_vec::const_iterator it
+	    = std::lower_bound (map.begin (), map.end (), map_key);
 
-	      /* VEC_lower_bound finds the earliest ordered insertion
-		 point.  If the following symbol starts at this exact
-		 address, we use that; otherwise, the preceding
-		 mapping symbol covers this address.  */
-	      if (idx < VEC_length (arm_mapping_symbol_s, map))
+	  /* std::lower_bound finds the earliest ordered insertion
+	     point.  If the symbol at this position starts at this exact
+	     address, we use that; otherwise, the preceding
+	     mapping symbol covers this address.  */
+	  if (it < map.end ())
+	    {
+	      if (it->value == map_key.value)
 		{
-		  map_sym = VEC_index (arm_mapping_symbol_s, map, idx);
-		  if (map_sym->value == map_key.value)
-		    {
-		      if (start)
-			*start = map_sym->value + obj_section_addr (sec);
-		      return map_sym->type;
-		    }
-		}
-
-	      if (idx > 0)
-		{
-		  map_sym = VEC_index (arm_mapping_symbol_s, map, idx - 1);
 		  if (start)
-		    *start = map_sym->value + obj_section_addr (sec);
-		  return map_sym->type;
+		    *start = it->value + obj_section_addr (sec);
+		  return it->type;
 		}
+	    }
+
+	  if (it > map.begin ())
+	    {
+	      arm_mapping_symbol_vec::const_iterator prev_it
+		= it - 1;
+
+	      if (start)
+		*start = prev_it->value + obj_section_addr (sec);
+	      return prev_it->type;
 	    }
 	}
     }
@@ -1801,6 +1815,10 @@ arm_scan_prologue (struct frame_info *this_frame,
       CORE_ADDR frame_loc;
       ULONGEST return_value;
 
+      /* AAPCS does not use a frame register, so we can abort here.  */
+      if (gdbarch_tdep (gdbarch)->arm_abi == ARM_ABI_AAPCS)
+        return;
+
       frame_loc = get_frame_register_unsigned (this_frame, ARM_FP_REGNUM);
       if (!safe_read_memory_unsigned_integer (frame_loc, 4, byte_order,
 					      &return_value))
@@ -3055,38 +3073,6 @@ struct frame_base arm_normal_base = {
   arm_normal_frame_base
 };
 
-/* Assuming THIS_FRAME is a dummy, return the frame ID of that
-   dummy frame.  The frame ID's base needs to match the TOS value
-   saved by save_dummy_frame_tos() and returned from
-   arm_push_dummy_call, and the PC needs to match the dummy frame's
-   breakpoint.  */
-
-static struct frame_id
-arm_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
-{
-  return frame_id_build (get_frame_register_unsigned (this_frame,
-						      ARM_SP_REGNUM),
-			 get_frame_pc (this_frame));
-}
-
-/* Given THIS_FRAME, find the previous frame's resume PC (which will
-   be used to construct the previous frame's ID, after looking up the
-   containing function).  */
-
-static CORE_ADDR
-arm_unwind_pc (struct gdbarch *gdbarch, struct frame_info *this_frame)
-{
-  CORE_ADDR pc;
-  pc = frame_unwind_register_unsigned (this_frame, ARM_PC_REGNUM);
-  return arm_addr_bits_remove (gdbarch, pc);
-}
-
-static CORE_ADDR
-arm_unwind_sp (struct gdbarch *gdbarch, struct frame_info *this_frame)
-{
-  return frame_unwind_register_unsigned (this_frame, ARM_SP_REGNUM);
-}
-
 static struct value *
 arm_dwarf2_prev_register (struct frame_info *this_frame, void **this_cache,
 			  int regnum)
@@ -3342,62 +3328,25 @@ pop_stack_item (struct stack_item *si)
   return si;
 }
 
+/* Implement the gdbarch type alignment method, overrides the generic
+   alignment algorithm for anything that is arm specific.  */
 
-/* Return the alignment (in bytes) of the given type.  */
-
-static int
-arm_type_align (struct type *t)
+static ULONGEST
+arm_type_align (gdbarch *gdbarch, struct type *t)
 {
-  int n;
-  int align;
-  int falign;
-
   t = check_typedef (t);
-  switch (TYPE_CODE (t))
+  if (TYPE_CODE (t) == TYPE_CODE_ARRAY && TYPE_VECTOR (t))
     {
-    default:
-      /* Should never happen.  */
-      internal_error (__FILE__, __LINE__, _("unknown type alignment"));
-      return 4;
-
-    case TYPE_CODE_PTR:
-    case TYPE_CODE_ENUM:
-    case TYPE_CODE_INT:
-    case TYPE_CODE_FLT:
-    case TYPE_CODE_SET:
-    case TYPE_CODE_RANGE:
-    case TYPE_CODE_REF:
-    case TYPE_CODE_RVALUE_REF:
-    case TYPE_CODE_CHAR:
-    case TYPE_CODE_BOOL:
-      return TYPE_LENGTH (t);
-
-    case TYPE_CODE_ARRAY:
-      if (TYPE_VECTOR (t))
-	{
-	  /* Use the natural alignment for vector types (the same for
-	     scalar type), but the maximum alignment is 64-bit.  */
-	  if (TYPE_LENGTH (t) > 8)
-	    return 8;
-	  else
-	    return TYPE_LENGTH (t);
-	}
+      /* Use the natural alignment for vector types (the same for
+	 scalar type), but the maximum alignment is 64-bit.  */
+      if (TYPE_LENGTH (t) > 8)
+	return 8;
       else
-	return arm_type_align (TYPE_TARGET_TYPE (t));
-    case TYPE_CODE_COMPLEX:
-      return arm_type_align (TYPE_TARGET_TYPE (t));
-
-    case TYPE_CODE_STRUCT:
-    case TYPE_CODE_UNION:
-      align = 1;
-      for (n = 0; n < TYPE_NFIELDS (t); n++)
-	{
-	  falign = arm_type_align (TYPE_FIELD_TYPE (t, n));
-	  if (falign > align)
-	    align = falign;
-	}
-      return align;
+	return TYPE_LENGTH (t);
     }
+
+  /* Allow the common code to calculate the alignment.  */
+  return 0;
 }
 
 /* Possible base types for a candidate for passing and returning in
@@ -3679,7 +3628,8 @@ arm_vfp_abi_for_function (struct gdbarch *gdbarch, struct type *func_type)
 static CORE_ADDR
 arm_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 		     struct regcache *regcache, CORE_ADDR bp_addr, int nargs,
-		     struct value **args, CORE_ADDR sp, int struct_return,
+		     struct value **args, CORE_ADDR sp,
+		     function_call_return_method return_method,
 		     CORE_ADDR struct_addr)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
@@ -3714,7 +3664,7 @@ arm_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
   /* The struct_return pointer occupies the first parameter
      passing register.  */
-  if (struct_return)
+  if (return_method == return_method_struct)
     {
       if (arm_debug)
 	fprintf_unfiltered (gdb_stdlog, "struct return in %s = %s\n",
@@ -3742,7 +3692,7 @@ arm_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       typecode = TYPE_CODE (arg_type);
       val = value_contents (args[argnum]);
 
-      align = arm_type_align (arg_type);
+      align = type_align (arg_type);
       /* Round alignment up to a whole number of words.  */
       align = (align + INT_REGISTER_SIZE - 1) & ~(INT_REGISTER_SIZE - 1);
       /* Different ABIs have different maximum alignments.  */
@@ -7460,9 +7410,9 @@ thumb_process_displaced_32bit_insn (struct gdbarch *gdbarch, uint16_t insn1,
 	{
 	  if (bit (insn1, 9)) /* Data processing (plain binary imm).  */
 	    {
-	      int op = bits (insn1, 4, 8);
+	      int dp_op = bits (insn1, 4, 8);
 	      int rn = bits (insn1, 0, 3);
-	      if ((op == 0 || op == 0xa) && rn == 0xf)
+	      if ((dp_op == 0 || dp_op == 0xa) && rn == 0xf)
 		err = thumb_copy_pc_relative_32bit (gdbarch, insn1, insn2,
 						    regs, dsc);
 	      else
@@ -8577,63 +8527,29 @@ arm_coff_make_msymbol_special(int val, struct minimal_symbol *msym)
 }
 
 static void
-arm_objfile_data_free (struct objfile *objfile, void *arg)
-{
-  struct arm_per_objfile *data = (struct arm_per_objfile *) arg;
-  unsigned int i;
-
-  for (i = 0; i < objfile->obfd->section_count; i++)
-    VEC_free (arm_mapping_symbol_s, data->section_maps[i]);
-}
-
-static void
 arm_record_special_symbol (struct gdbarch *gdbarch, struct objfile *objfile,
 			   asymbol *sym)
 {
   const char *name = bfd_asymbol_name (sym);
   struct arm_per_objfile *data;
-  VEC(arm_mapping_symbol_s) **map_p;
   struct arm_mapping_symbol new_map_sym;
 
   gdb_assert (name[0] == '$');
   if (name[1] != 'a' && name[1] != 't' && name[1] != 'd')
     return;
 
-  data = (struct arm_per_objfile *) objfile_data (objfile,
-						  arm_objfile_data_key);
+  data = arm_objfile_data_key.get (objfile);
   if (data == NULL)
-    {
-      data = OBSTACK_ZALLOC (&objfile->objfile_obstack,
-			     struct arm_per_objfile);
-      set_objfile_data (objfile, arm_objfile_data_key, data);
-      data->section_maps = OBSTACK_CALLOC (&objfile->objfile_obstack,
-					   objfile->obfd->section_count,
-					   VEC(arm_mapping_symbol_s) *);
-    }
-  map_p = &data->section_maps[bfd_get_section (sym)->index];
+    data = arm_objfile_data_key.emplace (objfile,
+					 objfile->obfd->section_count);
+  arm_mapping_symbol_vec &map
+    = data->section_maps[bfd_get_section (sym)->index];
 
   new_map_sym.value = sym->value;
   new_map_sym.type = name[1];
 
-  /* Assume that most mapping symbols appear in order of increasing
-     value.  If they were randomly distributed, it would be faster to
-     always push here and then sort at first use.  */
-  if (!VEC_empty (arm_mapping_symbol_s, *map_p))
-    {
-      struct arm_mapping_symbol *prev_map_sym;
-
-      prev_map_sym = VEC_last (arm_mapping_symbol_s, *map_p);
-      if (prev_map_sym->value >= sym->value)
-	{
-	  unsigned int idx;
-	  idx = VEC_lower_bound (arm_mapping_symbol_s, *map_p, &new_map_sym,
-				 arm_compare_mapping_symbols);
-	  VEC_safe_insert (arm_mapping_symbol_s, *map_p, idx, &new_map_sym);
-	  return;
-	}
-    }
-
-  VEC_safe_push (arm_mapping_symbol_s, *map_p, &new_map_sym);
+  /* Insert at the end, the vector will be sorted on first use.  */
+  map.push_back (new_map_sym);
 }
 
 static void
@@ -8902,7 +8818,17 @@ arm_code_of_frame_writable (struct gdbarch *gdbarch, struct frame_info *frame)
     return 1;
 }
 
-
+/* Implement gdbarch_gnu_triplet_regexp.  If the arch name is arm then allow it
+   to be postfixed by a version (eg armv7hl).  */
+
+static const char *
+arm_gnu_triplet_regexp (struct gdbarch *gdbarch)
+{
+  if (strcmp (gdbarch_bfd_arch_info (gdbarch)->arch_name, "arm") == 0)
+    return "arm(v[^- ]*)?";
+  return gdbarch_bfd_arch_info (gdbarch)->arch_name;
+}
+
 /* Initialize the current architecture based on INFO.  If possible,
    re-use an architecture from ARCHES, which is a list of
    architectures already created during this debugging session.
@@ -9046,8 +8972,6 @@ arm_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
 	  if (fp_model == ARM_FLOAT_AUTO)
 	    {
-	      int e_flags = elf_elfheader (info.abfd)->e_flags;
-
 	      switch (e_flags & (EF_ARM_SOFT_FLOAT | EF_ARM_VFP_FLOAT))
 		{
 		case 0:
@@ -9338,6 +9262,9 @@ arm_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   else
     set_gdbarch_wchar_signed (gdbarch, 1);
 
+  /* Compute type alignment.  */
+  set_gdbarch_type_align (gdbarch, arm_type_align);
+
   /* Note: for displaced stepping, this includes the breakpoint, and one word
      of additional scratch space.  This setting isn't used for anything beside
      displaced stepping at present.  */
@@ -9358,11 +9285,6 @@ arm_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     set_gdbarch_code_of_frame_writable (gdbarch, arm_code_of_frame_writable);
 
   set_gdbarch_write_pc (gdbarch, arm_write_pc);
-
-  /* Frame handling.  */
-  set_gdbarch_dummy_id (gdbarch, arm_dummy_id);
-  set_gdbarch_unwind_pc (gdbarch, arm_unwind_pc);
-  set_gdbarch_unwind_sp (gdbarch, arm_unwind_sp);
 
   frame_base_set_default (gdbarch, &arm_normal_base);
 
@@ -9508,6 +9430,8 @@ arm_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_disassembler_options (gdbarch, &arm_disassembler_options);
   set_gdbarch_valid_disassembler_options (gdbarch, disassembler_options_arm ());
 
+  set_gdbarch_gnu_triplet_regexp (gdbarch, arm_gnu_triplet_regexp);
+
   return gdbarch;
 }
 
@@ -9539,9 +9463,6 @@ _initialize_arm_tdep (void)
   size_t rest = sizeof (regdesc);
 
   gdbarch_register (bfd_arch_arm, arm_gdbarch_init, arm_dump_tdep);
-
-  arm_objfile_data_key
-    = register_objfile_data_with_cleanup (NULL, arm_objfile_data_free);
 
   /* Add ourselves to objfile event chain.  */
   gdb::observers::new_objfile.attach (arm_exidx_new_objfile);

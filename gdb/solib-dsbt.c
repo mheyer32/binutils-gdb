@@ -1,5 +1,5 @@
 /* Handle TIC6X (DSBT) shared libraries for GDB, the GNU Debugger.
-   Copyright (C) 2010-2018 Free Software Foundation, Inc.
+   Copyright (C) 2010-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -650,7 +650,7 @@ dsbt_current_sos (void)
   /* Locate the address of the first link map struct.  */
   lm_addr = lm_base ();
 
-  /* We have at least one link map entry.  Fetch the the lot of them,
+  /* We have at least one link map entry.  Fetch the lot of them,
      building the solist chain.  */
   while (lm_addr)
     {
@@ -830,14 +830,13 @@ enable_break (void)
 	 in the dynamic linker itself.  */
 
       gdb_bfd_ref_ptr tmp_bfd;
-      TRY
+      try
 	{
 	  tmp_bfd = solib_bfd_open (buf);
 	}
-      CATCH (ex, RETURN_MASK_ALL)
+      catch (const gdb_exception &ex)
 	{
 	}
-      END_CATCH
 
       if (tmp_bfd == NULL)
 	{

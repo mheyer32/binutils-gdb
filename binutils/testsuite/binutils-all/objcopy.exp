@@ -1,4 +1,4 @@
-#   Copyright (C) 1994-2018 Free Software Foundation, Inc.
+#   Copyright (C) 1994-2019 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -80,6 +80,7 @@ proc objcopy_test {testname srcfile} {
 	setup_xfail "hppa*-*-*"
 	setup_xfail "m8*-*"
 	setup_xfail "sh-*-coff*"
+	setup_xfail "tic54x-*-*"
 	setup_xfail "tic80-*-*"
 
 	clear_xfail "hppa*64*-*-hpux*" "hppa*-*-linux*" "hppa*-*-lites*"
@@ -100,6 +101,50 @@ proc objcopy_test {testname srcfile} {
 }
 
 objcopy_test "simple copy" bintest.s
+
+# Test verilog data width
+proc objcopy_test_verilog {testname} {
+    global OBJCOPY
+    global OBJCOPYFLAGS
+    global srcdir
+    global subdir
+    global copyfile
+    set binfile tmpdir/verilogtest.o
+    set verilog tmpdir/verilog
+
+    set got [binutils_assemble $srcdir/$subdir/verilogtest.s $binfile]
+    if {![binutils_assemble $srcdir/$subdir/verilogtest.s $binfile]} then {
+	unresolved "objcopy ($testname)"
+	return
+    }
+
+    set got [binutils_run $OBJCOPY "-O verilog $binfile $verilog"]
+    if ![string equal "" $got] then {
+	fail "objcopy ($testname)"
+    }
+
+    set got [binutils_run $OBJCOPY "-O verilog --verilog-data-width 0 $binfile $verilog-0.hex"]
+    if ![regexp "verilog data width must be at least 1 byte" $got] then {
+	fail "objcopy ($testname 0) {$got}"
+    } else {
+	pass "objcopy ($testname 0)"
+    }
+
+    foreach width {1 2 4 8} {
+	set got [binutils_run $OBJCOPY "-O verilog --verilog-data-width $width $binfile $verilog-$width.hex"]
+	if ![string equal "" $got] then {
+	    fail "objcopy ($testname $width)"
+	}
+        send_log "regexp_diff $verilog-$width.hex $srcdir/$subdir/verilog-$width.hex\n"
+	if {! [regexp_diff "$verilog-$width.hex" "$srcdir/$subdir/verilog-$width.hex"]} {
+	    pass "objcopy ($testname $width)"
+	} else {
+	    fail "objcopy ($testname $width)"
+	}
+    }
+}
+
+objcopy_test_verilog "verilog data width"
 
 if { [file exists $tempfile] } {
     # Test reversing bytes in a section.
@@ -1045,10 +1090,10 @@ if [is_elf_format] {
     objcopy_test_symbol_manipulation
     objcopy_test_elf_common_symbols
     objcopy_test "ELF unknown section type" unknown.s
-    objcopy_test_readelf "ELF group" group.s
-    objcopy_test_readelf "ELF group" group-2.s
-    objcopy_test_readelf "ELF group" group-3.s
-    objcopy_test_readelf "ELF group" group-4.s
+    objcopy_test_readelf "ELF group 1" group.s
+    objcopy_test_readelf "ELF group 2" group-2.s
+    objcopy_test_readelf "ELF group 3" group-3.s
+    objcopy_test_readelf "ELF group 4" group-4.s
     objcopy_test_readelf "GNU_MBIND section" mbind1.s
     run_dump_test "group-5"
     run_dump_test "group-6"
@@ -1074,6 +1119,9 @@ if [is_elf_format] {
 run_dump_test "copy-2"
 run_dump_test "copy-3"
 run_dump_test "copy-4"
+run_dump_test "copy-5"
+run_dump_test "copy-6"
+
 # Use bintest.o from the copy-4 test to determine ELF reloc type
 set reloc_format rel
 if { [is_elf_format] && [is_rela tmpdir/bintest.o] } {
@@ -1098,7 +1146,11 @@ if [is_elf_format] {
 	set reloc_format mips64
     }
     # A relocation type not supported by any target
-    set reloc 215
+    if { [istarget "nds32*-*"] } {
+	set reloc 255
+    } else {
+	set reloc 215
+    }
     run_dump_test "strip-13" [list \
 				  [list source strip-13${reloc_format}.s] \
 				  [list as "${elf64} --defsym RELOC=${reloc}"]]
@@ -1223,3 +1275,38 @@ proc objcopy_test_without_global_symbol { } {
 setup_xfail aarch64*-*-* arm*-*-*
 
 objcopy_test_without_global_symbol
+
+# objcopy remove relocation from executable test
+
+proc objcopy_remove_relocations_from_executable { } {
+    global OBJCOPY
+    global srcdir
+    global subdir
+    global READELF
+
+    set test "remove-section relocation sections"
+
+    if { [target_compile $srcdir/$subdir/testprog.c tmpdir/pr23611 executable debug] != "" } {
+	untested $test
+	return
+    }
+
+    if [is_remote host] {
+	set objfile [remote_download host tmpdir/pr23611]
+    } else {
+	set objfile tmpdir/pr23611
+    }
+    set out tmpdir/pr23611.out
+
+    set exec_output1 [binutils_run $OBJCOPY "-R .rela.plt -R .rela.dyn -R .rel.plt -R .rel.dyn $objfile $out"]
+    set exec_output2 [binutils_run $READELF "-S $out"]
+    if { [string match "*.rel.plt*" $exec_output2] || [string match "*.rela.plt*" $exec_output2] || [string match "*.rel.dyn*" $exec_output2] || [string match "*.rela.dyn*" $exec_output2] } {
+	fail $test
+	return
+    }
+    pass $test
+}
+
+objcopy_remove_relocations_from_executable
+
+run_dump_test "pr23633"

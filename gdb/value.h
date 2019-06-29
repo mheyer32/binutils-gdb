@@ -1,6 +1,6 @@
 /* Definitions for values of C expressions, for GDB.
 
-   Copyright (C) 1986-2018 Free Software Foundation, Inc.
+   Copyright (C) 1986-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -669,6 +669,7 @@ extern void pack_long (gdb_byte *buf, struct type *type, LONGEST num);
 extern struct value *value_from_longest (struct type *type, LONGEST num);
 extern struct value *value_from_ulongest (struct type *type, ULONGEST num);
 extern struct value *value_from_pointer (struct type *type, CORE_ADDR addr);
+extern struct value *value_from_host_double (struct type *type, double d);
 extern struct value *value_from_history_ref (const char *, const char **);
 extern struct value *value_from_component (struct value *, struct type *,
 					   LONGEST);
@@ -835,7 +836,7 @@ extern struct value *value_static_field (struct type *type, int fieldno);
 
 enum oload_search_type { NON_METHOD, METHOD, BOTH };
 
-extern int find_overload_match (struct value **args, int nargs,
+extern int find_overload_match (gdb::array_view<value *> args,
 				const char *name,
 				enum oload_search_type method,
 				struct value **objp, struct symbol *fsym,
@@ -1175,10 +1176,10 @@ char *value_internal_function_name (struct value *);
 extern struct value *value_from_xmethod (xmethod_worker_up &&worker);
 
 extern struct type *result_type_of_xmethod (struct value *method,
-					    int argc, struct value **argv);
+					    gdb::array_view<value *> argv);
 
 extern struct value *call_xmethod (struct value *method,
-				   int argc, struct value **argv);
+				   gdb::array_view<value *> argv);
 
 /* Given a discriminated union type and some corresponding value
    contents, this will return the field index of the currently active
@@ -1187,5 +1188,9 @@ extern struct value *call_xmethod (struct value *method,
 
 extern int value_union_variant (struct type *union_type,
 				const gdb_byte *contents);
+
+/* Destroy the values currently allocated.  This is called when GDB is
+   exiting (e.g., on quit_force).  */
+extern void finalize_values ();
 
 #endif /* !defined (VALUE_H) */

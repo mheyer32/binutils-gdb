@@ -1,5 +1,5 @@
 /* S390 native-dependent code for GDB, the GNU debugger.
-   Copyright (C) 2001-2018 Free Software Foundation, Inc.
+   Copyright (C) 2001-2019 Free Software Foundation, Inc.
 
    Contributed by D.J. Barrow (djbarrow@de.ibm.com,barrow_dj@yahoo.com)
    for IBM Deutschland Entwicklung GmbH, IBM Corporation.
@@ -42,6 +42,7 @@
 #include <elf.h>
 #include <algorithm>
 #include "inf-ptrace.h"
+#include "linux-tdep.h"
 
 /* Per-thread arch-specific data.  */
 
@@ -122,7 +123,6 @@ public:
   int remove_hw_breakpoint (struct gdbarch *, struct bp_target_info *)
     override;
   int region_ok_for_hw_watchpoint (CORE_ADDR, int) override;
-  bool have_continuable_watchpoint () override { return true; }
   bool stopped_by_watchpoint () override;
   int insert_watchpoint (CORE_ADDR, int, enum target_hw_bp_type,
 			 struct expression *) override;
@@ -834,7 +834,7 @@ s390_linux_nat_target::low_delete_thread (struct arch_lwp_info *arch_lwp)
 /* Iterator callback for s390_refresh_per_info.  */
 
 static int
-s390_refresh_per_info_cb (struct lwp_info *lp, void *arg)
+s390_refresh_per_info_cb (struct lwp_info *lp)
 {
   s390_mark_per_info_changed (lp);
 
@@ -850,7 +850,7 @@ s390_refresh_per_info (void)
 {
   ptid_t pid_ptid = ptid_t (current_lwp_ptid ().pid ());
 
-  iterate_over_lwps (pid_ptid, s390_refresh_per_info_cb, NULL);
+  iterate_over_lwps (pid_ptid, s390_refresh_per_info_cb);
   return 0;
 }
 
@@ -1017,9 +1017,8 @@ s390_linux_nat_target::read_description ()
      that mode, report s390 architecture with 64-bit GPRs.  */
 #ifdef __s390x__
   {
-    CORE_ADDR hwcap = 0;
+    CORE_ADDR hwcap = linux_get_hwcap (current_top_target ());
 
-    target_auxv_search (current_top_target (), AT_HWCAP, &hwcap);
     have_regset_tdb = (hwcap & HWCAP_S390_TE)
       && check_regset (tid, NT_S390_TDB, s390_sizeof_tdbregset);
 

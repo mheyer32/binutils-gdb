@@ -1,4 +1,4 @@
-#   Copyright 1988-2018 Free Software Foundation, Inc.
+#   Copyright 1988-2019 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -51,11 +51,8 @@ test_class_help "support" {"Support facilities\.\[\r\n\]+"}
 test_class_help "tracepoints" {
     "Tracing of program execution without stopping the program\.\[\r\n\]+"
 }
-test_class_help "user-defined" {
-    "User-defined commands\.\[\r\n\]+"
-    "The commands in this class are those defined by the user\.\[\r\n\]+"
-    "Use the \"define\" command to define a command\.\[\r\n\]+"
-}
+
+test_user_defined_class_help
 
 # Test help of an abbreviated command.  "break" is picked at random.
 set help_breakpoint_text "Set breakpoint at specified location\..*"
@@ -120,7 +117,7 @@ gdb_test "help info bogus-gdb-command" "Undefined info command: \"bogus-gdb-comm
 gdb_test "help gotcha" "Undefined command: \"gotcha\"\.  Try \"help\"\." "help gotcha"
 
 # test apropos regex
-gdb_test "apropos \\\(print\[\^ bsiedf\\\".-\]\\\)" "handle -- Specify how to handle signals"
+gdb_test "apropos \\\(print\[\^\[ bsiedf\\\".-\]\\\)" "handle -- Specify how to handle signals"
 # test apropos >1 word string
 gdb_test "apropos handle signal" "handle -- Specify how to handle signals"
 # test apropos apropos

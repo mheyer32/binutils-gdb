@@ -1,6 +1,6 @@
 /* Memory attributes support, for GDB.
 
-   Copyright (C) 2001-2018 Free Software Foundation, Inc.
+   Copyright (C) 2001-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,7 +25,7 @@
 #include "target-dcache.h"
 #include "value.h"
 #include "language.h"
-#include "vec.h"
+#include "common/vec.h"
 #include "breakpoint.h"
 #include "cli/cli-utils.h"
 #include <algorithm>
@@ -459,8 +459,6 @@ info_mem_command (const char *args, int from_tty)
 #endif
 
       printf_filtered ("\n");
-
-      gdb_flush (gdb_stdout);
     }
 }
 

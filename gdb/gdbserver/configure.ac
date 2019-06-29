@@ -1,5 +1,5 @@
 dnl Autoconf configure script for GDB server.
-dnl Copyright (C) 2000-2018 Free Software Foundation, Inc.
+dnl Copyright (C) 2000-2019 Free Software Foundation, Inc.
 dnl
 dnl This file is part of GDB.
 dnl
@@ -54,11 +54,9 @@ else
 fi
 GDB_AC_LIBMCHECK(${libmcheck_default})
 
-if $development; then
+GDB_AC_SELFTEST([
   srv_selftest_objs="common/selftest.o"
-  AC_DEFINE(GDB_SELF_TEST, 1,
-            [Define if self-testing features should be enabled])
-fi
+])
 
 ACX_NONCANONICAL_TARGET
 ACX_NONCANONICAL_HOST
@@ -90,7 +88,7 @@ fi
 # gdbserver/.  We need to build gnulib under some other directory not
 # "gnulib", to avoid the problem of both GDB and GDBserver wanting to
 # build it in the same directory, when building in the source dir.
-ACX_CONFIGURE_DIR(["../gnulib"], ["build-gnulib-gdbserver"],
+ACX_CONFIGURE_DIR(["../../gnulib"], ["build-gnulib-gdbserver"],
                   ["$gnulib_extra_configure_args"])
 
 ACX_CONFIGURE_DIR(["../../libiberty"], ["build-libiberty-gdbserver"])
@@ -157,12 +155,6 @@ AC_SUBST(ustlibs)
 AC_SUBST(ustinc)
 
 AM_GDB_WARNINGS
-dnl The codebase isn't clean yet with this flag.
-case " $WARN_CFLAGS " in
-*" -Wmissing-prototypes "*)
-  WARN_CFLAGS="$WARN_CFLAGS -Wno-missing-prototypes"
-  ;;
-esac
 
 dnl dladdr is glibc-specific.  It is used by thread-db.c but only for
 dnl debugging messages.  It lives in -ldl which is handled below so we don't

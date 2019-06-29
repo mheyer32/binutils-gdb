@@ -1,6 +1,6 @@
 /* Path manipulation routines for GDB and gdbserver.
 
-   Copyright (C) 1986-2018 Free Software Foundation, Inc.
+   Copyright (C) 1986-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,8 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef PATHSTUFF_H
-#define PATHSTUFF_H
+#ifndef COMMON_PATHSTUFF_H
+#define COMMON_PATHSTUFF_H
+
+#include "common/byte-vector.h"
 
 /* Path utilities.  */
 
@@ -46,6 +48,12 @@ extern gdb::unique_xmalloc_ptr<char>
 
 extern gdb::unique_xmalloc_ptr<char> gdb_abspath (const char *path);
 
+/* If the path in CHILD is a child of the path in PARENT, return a
+   pointer to the first component in the CHILD's pathname below the
+   PARENT.  Otherwise, return NULL.  */
+
+extern const char *child_path (const char *parent, const char *child);
+
 /* Return whether PATH contains a directory separator character.  */
 
 extern bool contains_dir_separator (const char *path);
@@ -53,11 +61,35 @@ extern bool contains_dir_separator (const char *path);
 /* Get the usual user cache directory for the current platform.
 
    On Linux, it follows the XDG Base Directory specification: use
-   $XDG_CACHE_HOME/gdb if the XDG_CACHE_HOME environment variable is defined,
-   otherwise $HOME/.cache.  The return value is absolute and tilde-expanded.
+   $XDG_CACHE_HOME/gdb if the XDG_CACHE_HOME environment variable is
+   defined, otherwise $HOME/.cache.
 
-   Return an empty string if neither XDG_CACHE_HOME or HOME are defined.  */
+   On macOS, it follows the local convention and uses
+   ~/Library/Caches/gdb.
+
+  The return value is absolute and tilde-expanded.  Return an empty
+  string if neither XDG_CACHE_HOME (on Linux) or HOME are defined.  */
 
 extern std::string get_standard_cache_dir ();
 
-#endif /* PATHSTUFF_H */
+/* Get the usual temporary directory for the current platform.
+
+   On Windows, this is the TMP or TEMP environment variable.
+
+   On the rest, this is the TMPDIR environment variable, if defined, else /tmp.
+
+   Throw an exception on error.  */
+
+extern std::string get_standard_temp_dir ();
+
+/* Return the file name of the user's shell.  Normally this comes from
+   the SHELL environment variable.  */
+
+extern const char *get_shell ();
+
+/* Make a filename suitable to pass to mkstemp based on F (e.g.
+   /tmp/foo -> /tmp/foo-XXXXXX).  */
+
+extern gdb::char_vector make_temp_filename (const std::string &f);
+
+#endif /* COMMON_PATHSTUFF_H */

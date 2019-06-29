@@ -1,6 +1,6 @@
 /* Target-dependent code for s390.
 
-   Copyright (C) 2001-2018 Free Software Foundation, Inc.
+   Copyright (C) 2001-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -1275,8 +1275,9 @@ s390_pseudo_register_type (struct gdbarch *gdbarch, int regnum)
   if (regnum_is_gpr_full (tdep, regnum))
     return builtin_type (gdbarch)->builtin_uint64;
 
+  /* For the "concatenated" vector registers use the same type as v16.  */
   if (regnum_is_vxr_full (tdep, regnum))
-    return tdesc_find_type (gdbarch, "vec128");
+    return tdesc_register_type (gdbarch, S390_V16_REGNUM);
 
   internal_error (__FILE__, __LINE__, _("invalid regnum"));
 }
@@ -1864,7 +1865,8 @@ static CORE_ADDR
 s390_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 		      struct regcache *regcache, CORE_ADDR bp_addr,
 		      int nargs, struct value **args, CORE_ADDR sp,
-		      int struct_return, CORE_ADDR struct_addr)
+		      function_call_return_method return_method,
+		      CORE_ADDR struct_addr)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int word_size = gdbarch_ptr_bit (gdbarch) / 8;
@@ -1878,7 +1880,7 @@ s390_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
     ftype = check_typedef (TYPE_TARGET_TYPE (ftype));
 
   arg_prep.copy = sp;
-  arg_prep.gr = struct_return ? 3 : 2;
+  arg_prep.gr = (return_method == return_method_struct) ? 3 : 2;
   arg_prep.fr = 0;
   arg_prep.vr = 0;
   arg_prep.argp = 0;
@@ -1907,7 +1909,7 @@ s390_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
     error (_("Stack overflow"));
 
   /* Pass the structure return address in general register 2.  */
-  if (struct_return)
+  if (return_method == return_method_struct)
     regcache_cooked_write_unsigned (regcache, S390_R2_REGNUM, struct_addr);
 
   /* Initialize arg_state for "write mode".  */
@@ -2360,11 +2362,11 @@ s390_prologue_frame_unwind_cache (struct frame_info *this_frame,
 	     Recognize this case by looking ahead a bit ...  */
 
 	  struct s390_prologue_data data2;
-	  pv_t *sp = &data2.gpr[S390_SP_REGNUM - S390_R0_REGNUM];
+	  pv_t *sp2 = &data2.gpr[S390_SP_REGNUM - S390_R0_REGNUM];
 
 	  if (!(s390_analyze_prologue (gdbarch, func, (CORE_ADDR)-1, &data2)
-		&& pv_is_register (*sp, S390_SP_REGNUM)
-		&& sp->k != 0))
+		&& pv_is_register (*sp2, S390_SP_REGNUM)
+		&& sp2->k != 0))
 	    return 0;
 	}
     }
@@ -2545,19 +2547,18 @@ s390_frame_unwind_cache (struct frame_info *this_frame,
   info->frame_base = -1;
   info->local_base = -1;
 
-  TRY
+  try
     {
       /* Try to use prologue analysis to fill the unwind cache.
 	 If this fails, fall back to reading the stack backchain.  */
       if (!s390_prologue_frame_unwind_cache (this_frame, info))
 	s390_backchain_frame_unwind_cache (this_frame, info);
     }
-  CATCH (ex, RETURN_MASK_ERROR)
+  catch (const gdb_exception_error &ex)
     {
       if (ex.error != NOT_AVAILABLE_ERROR)
-	throw_exception (ex);
+	throw;
     }
-  END_CATCH
 
   return info;
 }

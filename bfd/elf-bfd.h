@@ -1,5 +1,5 @@
 /* BFD back-end data structures for ELF files.
-   Copyright (C) 1992-2018 Free Software Foundation, Inc.
+   Copyright (C) 1992-2019 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -1473,7 +1473,7 @@ struct elf_backend_data
 						  unsigned int);
 
   /* Merge GNU properties.  Return TRUE if property is updated.  */
-  bfd_boolean (*merge_gnu_properties) (struct bfd_link_info *, bfd *,
+  bfd_boolean (*merge_gnu_properties) (struct bfd_link_info *, bfd *, bfd *,
 				       elf_property *, elf_property *);
 
   /* Set up GNU properties.  */
@@ -2634,6 +2634,8 @@ extern char *elfcore_write_aarch_hw_watch
   (bfd *, char *, int *, const void *, int);
 extern char *elfcore_write_aarch_sve
   (bfd *, char *, int *, const void *, int);
+extern char *elfcore_write_aarch_pauth
+  (bfd *, char *, int *, const void *, int);
 extern char *elfcore_write_lwpstatus
   (bfd *, char *, int *, long, int, const void *);
 extern char *elfcore_write_register_note
@@ -2847,7 +2849,7 @@ extern asection _bfd_elf_large_com_section;
   {									\
     int i_;								\
     _bfd_clear_contents (howto, input_bfd, input_section,		\
-			 contents + rel[index].r_offset);		\
+			 contents, rel[index].r_offset);		\
 									\
     if (bfd_link_relocatable (info)					\
 	&& (input_section->flags & SEC_DEBUGGING))			\

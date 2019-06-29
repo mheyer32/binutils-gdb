@@ -1,6 +1,6 @@
 /* Tracing functionality for remote targets in custom GDB protocol
 
-   Copyright (C) 1997-2018 Free Software Foundation, Inc.
+   Copyright (C) 1997-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -52,8 +52,8 @@
 #include "cli/cli-utils.h"
 #include "probe.h"
 #include "ctf.h"
-#include "filestuff.h"
-#include "rsp-low.h"
+#include "common/filestuff.h"
+#include "common/rsp-low.h"
 #include "tracefile.h"
 #include "location.h"
 #include <algorithm>
@@ -2427,7 +2427,7 @@ tfind_range_command (const char *args, int from_tty)
 
   if (args == 0 || *args == 0)
     { /* XXX FIXME: what should default behavior be?  */
-      printf_filtered ("Usage: tfind range <startaddr>,<endaddr>\n");
+      printf_filtered ("Usage: tfind range STARTADDR, ENDADDR\n");
       return;
     }
 
@@ -2461,7 +2461,7 @@ tfind_outside_command (const char *args, int from_tty)
 
   if (args == 0 || *args == 0)
     { /* XXX FIXME: what should default behavior be?  */
-      printf_filtered ("Usage: tfind outside <startaddr>,<endaddr>\n");
+      printf_filtered ("Usage: tfind outside STARTADDR, ENDADDR\n");
       return;
     }
 
@@ -2636,8 +2636,11 @@ info_scope_command (const char *args_in, int from_tty)
 		}
 	    }
 	  if (SYMBOL_TYPE (sym))
-	    printf_filtered (", length %d.\n",
-			     TYPE_LENGTH (check_typedef (SYMBOL_TYPE (sym))));
+	    {
+	      struct type *t = check_typedef (SYMBOL_TYPE (sym));
+
+	      printf_filtered (", length %s.\n", pulongest (TYPE_LENGTH (t)));
+	    }
 	}
       if (BLOCK_FUNCTION (block))
 	break;
@@ -3083,7 +3086,8 @@ find_matching_tracepoint_location (struct uploaded_tp *utp)
       if (b->type == utp->type
 	  && t->step_count == utp->step
 	  && t->pass_count == utp->pass
-	  && cond_string_is_same (t->cond_string, utp->cond_string)
+	  && cond_string_is_same (t->cond_string,
+				  utp->cond_string.get ())
 	  /* FIXME also test actions.  */
 	  )
 	{
@@ -3224,7 +3228,6 @@ void
 merge_uploaded_trace_state_variables (struct uploaded_tsv **uploaded_tsvs)
 {
   struct uploaded_tsv *utsv;
-  struct trace_state_variable *tsv;
   int highest;
 
   /* Most likely some numbers will have to be reassigned as part of
@@ -3234,7 +3237,7 @@ merge_uploaded_trace_state_variables (struct uploaded_tsv **uploaded_tsvs)
 
   for (utsv = *uploaded_tsvs; utsv; utsv = utsv->next)
     {
-      tsv = find_matching_tsv (utsv);
+      struct trace_state_variable *tsv = find_matching_tsv (utsv);
       if (tsv)
 	{
 	  if (info_verbose)
@@ -3463,7 +3466,7 @@ parse_tracepoint_definition (const char *line, struct uploaded_tp **utpp)
   int enabled, end;
   enum bptype type;
   const char *srctype;
-  char *cond, *buf;
+  char *buf;
   struct uploaded_tp *utp = NULL;
 
   p = line;
@@ -3476,13 +3479,14 @@ parse_tracepoint_definition (const char *line, struct uploaded_tp **utpp)
   p++;  /* skip a colon */
   if (piece == 'T')
     {
+      gdb::unique_xmalloc_ptr<char[]> cond;
+
       enabled = (*p++ == 'E');
       p++;  /* skip a colon */
       p = unpack_varlen_hex (p, &step);
       p++;  /* skip a colon */
       p = unpack_varlen_hex (p, &pass);
       type = bp_tracepoint;
-      cond = NULL;
       /* Thumb through optional fields.  */
       while (*p == ':')
 	{
@@ -3503,8 +3507,8 @@ parse_tracepoint_definition (const char *line, struct uploaded_tp **utpp)
 	      p++;
 	      p = unpack_varlen_hex (p, &xlen);
 	      p++;  /* skip a comma */
-	      cond = (char *) xmalloc (2 * xlen + 1);
-	      strncpy (cond, p, 2 * xlen);
+	      cond.reset ((char *) xmalloc (2 * xlen + 1));
+	      strncpy (&cond[0], p, 2 * xlen);
 	      cond[2 * xlen] = '\0';
 	      p += 2 * xlen;
 	    }
@@ -3517,17 +3521,17 @@ parse_tracepoint_definition (const char *line, struct uploaded_tp **utpp)
       utp->enabled = enabled;
       utp->step = step;
       utp->pass = pass;
-      utp->cond = cond;
+      utp->cond = std::move (cond);
     }
   else if (piece == 'A')
     {
       utp = get_uploaded_tp (num, addr, utpp);
-      utp->actions.push_back (xstrdup (p));
+      utp->actions.emplace_back (xstrdup (p));
     }
   else if (piece == 'S')
     {
       utp = get_uploaded_tp (num, addr, utpp);
-      utp->step_actions.push_back (xstrdup (p));
+      utp->step_actions.emplace_back (xstrdup (p));
     }
   else if (piece == 'Z')
     {
@@ -3547,11 +3551,11 @@ parse_tracepoint_definition (const char *line, struct uploaded_tp **utpp)
       buf[end] = '\0';
 
       if (startswith (srctype, "at:"))
-	utp->at_string = xstrdup (buf);
+	utp->at_string.reset (xstrdup (buf));
       else if (startswith (srctype, "cond:"))
-	utp->cond_string = xstrdup (buf);
+	utp->cond_string.reset (xstrdup (buf));
       else if (startswith (srctype, "cmd:"))
-	utp->cmd_strings.push_back (xstrdup (buf));
+	utp->cmd_strings.emplace_back (xstrdup (buf));
     }
   else if (piece == 'V')
     {
@@ -3685,8 +3689,8 @@ print_one_static_tracepoint_marker (int count,
   if (sym)
     {
       uiout->text ("in ");
-      uiout->field_string ("func",
-			   SYMBOL_PRINT_NAME (sym));
+      uiout->field_string ("func", SYMBOL_PRINT_NAME (sym),
+			   ui_out_style_kind::FUNCTION);
       uiout->wrap_hint (wrap_indent);
       uiout->text (" at ");
     }
@@ -3696,7 +3700,8 @@ print_one_static_tracepoint_marker (int count,
   if (sal.symtab != NULL)
     {
       uiout->field_string ("file",
-			   symtab_to_filename_for_display (sal.symtab));
+			   symtab_to_filename_for_display (sal.symtab),
+			   ui_out_style_kind::FILE);
       uiout->text (":");
 
       if (uiout->is_mi_like_p ())
@@ -3727,7 +3732,7 @@ print_one_static_tracepoint_marker (int count,
       int ix;
 
       {
-	ui_out_emit_tuple tuple_emitter (uiout, "tracepoints-at");
+	ui_out_emit_tuple inner_tuple_emitter (uiout, "tracepoints-at");
 
 	uiout->text (extra_field_indent);
 	uiout->text (_("Probed by static tracepoints: "));
@@ -3977,6 +3982,9 @@ static const struct internalvar_funcs sdata_funcs =
   NULL
 };
 
+/* See tracepoint.h.  */
+cmd_list_element *while_stepping_cmd_element = nullptr;
+
 /* module initialization */
 void
 _initialize_tracepoint (void)
@@ -4016,13 +4024,11 @@ If no arguments are supplied, delete all variables."), &deletelist);
   /* FIXME add a trace variable completer.  */
 
   add_info ("tvariables", info_tvariables_command, _("\
-Status of trace state variables and their values.\n\
-"));
+Status of trace state variables and their values."));
 
   add_info ("static-tracepoint-markers",
 	    info_static_tracepoint_markers_command, _("\
-List target static tracepoints markers.\n\
-"));
+List target static tracepoints markers."));
 
   add_prefix_cmd ("tfind", class_trace, tfind_command, _("\
 Select a trace frame;\n\
@@ -4031,12 +4037,12 @@ No argument means forward by one frame; '-' means backward by one frame."),
 
   add_cmd ("outside", class_trace, tfind_outside_command, _("\
 Select a trace frame whose PC is outside the given range (exclusive).\n\
-Usage: tfind outside addr1, addr2"),
+Usage: tfind outside ADDR1, ADDR2"),
 	   &tfindlist);
 
   add_cmd ("range", class_trace, tfind_range_command, _("\
 Select a trace frame whose PC is in the given range (inclusive).\n\
-Usage: tfind range addr1,addr2"),
+Usage: tfind range ADDR1, ADDR2"),
 	   &tfindlist);
 
   add_cmd ("line", class_trace, tfind_line_command, _("\
@@ -4088,7 +4094,8 @@ Entering \"end\" on a line by itself is the normal way to terminate\n\
 such a list.\n\n\
 Note: the \"end\" command cannot be used at the gdb prompt."));
 
-  add_com ("while-stepping", class_trace, while_stepping_pseudocommand, _("\
+  while_stepping_cmd_element = add_com ("while-stepping", class_trace,
+					while_stepping_pseudocommand, _("\
 Specify single-stepping behavior at a tracepoint.\n\
 Argument is number of instructions to trace in single-step mode\n\
 following the tracepoint.  This command is normally followed by\n\

@@ -1,6 +1,6 @@
 /* Generic remote debugging interface for simulators.
 
-   Copyright (C) 1993-2018 Free Software Foundation, Inc.
+   Copyright (C) 1993-2019 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.
    Steve Chamberlain (sac@cygnus.com).
@@ -31,6 +31,7 @@
 #include <setjmp.h>
 #include "terminal.h"
 #include "target.h"
+#include "process-stratum-target.h"
 #include "gdbcore.h"
 #include "gdb/callback.h"
 #include "gdb/remote-sim.h"
@@ -82,10 +83,9 @@ static const target_info gdbsim_target_info = {
 };
 
 struct gdbsim_target final
-  : public memory_breakpoint_target<target_ops>
+  : public memory_breakpoint_target<process_stratum_target>
 {
-  gdbsim_target ()
-  { to_stratum = process_stratum; }
+  gdbsim_target () = default;
 
   const target_info &info () const override
   { return gdbsim_target_info; }
@@ -124,19 +124,10 @@ struct gdbsim_target final
 
   bool thread_alive (ptid_t ptid) override;
 
-  const char *pid_to_str (ptid_t) override;
+  std::string pid_to_str (ptid_t) override;
 
   bool has_all_memory ()  override;
   bool has_memory ()  override;
-
-  bool has_stack ()  override
-  { return default_child_has_stack (); }
-
-  bool has_registers ()  override
-  { return default_child_has_registers (); }
-
-  bool has_execution (ptid_t ptid) override
-  { return default_child_has_execution (ptid); }
 };
 
 static struct gdbsim_target gdbsim_ops;
@@ -674,9 +665,6 @@ gdbsim_target::create_inferior (const char *exec_file,
       built_argv.reset (arg_buf);
     }
 
-  if (!have_inferiors ())
-    init_thread_list ();
-
   if (sim_create_inferior (sim_data->gdbsim_desc, exec_bfd,
 			   built_argv.get (), env)
       != SIM_RC_OK)
@@ -763,18 +751,17 @@ gdbsim_target_open (const char *args, int from_tty)
     }
 
   gdb_argv argv (arg_buf);
-  sim_argv = argv.get ();
+  sim_argv = argv.release ();
 
   init_callbacks ();
   gdbsim_desc = sim_open (SIM_OPEN_DEBUG, &gdb_callback, exec_bfd, sim_argv);
 
   if (gdbsim_desc == 0)
     {
+      freeargv (sim_argv);
       sim_argv = NULL;
       error (_("unable to create simulator instance"));
     }
-
-  argv.release ();
 
   /* Reset the pid numberings for this batch of sim instances.  */
   next_pid = INITIAL_PID;
@@ -1293,10 +1280,9 @@ gdbsim_target::thread_alive (ptid_t ptid)
   return false;
 }
 
-/* Convert a thread ID to a string.  Returns the string in a static
-   buffer.  */
+/* Convert a thread ID to a string.  */
 
-const char *
+std::string
 gdbsim_target::pid_to_str (ptid_t ptid)
 {
   return normal_pid_to_str (ptid);

@@ -1,5 +1,5 @@
 /* This module handles expression trees.
-   Copyright (C) 1991-2018 Free Software Foundation, Inc.
+   Copyright (C) 1991-2019 Free Software Foundation, Inc.
    Written by Steve Chamberlain of Cygnus Support <sac@cygnus.com>.
 
    This file is part of the GNU Binutils.
@@ -534,6 +534,7 @@ fold_binary (etree_type *tree)
      operand, binary.rhs is first operand.  */
   if (expld.result.valid_p && tree->type.node_code == SEGMENT_START)
     {
+      bfd_vma value = expld.result.value;
       const char *segment_name;
       segment_type *seg;
 
@@ -545,14 +546,16 @@ fold_binary (etree_type *tree)
 	  {
 	    if (!seg->used
 		&& config.magic_demand_paged
+		&& config.maxpagesize != 0
 		&& (seg->value % config.maxpagesize) != 0)
 	      einfo (_("%P: warning: address of `%s' "
 		       "isn't multiple of maximum page size\n"),
 		     segment_name);
 	    seg->used = TRUE;
-	    new_rel_from_abs (seg->value);
+	    value = seg->value;
 	    break;
 	  }
+      new_rel_from_abs (value);
       return;
     }
 
@@ -689,6 +692,7 @@ fold_name (etree_type *tree)
   switch (tree->type.node_code)
     {
     case SIZEOF_HEADERS:
+      link_info.load_phdrs = 1;
       if (expld.phase != lang_first_phase_enum)
 	{
 	  bfd_vma hdr_size = 0;
@@ -716,23 +720,6 @@ fold_name (etree_type *tree)
       break;
 
     case NAME:
-      if (expld.assign_name != NULL
-	  && strcmp (expld.assign_name, tree->name.name) == 0)
-	{
-	  /* Self-assignment is only allowed for absolute symbols
-	     defined in a linker script.  */
-	  h = bfd_wrapped_link_hash_lookup (link_info.output_bfd,
-					    &link_info,
-					    tree->name.name,
-					    FALSE, FALSE, TRUE);
-	  if (!(h != NULL
-		&& (h->type == bfd_link_hash_defined
-		    || h->type == bfd_link_hash_defweak)
-		&& h->u.def.section == bfd_abs_section_ptr
-		&& (def = symbol_defined (tree->name.name)) != NULL
-		&& def->iteration == (lang_statement_iteration & 255)))
-	    expld.assign_name = NULL;
-	}
       if (tree->name.name[0] == '.' && tree->name.name[1] == 0)
 	new_rel_from_abs (expld.dot);
       else
@@ -783,6 +770,18 @@ fold_name (etree_type *tree)
 	    expld.assign_src = h;
 	  else
 	    expld.assign_src = (struct bfd_link_hash_entry *) - 1;
+
+	  /* Self-assignment is only allowed for absolute symbols
+	     defined in a linker script.  */
+	  if (expld.assign_name != NULL
+	      && strcmp (expld.assign_name, tree->name.name) == 0
+	      && !(h != NULL
+		   && (h->type == bfd_link_hash_defined
+		       || h->type == bfd_link_hash_defweak)
+		   && h->u.def.section == bfd_abs_section_ptr
+		   && (def = symbol_defined (tree->name.name)) != NULL
+		   && def->iteration == (lang_statement_iteration & 255)))
+	    expld.assign_name = NULL;
 	}
       break;
 
@@ -865,34 +864,30 @@ fold_name (etree_type *tree)
 
     case LENGTH:
       {
-      if (expld.phase != lang_first_phase_enum)
-	{
-	  lang_memory_region_type *mem;
+	lang_memory_region_type *mem;
 
-	  mem = lang_memory_region_lookup (tree->name.name, FALSE);
-	  if (mem != NULL)
-	    new_number (mem->length);
-	  else
-	    einfo (_("%F%P:%pS: undefined MEMORY region `%s'"
-		     " referenced in expression\n"),
-		   tree, tree->name.name);
-	}
+	mem = lang_memory_region_lookup (tree->name.name, FALSE);
+	if (mem != NULL)
+	  new_number (mem->length);
+	else
+	  einfo (_("%F%P:%pS: undefined MEMORY region `%s'"
+		   " referenced in expression\n"),
+		 tree, tree->name.name);
       }
       break;
 
     case ORIGIN:
-      if (expld.phase != lang_first_phase_enum)
-	{
-	  lang_memory_region_type *mem;
+      {
+	lang_memory_region_type *mem;
 
-	  mem = lang_memory_region_lookup (tree->name.name, FALSE);
-	  if (mem != NULL)
-	    new_rel_from_abs (mem->origin);
-	  else
-	    einfo (_("%F%P:%pS: undefined MEMORY region `%s'"
-		     " referenced in expression\n"),
-		   tree, tree->name.name);
-	}
+	mem = lang_memory_region_lookup (tree->name.name, FALSE);
+	if (mem != NULL)
+	  new_rel_from_abs (mem->origin);
+	else
+	  einfo (_("%F%P:%pS: undefined MEMORY region `%s'"
+		   " referenced in expression\n"),
+		 tree, tree->name.name);
+      }
       break;
 
     case CONSTANT:
@@ -1154,7 +1149,8 @@ exp_fold_tree_1 (etree_type *tree)
 	     converted to absolute values, as is required by many
 	     expressions, until final section sizing is complete.  */
 	  if (expld.phase == lang_final_phase_enum
-              || expld.assign_name != NULL)
+	      || expld.phase == lang_fixed_phase_enum
+	      || expld.assign_name != NULL)
 	    {
 	      if (tree->type.node_class == etree_provide)
 		tree->type.node_class = etree_provided;
@@ -1195,28 +1191,40 @@ exp_fold_tree_1 (etree_type *tree)
 			(&link_info, h, link_info.output_bfd,
 			 expld.result.section, expld.result.value);
 		    }
-		  h->type = bfd_link_hash_defined;
-		  h->u.def.value = expld.result.value;
-		  h->u.def.section = expld.result.section;
-		  h->linker_def = ! tree->assign.type.lineno;
-		  h->ldscript_def = 1;
-		  h->rel_from_abs = expld.rel_from_abs;
-		  if (tree->assign.hidden)
-		    bfd_link_hide_symbol (link_info.output_bfd,
-					  &link_info, h);
+		  if (expld.phase == lang_fixed_phase_enum)
+		    {
+		      if (h->type == bfd_link_hash_defined)
+			{
+			  expld.result.value = h->u.def.value;
+			  expld.result.section = h->u.def.section;
+			}
+		    }
+		  else
+		    {
+		      h->type = bfd_link_hash_defined;
+		      h->u.def.value = expld.result.value;
+		      h->u.def.section = expld.result.section;
+		      h->linker_def = ! tree->assign.type.lineno;
+		      h->ldscript_def = 1;
+		      h->rel_from_abs = expld.rel_from_abs;
+		      if (tree->assign.hidden)
+			bfd_link_hide_symbol (link_info.output_bfd,
+					      &link_info, h);
 
-		  /* Copy the symbol type if this is an expression only
-		     referencing a single symbol.  (If the expression
-		     contains ternary conditions, ignoring symbols on
-		     false branches.)  */
-		  if (expld.assign_src != NULL
-		      && (expld.assign_src
-			  != (struct bfd_link_hash_entry *) -1))
-		    bfd_copy_link_hash_symbol_type (link_info.output_bfd, h,
-						    expld.assign_src);
+		      /* Copy the symbol type if this is an expression only
+			 referencing a single symbol.  (If the expression
+			 contains ternary conditions, ignoring symbols on
+			 false branches.)  */
+		      if (expld.assign_src != NULL
+			  && (expld.assign_src
+			      != (struct bfd_link_hash_entry *) -1))
+			bfd_copy_link_hash_symbol_type (link_info.output_bfd,
+							h, expld.assign_src);
+		    }
 		}
 	    }
-	  expld.assign_name = NULL;
+	  if (expld.phase != lang_fixed_phase_enum)
+	    expld.assign_name = NULL;
 	}
       break;
 
@@ -1523,10 +1531,26 @@ exp_get_vma (etree_type *tree, bfd_vma def, char *name)
   return def;
 }
 
+/* Return the smallest non-negative integer such that two raised to
+   that power is at least as large as the vma evaluated at TREE, if
+   TREE is a non-NULL expression that can be resolved.  If TREE is
+   NULL or cannot be resolved, return -1.  */
+
 int
-exp_get_value_int (etree_type *tree, int def, char *name)
+exp_get_power (etree_type *tree, char *name)
 {
-  return exp_get_vma (tree, def, name);
+  bfd_vma x = exp_get_vma (tree, -1, name);
+  bfd_vma p2;
+  int n;
+
+  if (x == (bfd_vma) -1)
+    return -1;
+
+  for (n = 0, p2 = 1; p2 < x; ++n, p2 <<= 1)
+    if (p2 == 0)
+      break;
+
+  return n;
 }
 
 fill_type *

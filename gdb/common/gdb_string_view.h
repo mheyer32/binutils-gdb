@@ -1,9 +1,13 @@
 // Components for manipulating non-owning sequences of characters -*- C++ -*-
 
+
+#ifndef COMMON_GDB_STRING_VIEW_H
+#define COMMON_GDB_STRING_VIEW_H
+
 // Note: This file has been stolen from the gcc repo
 // (libstdc++-v3/include/experimental/string_view) and has local modifications.
 
-// Copyright (C) 2013-2018 Free Software Foundation, Inc.
+// Copyright (C) 2013-2019 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -29,8 +33,6 @@
 // N3762 basic_string_view library
 //
 
-#ifndef GDB_STRING_VIEW_H
-#define GDB_STRING_VIEW_H 1
 
 #if __cplusplus >= 201703L
 
@@ -557,4 +559,4 @@ namespace gdb {
 
 #endif // __cplusplus < 201703L
 
-#endif /* GDB_STRING_VIEW_H */
+#endif /* COMMON_GDB_STRING_VIEW_H */

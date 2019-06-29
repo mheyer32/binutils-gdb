@@ -1,5 +1,5 @@
 /* Generic target-file-type support for the BFD library.
-   Copyright (C) 1990-2018 Free Software Foundation, Inc.
+   Copyright (C) 1990-2019 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -642,6 +642,8 @@ extern const bfd_target elf32_be_vec;
 extern const bfd_target elf32_le_vec;
 extern const bfd_target elf64_be_vec;
 extern const bfd_target elf64_le_vec;
+extern const bfd_target bpf_elf64_le_vec;
+extern const bfd_target bpf_elf64_be_vec;
 extern const bfd_target epiphany_elf32_vec;
 extern const bfd_target fr30_elf32_vec;
 extern const bfd_target frv_elf32_vec;
@@ -780,6 +782,7 @@ extern const bfd_target rs6000_xcoff_vec;
 extern const bfd_target rx_elf32_be_vec;
 extern const bfd_target rx_elf32_be_ns_vec;
 extern const bfd_target rx_elf32_le_vec;
+extern const bfd_target rx_elf32_linux_le_vec;
 extern const bfd_target s390_elf32_vec;
 extern const bfd_target s390_elf64_vec;
 extern const bfd_target score_elf32_be_vec;
@@ -1028,6 +1031,11 @@ static const bfd_target * const _bfd_target_vector[] =
 	&iamcu_elf32_vec,
 
 #ifdef BFD64
+	&bpf_elf64_be_vec,
+	&bpf_elf64_le_vec,
+#endif
+
+#ifdef BFD64
 #if 0
 	&ia64_elf32_be_vec,
 #endif
@@ -1148,10 +1156,6 @@ static const bfd_target * const _bfd_target_vector[] =
 
 	&pj_elf32_vec,
 	&pj_elf32_le_vec,
-
-#if BFD_SUPPORTS_PLUGINS
-	&plugin_vec,
-#endif
 
 	&powerpc_boot_vec,
 	&powerpc_elf32_vec,
@@ -1291,6 +1295,7 @@ static const bfd_target * const _bfd_target_vector[] =
 	&z80_coff_vec,
 
 	&z8k_coff_vec,
+#endif /* not SELECT_VECS */
 
 /* Always support S-records, for convenience.  */
 	&srec_vec,
@@ -1304,7 +1309,9 @@ static const bfd_target * const _bfd_target_vector[] =
 /* Likewise for ihex.  */
 	&ihex_vec,
 
-#endif /* not SELECT_VECS */
+#if BFD_SUPPORTS_PLUGINS
+	&plugin_vec,
+#endif
 
 /* Add any required traditional-core-file-handler.  */
 

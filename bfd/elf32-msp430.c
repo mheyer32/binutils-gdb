@@ -1,5 +1,5 @@
 /*  MSP430-specific support for 32-bit ELF
-    Copyright (C) 2002-2018 Free Software Foundation, Inc.
+    Copyright (C) 2002-2019 Free Software Foundation, Inc.
     Contributed by Dmitry Diky <diwil@mail.ru>
 
     This file is part of BFD, the Binary File Descriptor library.
@@ -2422,6 +2422,12 @@ elf32_msp430_merge_mspabi_attributes (bfd *ibfd, struct bfd_link_info *info)
 
   /* Skip linker created files.  */
   if (ibfd->flags & BFD_LINKER_CREATED)
+    return TRUE;
+
+  /* LTO can create temporary files for linking which may not have an attribute
+     section.  */
+  if (ibfd->lto_output
+      && bfd_get_section_by_name (ibfd, ".MSP430.attributes") == NULL)
     return TRUE;
 
   /* If this is the first real object just copy the attributes.  */

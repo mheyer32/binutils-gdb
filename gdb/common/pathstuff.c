@@ -1,6 +1,6 @@
 /* Path manipulation routines for GDB and gdbserver.
 
-   Copyright (C) 1986-2018 Free Software Foundation, Inc.
+   Copyright (C) 1986-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -65,7 +65,7 @@ gdb_realpath (const char *filename)
        we might not be able to display the original casing in a given
        path.  */
     if (len > 0 && len < MAX_PATH)
-      return gdb::unique_xmalloc_ptr<char> (xstrdup (buf));
+      return make_unique_xstrdup (buf);
   }
 #else
   {
@@ -77,7 +77,7 @@ gdb_realpath (const char *filename)
 #endif
 
   /* This system is a lost cause, just dup the buffer.  */
-  return gdb::unique_xmalloc_ptr<char> (xstrdup (filename));
+  return make_unique_xstrdup (filename);
 }
 
 /* See common/pathstuff.h.  */
@@ -92,7 +92,7 @@ gdb_realpath_keepfile (const char *filename)
   /* Extract the basename of filename, and return immediately
      a copy of filename if it does not contain any directory prefix.  */
   if (base_name == filename)
-    return gdb::unique_xmalloc_ptr<char> (xstrdup (filename));
+    return make_unique_xstrdup (filename);
 
   dir_name = (char *) alloca ((size_t) (base_name - filename + 2));
   /* Allocate enough space to store the dir_name + plus one extra
@@ -135,7 +135,7 @@ gdb_abspath (const char *path)
     return gdb_tilde_expand_up (path);
 
   if (IS_ABSOLUTE_PATH (path))
-    return gdb::unique_xmalloc_ptr<char> (xstrdup (path));
+    return make_unique_xstrdup (path);
 
   /* Beware the // my son, the Emacs barfs, the botch that catch...  */
   return gdb::unique_xmalloc_ptr<char>
@@ -143,6 +143,56 @@ gdb_abspath (const char *path)
 	     IS_DIR_SEPARATOR (current_directory[strlen (current_directory) - 1])
 	     ? "" : SLASH_STRING,
 	     path, (char *) NULL));
+}
+
+/* See common/pathstuff.h.  */
+
+const char *
+child_path (const char *parent, const char *child)
+{
+  /* The child path must start with the parent path.  */
+  size_t parent_len = strlen (parent);
+  if (filename_ncmp (parent, child, parent_len) != 0)
+    return NULL;
+
+  /* The parent path must be a directory and the child must contain at
+     least one component underneath the parent.  */
+  const char *child_component;
+  if (parent_len > 0 && IS_DIR_SEPARATOR (parent[parent_len - 1]))
+    {
+      /* The parent path ends in a directory separator, so it is a
+	 directory.  The first child component starts after the common
+	 prefix.  */
+      child_component = child + parent_len;
+    }
+  else
+    {
+      /* The parent path does not end in a directory separator.  The
+	 first character in the child after the common prefix must be
+	 a directory separator.
+
+	 Note that CHILD must hold at least parent_len characters for
+	 filename_ncmp to return zero.  If the character at parent_len
+	 is nul due to CHILD containing the same path as PARENT, the
+	 IS_DIR_SEPARATOR check will fail here.  */
+      if (!IS_DIR_SEPARATOR (child[parent_len]))
+	return NULL;
+
+      /* The first child component starts after the separator after the
+	 common prefix.  */
+      child_component = child + parent_len + 1;
+    }
+
+  /* The child must contain at least one non-separator character after
+     the parent.  */
+  while (*child_component != '\0')
+    {
+      if (!IS_DIR_SEPARATOR (*child_component))
+	return child_component;
+
+      child_component++;
+    }
+  return NULL;
 }
 
 /* See common/pathstuff.h.  */
@@ -164,21 +214,77 @@ contains_dir_separator (const char *path)
 std::string
 get_standard_cache_dir ()
 {
-  char *xdg_cache_home = getenv ("XDG_CACHE_HOME");
+#ifdef __APPLE__
+#define HOME_CACHE_DIR "Library/Caches"
+#else
+#define HOME_CACHE_DIR ".cache"
+#endif
+
+#ifndef __APPLE__
+  const char *xdg_cache_home = getenv ("XDG_CACHE_HOME");
   if (xdg_cache_home != NULL)
     {
       /* Make sure the path is absolute and tilde-expanded.  */
       gdb::unique_xmalloc_ptr<char> abs (gdb_abspath (xdg_cache_home));
       return string_printf ("%s/gdb", abs.get ());
     }
+#endif
 
-  char *home = getenv ("HOME");
+  const char *home = getenv ("HOME");
   if (home != NULL)
     {
       /* Make sure the path is absolute and tilde-expanded.  */
       gdb::unique_xmalloc_ptr<char> abs (gdb_abspath (home));
-      return string_printf ("%s/.cache/gdb", abs.get ());
+      return string_printf ("%s/" HOME_CACHE_DIR "/gdb", abs.get ());
     }
 
   return {};
+}
+
+/* See common/pathstuff.h.  */
+
+std::string
+get_standard_temp_dir ()
+{
+#ifdef WIN32
+  const char *tmp = getenv ("TMP");
+  if (tmp != nullptr)
+    return tmp;
+
+  tmp = getenv ("TEMP");
+  if (tmp != nullptr)
+    return tmp;
+
+  error (_("Couldn't find temp dir path, both TMP and TEMP are unset."));
+
+#else
+  const char *tmp = getenv ("TMPDIR");
+  if (tmp != nullptr)
+    return tmp;
+
+  return "/tmp";
+#endif
+}
+
+/* See common/pathstuff.h.  */
+
+const char *
+get_shell ()
+{
+  const char *ret = getenv ("SHELL");
+  if (ret == NULL)
+    ret = "/bin/sh";
+
+  return ret;
+}
+
+/* See common/pathstuff.h.  */
+
+gdb::char_vector
+make_temp_filename (const std::string &f)
+{
+  gdb::char_vector filename_temp (f.length () + 8);
+  strcpy (filename_temp.data (), f.c_str ());
+  strcat (filename_temp.data () + f.size (), "-XXXXXX");
+  return filename_temp;
 }

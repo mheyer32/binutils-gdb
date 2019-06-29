@@ -15,7 +15,7 @@
 @SET_MAKE@
 
 #
-#   Copyright (C) 2012-2018 Free Software Foundation, Inc.
+#   Copyright (C) 2012-2019 Free Software Foundation, Inc.
 #
 # This file is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -509,7 +509,6 @@ HFILES = \
 	output-file.h \
 	read.h \
 	sb.h \
-	struc-symbol.h \
 	subsegs.h \
 	symbols.h \
 	tc.h \
@@ -524,6 +523,7 @@ TARGET_CPU_CFILES = \
 	config/tc-arm.c \
 	config/tc-avr.c \
 	config/tc-bfin.c \
+	config/tc-bpf.c \
 	config/tc-cr16.c \
 	config/tc-cris.c \
 	config/tc-crx.c \
@@ -599,6 +599,7 @@ TARGET_CPU_HFILES = \
 	config/tc-arm.h \
 	config/tc-avr.h \
 	config/tc-bfin.h \
+	config/tc-bpf.h \
 	config/tc-cr16.h \
 	config/tc-cris.h \
 	config/tc-crx.h \
@@ -899,6 +900,8 @@ config/tc-avr.$(OBJEXT): config/$(am__dirstamp) \
 	config/$(DEPDIR)/$(am__dirstamp)
 config/tc-bfin.$(OBJEXT): config/$(am__dirstamp) \
 	config/$(DEPDIR)/$(am__dirstamp)
+config/tc-bpf.$(OBJEXT): config/$(am__dirstamp) \
+	config/$(DEPDIR)/$(am__dirstamp)
 config/tc-cr16.$(OBJEXT): config/$(am__dirstamp) \
 	config/$(DEPDIR)/$(am__dirstamp)
 config/tc-cris.$(OBJEXT): config/$(am__dirstamp) \
@@ -1155,6 +1158,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@config/$(DEPDIR)/tc-arm.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@config/$(DEPDIR)/tc-avr.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@config/$(DEPDIR)/tc-bfin.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@config/$(DEPDIR)/tc-bpf.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@config/$(DEPDIR)/tc-cr16.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@config/$(DEPDIR)/tc-cris.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@config/$(DEPDIR)/tc-crx.Po@am__quote@
@@ -1605,7 +1609,7 @@ m68k-parse.@OBJEXT@: m68k-parse.c
 # Don't let the .y.h rule clobber m68k-parse.h.
 m68k-parse.h: ; @true
 $(srcdir)/config/m68k-parse.h: ; @true
-bfin-parse.c: $(srcdir)/config/bfin-parse.y
+bfin-parse.c: $(srcdir)/config/bfin-parse.y $(srcdir)/../bfd/reloc.c
 	$(SHELL) $(YLWRAP) $(srcdir)/config/bfin-parse.y y.tab.c bfin-parse.c y.tab.h bfin-parse.h -- $(YACCCOMPILE) -d ;
 bfin-parse.h: bfin-parse.c
 bfin-parse.h: ; @true
@@ -1619,12 +1623,12 @@ bfin-lex-wrapper.@OBJEXT@: $(srcdir)/config/bfin-lex-wrapper.c bfin-lex.c bfin-p
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='bfin-lex-wrapper.c' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(COMPILE) -c $(srcdir)/config/bfin-lex-wrapper.c $(NO_WERROR)
-rl78-parse.c: $(srcdir)/config/rl78-parse.y
+rl78-parse.c: $(srcdir)/config/rl78-parse.y $(srcdir)/../bfd/reloc.c
 	$(SHELL) $(YLWRAP) $(srcdir)/config/rl78-parse.y y.tab.c rl78-parse.c y.tab.h rl78-parse.h -- $(YACCCOMPILE) -d ;
 rl78-parse.h: rl78-parse.c
 rl78-defs.h: ; @true
 $(srcdir)/config/rl78-defs.h: ; @true
-rx-parse.c: $(srcdir)/config/rx-parse.y
+rx-parse.c: $(srcdir)/config/rx-parse.y $(srcdir)/../bfd/reloc.c
 	$(SHELL) $(YLWRAP) $(srcdir)/config/rx-parse.y y.tab.c rx-parse.c y.tab.h rx-parse.h -- $(YACCCOMPILE) -d ;
 rx-parse.h: rx-parse.c
 rx-defs.h: ; @true

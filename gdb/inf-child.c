@@ -1,6 +1,6 @@
 /* Base/prototype target for default child (native) targets.
 
-   Copyright (C) 1988-2018 Free Software Foundation, Inc.
+   Copyright (C) 1988-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -30,10 +30,10 @@
 #include "inferior.h"
 #include <sys/stat.h>
 #include "inf-child.h"
-#include "fileio.h"
-#include "agent.h"
-#include "gdb_wait.h"
-#include "filestuff.h"
+#include "common/fileio.h"
+#include "common/agent.h"
+#include "common/gdb_wait.h"
+#include "common/filestuff.h"
 
 #include <sys/types.h>
 #include <fcntl.h>
@@ -243,36 +243,6 @@ inf_child_target::pid_to_exec_file (int pid)
   return NULL;
 }
 
-bool
-inf_child_target::has_all_memory ()
-{
-  return default_child_has_all_memory ();
-}
-
-bool
-inf_child_target::has_memory ()
-{
-  return default_child_has_memory ();
-}
-
-bool
-inf_child_target::has_stack ()
-{
-  return default_child_has_stack ();
-}
-
-bool
-inf_child_target::has_registers ()
-{
-  return default_child_has_registers ();
-}
-
-bool
-inf_child_target::has_execution (ptid_t ptid)
-{
-  return default_child_has_execution (ptid);
-}
-
 /* Implementation of to_fileio_open.  */
 
 int
@@ -437,11 +407,6 @@ bool
 inf_child_target::can_use_agent ()
 {
   return agent_loaded_p ();
-}
-
-inf_child_target::inf_child_target ()
-{
-  this->to_stratum = process_stratum;
 }
 
 /* See inf-child.h.  */

@@ -1,6 +1,6 @@
 /* Reference-counted smart pointer class
 
-   Copyright (C) 2016-2018 Free Software Foundation, Inc.
+   Copyright (C) 2016-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,8 +17,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef GDB_REF_PTR_H
-#define GDB_REF_PTR_H
+#ifndef COMMON_GDB_REF_PTR_H
+#define COMMON_GDB_REF_PTR_H
 
 #include <cstddef>
 
@@ -135,7 +135,7 @@ class ref_ptr
   /* Return this instance's referent, and stop managing this
      reference.  The caller is now responsible for the ownership of
      the reference.  */
-  T *release ()
+  ATTRIBUTE_UNUSED_RESULT T *release ()
   {
     T *result = m_obj;
 
@@ -225,4 +225,4 @@ inline bool operator!= (const std::nullptr_t, const ref_ptr<T, Policy> &rhs)
 
 }
 
-#endif /* GDB_REF_PTR_H */
+#endif /* COMMON_GDB_REF_PTR_H */

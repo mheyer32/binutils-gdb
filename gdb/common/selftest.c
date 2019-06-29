@@ -1,5 +1,5 @@
 /* GDB self-testing.
-   Copyright (C) 2016-2018 Free Software Foundation, Inc.
+   Copyright (C) 2016-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -81,18 +81,17 @@ run_tests (const char *filter)
 	  && name.find (filter) == std::string::npos)
 	continue;
 
-      TRY
+      try
 	{
 	  debug_printf (_("Running selftest %s.\n"), name.c_str ());
 	  ++ran;
 	  (*test) ();
 	}
-      CATCH (ex, RETURN_MASK_ERROR)
+      catch (const gdb_exception_error &ex)
 	{
 	  ++failed;
-	  debug_printf ("Self test failed: %s\n", ex.message);
+	  debug_printf ("Self test failed: %s\n", ex.what ());
 	}
-      END_CATCH
 
       reset ();
     }

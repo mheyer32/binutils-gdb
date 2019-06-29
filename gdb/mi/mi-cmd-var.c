@@ -1,5 +1,5 @@
 /* MI Command Set - varobj commands.
-   Copyright (C) 2000-2018 Free Software Foundation, Inc.
+   Copyright (C) 2000-2019 Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions (a Red Hat company).
 
@@ -752,7 +752,7 @@ varobj_update_one (struct varobj *var, enum print_values print_values,
 
 	  for (varobj *child : r.newobj)
 	    {
-	      ui_out_emit_tuple tuple_emitter (uiout, NULL);
+	      ui_out_emit_tuple inner_tuple_emitter (uiout, NULL);
 	      print_varobj (child, print_values, 1 /* print_expression */);
 	    }
 	}

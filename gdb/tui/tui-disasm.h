@@ -1,6 +1,6 @@
 /* Disassembly display.
 
-   Copyright (C) 1998-2018 Free Software Foundation, Inc.
+   Copyright (C) 1998-2019 Free Software Foundation, Inc.
    
    Contributed by Hewlett-Packard Company.
 
@@ -19,8 +19,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef TUI_DISASM_H
-#define TUI_DISASM_H
+#ifndef TUI_TUI_DISASM_H
+#define TUI_TUI_DISASM_H
 
 #include "tui/tui.h"		/* For enum tui_status.  */
 #include "tui/tui-data.h"	/* For enum tui_scroll_direction.  */
@@ -28,8 +28,6 @@
 extern enum tui_status tui_set_disassem_content (struct gdbarch *, CORE_ADDR);
 extern void tui_show_disassem (struct gdbarch *, CORE_ADDR);
 extern void tui_show_disassem_and_update_source (struct gdbarch *, CORE_ADDR);
-extern void tui_vertical_disassem_scroll (enum tui_scroll_direction, 
-					  int);
 extern void tui_get_begin_asm_address (struct gdbarch **, CORE_ADDR *);
 
-#endif
+#endif /* TUI_TUI_DISASM_H */

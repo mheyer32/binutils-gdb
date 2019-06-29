@@ -1,5 +1,5 @@
 /* DWARF 2 support.
-   Copyright (C) 1994-2018 Free Software Foundation, Inc.
+   Copyright (C) 1994-2019 Free Software Foundation, Inc.
 
    Adapted from gdb/dwarf2read.c by Gavin Koch of Cygnus Solutions
    (gavin@cygnus.com).
@@ -169,6 +169,8 @@ struct dwarf2_debug
 
   /* Section VMAs at the time the stash was built.  */
   bfd_vma *sec_vma;
+  /* Number of sections in the SEC_VMA table.  */
+  unsigned int sec_vma_count;
 
   /* Number of sections whose VMA we must adjust.  */
   int adjusted_section_count;
@@ -527,6 +529,7 @@ read_section (bfd *	      abfd,
   asection *msec;
   const char *section_name = sec->uncompressed_name;
   bfd_byte *contents = *section_buffer;
+  bfd_size_type amt;
 
   /* The section may have already been read.  */
   if (contents == NULL)
@@ -549,7 +552,13 @@ read_section (bfd *	      abfd,
       *section_size = msec->rawsize ? msec->rawsize : msec->size;
       /* Paranoia - alloc one extra so that we can make sure a string
 	 section is NUL terminated.  */
-      contents = (bfd_byte *) bfd_malloc (*section_size + 1);
+      amt = *section_size + 1;
+      if (amt == 0)
+	{
+	  bfd_set_error (bfd_error_no_memory);
+	  return FALSE;
+	}
+      contents = (bfd_byte *) bfd_malloc (amt);
       if (contents == NULL)
 	return FALSE;
       if (syms
@@ -2837,7 +2846,9 @@ find_abstract_instance (struct comp_unit *   unit,
       info_ptr = unit->stash->info_ptr_memory;
       info_ptr_end = unit->stash->info_ptr_end;
       total = info_ptr_end - info_ptr;
-      if (!die_ref || die_ref >= total)
+      if (!die_ref)
+	return TRUE;
+      else if (die_ref >= total)
 	{
 	  _bfd_error_handler
 	    (_("DWARF error: invalid abstract instance DIE ref"));
@@ -2953,7 +2964,7 @@ find_abstract_instance (struct comp_unit *   unit,
 		  break;
 		case DW_AT_specification:
 		  if (!find_abstract_instance (unit, info_ptr, &attr,
-					       pname, is_linkage,
+					       &name, is_linkage,
 					       filename_ptr, linenumber_ptr))
 		    return FALSE;
 		  break;
@@ -4260,7 +4271,10 @@ save_section_vma (const bfd *abfd, struct dwarf2_debug *stash)
   stash->sec_vma = bfd_malloc (sizeof (*stash->sec_vma) * abfd->section_count);
   if (stash->sec_vma == NULL)
     return FALSE;
-  for (i = 0, s = abfd->sections; i < abfd->section_count; i++, s = s->next)
+  stash->sec_vma_count = abfd->section_count;
+  for (i = 0, s = abfd->sections;
+       s != NULL && i < abfd->section_count;
+       i++, s = s->next)
     {
       if (s->output_section != NULL)
 	stash->sec_vma[i] = s->output_section->vma + s->output_offset;
@@ -4283,7 +4297,15 @@ section_vma_same (const bfd *abfd, const struct dwarf2_debug *stash)
   asection *s;
   unsigned int i;
 
-  for (i = 0, s = abfd->sections; i < abfd->section_count; i++, s = s->next)
+  /* PR 24334: If the number of sections in ABFD has changed between
+     when the stash was created and now, then we cannot trust the
+     stashed vma information.  */
+  if (abfd->section_count != stash->sec_vma_count)
+    return FALSE;
+
+  for (i = 0, s = abfd->sections;
+       s != NULL && i < abfd->section_count;
+       i++, s = s->next)
     {
       bfd_vma vma;
 
@@ -4463,7 +4485,7 @@ _bfd_dwarf2_find_symbol_bias (asymbol ** symbols, void ** pinfo)
 
   stash = (struct dwarf2_debug *) *pinfo;
 
-  if (stash == NULL)
+  if (stash == NULL || symbols == NULL)
     return 0;
 
   for (unit = stash->all_comp_units; unit; unit = unit->next_unit)

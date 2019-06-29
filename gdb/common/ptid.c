@@ -1,6 +1,6 @@
 /* The ptid_t type and common functions operating on it.
 
-   Copyright (C) 1986-2018 Free Software Foundation, Inc.
+   Copyright (C) 1986-2019 Free Software Foundation, Inc.
    
    This file is part of GDB.
 
@@ -22,5 +22,5 @@
 
 /* See ptid.h for these.  */
 
-ptid_t null_ptid = ptid_t::make_null ();
-ptid_t minus_one_ptid = ptid_t::make_minus_one ();
+ptid_t const null_ptid = ptid_t::make_null ();
+ptid_t const minus_one_ptid = ptid_t::make_minus_one ();

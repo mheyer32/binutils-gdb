@@ -1,5 +1,5 @@
 /* BFD back-end for Intel 386 PE IMAGE COFF files.
-   Copyright (C) 2006-2018 Free Software Foundation, Inc.
+   Copyright (C) 2006-2019 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -126,7 +126,7 @@ pex64_get_unwind_info (bfd *abfd, struct pex64_unwind_info *ui,
   ex_dta += ui->SizeOfBlock;
   if (ex_dta >= ex_dta_end)
     return FALSE;
-  
+
   switch (ui->Flags)
     {
     case UNW_FLAG_CHAININFO:
@@ -191,7 +191,7 @@ pex64_xdata_print_uwd_codes (FILE *file, bfd *abfd,
 	  fprintf (file, _("warning: corrupt unwind data\n"));
 	  return;
 	}
-	  
+
       fprintf (file, "\tv2 epilog (length: %02x) at pc+:",
 	       ui->rawUnwindCodes[0]);
 
@@ -220,7 +220,7 @@ pex64_xdata_print_uwd_codes (FILE *file, bfd *abfd,
       fprintf (file, _("warning: corrupt unwind data\n"));
       return;
     }
-	  
+
   for (; i < ui->CountOfCodes; i++)
     {
       const bfd_byte *dta = ui->rawUnwindCodes + 2 * i;
@@ -541,7 +541,7 @@ pex64_bfd_print_pdata_section (bfd *abfd, void *vfile, asection *pdata_section)
   /* virt_size might be zero for objects.  */
   if (stop == 0 && strcmp (abfd->xvec->name, "pe-x86-64") == 0)
     {
-      stop = (datasize / onaline) * onaline;
+      stop = datasize;
       virt_size_is_zero = TRUE;
     }
   else if (datasize < stop)
@@ -551,8 +551,8 @@ pex64_bfd_print_pdata_section (bfd *abfd, void *vfile, asection *pdata_section)
 		 _("Warning: %s section size (%ld) is smaller than virtual size (%ld)\n"),
 		 pdata_section->name, (unsigned long) datasize,
 		 (unsigned long) stop);
-	/* Be sure not to read passed datasize.  */
-	stop = datasize / onaline;
+	/* Be sure not to read past datasize.  */
+	stop = datasize;
       }
 
   /* Display functions table.  */
@@ -724,8 +724,7 @@ pex64_bfd_print_pdata_section (bfd *abfd, void *vfile, asection *pdata_section)
 	      altent += imagebase;
 
 	      if (altent >= pdata_vma
-		  && (altent + PDATA_ROW_SIZE <= pdata_vma
-		      + pei_section_data (abfd, pdata_section)->virt_size))
+		  && altent - pdata_vma + PDATA_ROW_SIZE <= stop)
 		{
 		  pex64_get_runtime_function
 		    (abfd, &arf, &pdata[altent - pdata_vma]);

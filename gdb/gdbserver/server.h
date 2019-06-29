@@ -1,5 +1,5 @@
 /* Common definitions for remote server for GDB.
-   Copyright (C) 1993-2018 Free Software Foundation, Inc.
+   Copyright (C) 1993-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,10 +16,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef SERVER_H
-#define SERVER_H
+#ifndef GDBSERVER_SERVER_H
+#define GDBSERVER_SERVER_H
 
-#include "common-defs.h"
+#include "common/common-defs.h"
 
 gdb_static_assert (sizeof (CORE_ADDR) >= sizeof (void *));
 
@@ -27,7 +27,7 @@ gdb_static_assert (sizeof (CORE_ADDR) >= sizeof (void *));
 #include "wincecompat.h"
 #endif
 
-#include "version.h"
+#include "common/version.h"
 
 #if !HAVE_DECL_STRERROR
 #ifndef strerror
@@ -54,13 +54,13 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap);
 #  define PROG "gdbserver"
 #endif
 
-#include "buffer.h"
-#include "xml-utils.h"
+#include "common/buffer.h"
+#include "common/xml-utils.h"
 #include "regcache.h"
-#include "gdb_signals.h"
+#include "common/gdb_signals.h"
 #include "target.h"
 #include "mem-break.h"
-#include "environ.h"
+#include "common/environ.h"
 
 /* Target-specific functions */
 
@@ -104,7 +104,7 @@ extern int in_queued_stop_replies (ptid_t ptid);
 
 #include "utils.h"
 #include "debug.h"
-#include "gdb_vecs.h"
+#include "common/gdb_vecs.h"
 
 /* Maximum number of bytes to read/write at once.  The value here
    is chosen to fill up a packet (the headers account for the 32).  */
@@ -205,4 +205,4 @@ client_state &get_client_state ();
 #include "gdbthread.h"
 #include "inferiors.h"
 
-#endif /* SERVER_H */
+#endif /* GDBSERVER_SERVER_H */

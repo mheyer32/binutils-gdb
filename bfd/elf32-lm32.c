@@ -1,5 +1,5 @@
 /* Lattice Mico32-specific support for 32-bit ELF
-   Copyright (C) 2008-2018 Free Software Foundation, Inc.
+   Copyright (C) 2008-2019 Free Software Foundation, Inc.
    Contributed by Jon Beniston <jon@beniston.com>
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -1444,7 +1444,8 @@ lm32_elf_finish_dynamic_sections (bfd *output_bfd,
 	      FALSE, FALSE, TRUE);
       if (hend
 	  && (hend->type == bfd_link_hash_defined
-	      || hend->type == bfd_link_hash_defweak))
+	      || hend->type == bfd_link_hash_defweak)
+	  && hend->u.def.section->output_section != NULL)
 	{
 	  bfd_vma value =
 	    lm32fdpic_fixup32_section (info)->output_section->vma

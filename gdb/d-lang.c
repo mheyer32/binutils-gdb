@@ -1,6 +1,6 @@
 /* D language support routines for GDB, the GNU debugger.
 
-   Copyright (C) 2005-2018 Free Software Foundation, Inc.
+   Copyright (C) 2005-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -251,7 +251,8 @@ extern const struct language_defn d_language_defn =
   &default_varobj_ops,
   NULL,
   NULL,
-  LANG_MAGIC
+  c_is_string_type_p,
+  "{...}"			/* la_struct_too_deep_ellipsis */
 };
 
 /* Build all D language types for the specified architecture.  */

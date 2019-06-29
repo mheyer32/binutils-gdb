@@ -1,6 +1,6 @@
 /* TUI display source/assembly window.
 
-   Copyright (C) 1998-2018 Free Software Foundation, Inc.
+   Copyright (C) 1998-2019 Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -19,8 +19,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef TUI_SOURCEWIN_H
-#define TUI_SOURCEWIN_H
+#ifndef TUI_TUI_WINSOURCE_H
+#define TUI_TUI_WINSOURCE_H
 
 #include "tui/tui-data.h"
 
@@ -34,46 +34,41 @@ extern void tui_update_all_breakpoint_info (void);
 /* Scan the source window and the breakpoints to update the hasBreak
    information for each line.  Returns 1 if something changed and the
    execution window must be refreshed.  */
-extern int tui_update_breakpoint_info (struct tui_win_info *win,
+extern int tui_update_breakpoint_info (struct tui_source_window_base *win,
 				       int current_only);
 
 /* Function to display the "main" routine.  */
 extern void tui_display_main (void);
-extern void tui_update_source_window (struct tui_win_info *, 
+extern void tui_update_source_window (struct tui_source_window_base *, 
 				      struct gdbarch *, struct symtab *,
 				      struct tui_line_or_address, 
 				      int);
-extern void tui_update_source_window_as_is (struct tui_win_info *,
+extern void tui_update_source_window_as_is (struct tui_source_window_base *,
 					    struct gdbarch *, struct symtab *,
 					    struct tui_line_or_address, 
 					    int);
 extern void tui_update_source_windows_with_addr (struct gdbarch *, CORE_ADDR);
 extern void tui_update_source_windows_with_line (struct symtab *, 
 						 int);
-extern void tui_clear_source_content (struct tui_win_info *, int);
-extern void tui_erase_source_content (struct tui_win_info *, int);
-extern void tui_show_source_content (struct tui_win_info *);
-extern void tui_horizontal_source_scroll (struct tui_win_info *,
-					  enum tui_scroll_direction, 
-					  int);
-extern enum tui_status tui_set_exec_info_content (struct tui_win_info *);
-extern void tui_show_exec_info_content (struct tui_win_info *);
-extern void tui_erase_exec_info_content (struct tui_win_info *);
-extern void tui_clear_exec_info_content (struct tui_win_info *);
-extern void tui_update_exec_info (struct tui_win_info *);
+extern void tui_clear_source_content (struct tui_source_window_base *, int);
+extern void tui_erase_source_content (struct tui_source_window_base *, int);
+extern void tui_show_source_content (struct tui_source_window_base *);
+extern void tui_set_exec_info_content (struct tui_source_window_base *);
+extern void tui_show_exec_info_content (struct tui_source_window_base *);
+extern void tui_erase_exec_info_content (struct tui_source_window_base *);
+extern void tui_clear_exec_info_content (struct tui_source_window_base *);
+extern void tui_update_exec_info (struct tui_source_window_base *);
 
-extern void tui_set_is_exec_point_at (struct tui_line_or_address,
-				      struct tui_win_info *);
-extern enum tui_status tui_alloc_source_buffer (struct tui_win_info *);
-extern int tui_line_is_displayed (int, 
-				  struct tui_win_info *, 
+extern void tui_alloc_source_buffer (struct tui_source_window_base *);
+extern int tui_line_is_displayed (int,
+				  struct tui_source_window_base *,
 				  int);
-extern int tui_addr_is_displayed (CORE_ADDR, 
-				  struct tui_win_info *, 
+extern int tui_addr_is_displayed (CORE_ADDR,
+				  struct tui_source_window_base *,
 				  int);
 
 
 /* Constant definitions. */
 #define SCROLL_THRESHOLD 2	/* Threshold for lazy scroll.  */
 
-#endif
+#endif /* TUI_TUI_WINSOURCE_H */

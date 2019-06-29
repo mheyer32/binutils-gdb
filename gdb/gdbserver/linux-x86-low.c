@@ -1,6 +1,6 @@
 /* GNU/Linux/x86-64 specific low level interface, for the remote server
    for GDB.
-   Copyright (C) 2002-2018 Free Software Foundation, Inc.
+   Copyright (C) 2002-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -24,7 +24,7 @@
 #include "linux-low.h"
 #include "i387-fp.h"
 #include "x86-low.h"
-#include "x86-xstate.h"
+#include "common/x86-xstate.h"
 #include "nat/gdb_ptrace.h"
 
 #ifdef __x86_64__
@@ -38,7 +38,7 @@
 #include "elf/common.h"
 #endif
 
-#include "agent.h"
+#include "common/agent.h"
 #include "tdesc.h"
 #include "tracepoint.h"
 #include "ax.h"
@@ -72,7 +72,6 @@ static const char *xmltarget_amd64_linux_no_xml = "@<target>\
 
 #include <sys/reg.h>
 #include <sys/procfs.h>
-#include "nat/gdb_ptrace.h"
 #include <sys/uio.h>
 
 #ifndef PTRACE_GET_THREAD_AREA
@@ -339,6 +338,21 @@ x86_fill_gregset (struct regcache *regcache, void *buf)
 
   collect_register_by_name (regcache, "orig_eax",
 			    ((char *) buf) + ORIG_EAX * REGSIZE);
+
+#ifdef __x86_64__
+  /* Sign extend EAX value to avoid potential syscall restart
+     problems. 
+
+     See amd64_linux_collect_native_gregset() in gdb/amd64-linux-nat.c
+     for a detailed explanation.  */
+  if (register_size (regcache->tdesc, 0) == 4)
+    {
+      void *ptr = ((gdb_byte *) buf
+                   + i386_regmap[find_regno (regcache->tdesc, "eax")]);
+
+      *(int64_t *) ptr = *(int32_t *) ptr;
+    }
+#endif
 }
 
 static void
@@ -1467,7 +1481,7 @@ x86_get_min_fast_tracepoint_insn_len (void)
 	     mention that something has gone awry.  */
 	  if (!warned_about_fast_tracepoints)
 	    {
-	      warning ("4-byte fast tracepoints not available; %s\n", errbuf);
+	      warning ("4-byte fast tracepoints not available; %s", errbuf);
 	      warned_about_fast_tracepoints = 1;
 	    }
 	  return 5;

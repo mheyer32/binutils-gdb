@@ -1,5 +1,5 @@
 /* Darwin support for GDB, the GNU debugger.
-   Copyright (C) 2008-2018 Free Software Foundation, Inc.
+   Copyright (C) 2008-2019 Free Software Foundation, Inc.
 
    Contributed by AdaCore.
 
@@ -28,7 +28,7 @@
 #include "gdbcore.h"
 #include "mach-o.h"
 #include "aout/stab_gnu.h"
-#include "vec.h"
+#include "common/vec.h"
 #include "psympriv.h"
 #include "complaints.h"
 #include "gdb_bfd.h"
@@ -697,7 +697,7 @@ macho_symfile_read_all_oso (std::vector<oso_el> *oso_vector_ptr,
 	    }
           for (ix2 = ix; ix2 < last_ix; ix2++)
             {
-              oso_el *oso2 = &(*oso_vector_ptr)[ix2];
+              oso2 = &(*oso_vector_ptr)[ix2];
 
               if (oso2->name != NULL)
                 warning (_("Could not find specified archive member "

@@ -1,5 +1,5 @@
 /* PPC64 ELF support for BFD.
-   Copyright (C) 2003-2018 Free Software Foundation, Inc.
+   Copyright (C) 2003-2019 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -158,14 +158,44 @@ START_RELOC_NUMBERS (elf_ppc64_reloc_type)
   RELOC_NUMBER (R_PPC64_PLTSEQ,		   119)
   RELOC_NUMBER (R_PPC64_PLTCALL,	   120)
 
+/* Powerxx support.  */
+  RELOC_NUMBER (R_PPC64_PLTSEQ_NOTOC,	   121)
+  RELOC_NUMBER (R_PPC64_PLTCALL_NOTOC,	   122)
+  RELOC_NUMBER (R_PPC64_PCREL_OPT,	   123)
+
+  RELOC_NUMBER (R_PPC64_D34,		   128)
+  RELOC_NUMBER (R_PPC64_D34_LO,		   129)
+  RELOC_NUMBER (R_PPC64_D34_HI30,	   130)
+  RELOC_NUMBER (R_PPC64_D34_HA30,	   131)
+  RELOC_NUMBER (R_PPC64_PCREL34,	   132)
+  RELOC_NUMBER (R_PPC64_GOT_PCREL34,	   133)
+  RELOC_NUMBER (R_PPC64_PLT_PCREL34,	   134)
+  RELOC_NUMBER (R_PPC64_PLT_PCREL34_NOTOC, 135)
+  RELOC_NUMBER (R_PPC64_ADDR16_HIGHER34,   136)
+  RELOC_NUMBER (R_PPC64_ADDR16_HIGHERA34,  137)
+  RELOC_NUMBER (R_PPC64_ADDR16_HIGHEST34,  138)
+  RELOC_NUMBER (R_PPC64_ADDR16_HIGHESTA34, 139)
+  RELOC_NUMBER (R_PPC64_REL16_HIGHER34,    140)
+  RELOC_NUMBER (R_PPC64_REL16_HIGHERA34,   141)
+  RELOC_NUMBER (R_PPC64_REL16_HIGHEST34,   142)
+  RELOC_NUMBER (R_PPC64_REL16_HIGHESTA34,  143)
+  RELOC_NUMBER (R_PPC64_D28,		   144)
+  RELOC_NUMBER (R_PPC64_PCREL28,	   145)
+
 #ifndef RELOC_MACROS_GEN_FUNC
-/* Relocation only used internally by ld.  If you need to use these
-   reloc numbers, you can change them to some other unused value
+/* Relocation only used internally by gas or ld.  If you need to use
+   these reloc numbers, you can change them to some other unused value
    without affecting the ABI.  They will never appear in object files.  */
-  RELOC_NUMBER (R_PPC64_LO_DS_OPT,	   128)
-/* Reloc only used internally by gas.  As above, value is unimportant.  */
-  RELOC_NUMBER (R_PPC64_16DX_HA,	   129)
+  RELOC_NUMBER (R_PPC64_LO_DS_OPT,	   200)
+  RELOC_NUMBER (R_PPC64_16DX_HA,	   201)
 #endif
+
+  RELOC_NUMBER (R_PPC64_REL16_HIGH,	   240)
+  RELOC_NUMBER (R_PPC64_REL16_HIGHA,	   241)
+  RELOC_NUMBER (R_PPC64_REL16_HIGHER,	   242)
+  RELOC_NUMBER (R_PPC64_REL16_HIGHERA,	   243)
+  RELOC_NUMBER (R_PPC64_REL16_HIGHEST,	   244)
+  RELOC_NUMBER (R_PPC64_REL16_HIGHESTA,	   245)
 
 /* Power9 split rel16 for addpcis.  */
   RELOC_NUMBER (R_PPC64_REL16DX_HA,	   246)

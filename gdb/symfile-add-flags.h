@@ -1,6 +1,6 @@
 /* Definition of symfile add flags.
 
-   Copyright (C) 1990-2018 Free Software Foundation, Inc.
+   Copyright (C) 1990-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -26,7 +26,7 @@
    symbol_file_add, etc.  Defined in a separate file to break circular
    header dependencies.  */
 
-enum symfile_add_flag
+enum symfile_add_flag : unsigned
   {
     /* Be chatty about what you are doing.  */
     SYMFILE_VERBOSE = 1 << 1,

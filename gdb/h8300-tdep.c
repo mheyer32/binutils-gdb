@@ -1,6 +1,6 @@
 /* Target-machine dependent code for Renesas H8/300, for GDB.
 
-   Copyright (C) 1988-2018 Free Software Foundation, Inc.
+   Copyright (C) 1988-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -91,25 +91,6 @@ static int is_h8300_normal_mode (struct gdbarch *gdbarch);
 #define BINWORD(gdbarch) ((is_h8300hmode (gdbarch) \
 		  && !is_h8300_normal_mode (gdbarch)) \
 		 ? h8300h_reg_size : h8300_reg_size)
-
-static CORE_ADDR
-h8300_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
-{
-  return frame_unwind_register_unsigned (next_frame, E_PC_REGNUM);
-}
-
-static CORE_ADDR
-h8300_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
-{
-  return frame_unwind_register_unsigned (next_frame, E_SP_REGNUM);
-}
-
-static struct frame_id
-h8300_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
-{
-  CORE_ADDR sp = get_frame_register_unsigned (this_frame, E_SP_REGNUM);
-  return frame_id_build (sp, get_frame_pc (this_frame));
-}
 
 /* Normal frames.  */
 
@@ -634,7 +615,8 @@ static CORE_ADDR
 h8300_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 		       struct regcache *regcache, CORE_ADDR bp_addr,
 		       int nargs, struct value **args, CORE_ADDR sp,
-		       int struct_return, CORE_ADDR struct_addr)
+		       function_call_return_method return_method,
+		       CORE_ADDR struct_addr)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   int stack_alloc = 0, stack_offset = 0;
@@ -657,7 +639,7 @@ h8300_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
      If we're returning a structure by value, then we must pass a
      pointer to the buffer for the return value as an invisible first
      argument.  */
-  if (struct_return)
+  if (return_method == return_method_struct)
     regcache_cooked_write_unsigned (regcache, reg++, struct_addr);
 
   for (argument = 0; argument < nargs; argument++)
@@ -1128,8 +1110,7 @@ h8300_print_registers_info (struct gdbarch *gdbarch, struct ui_file *file,
 static struct type *
 h8300_register_type (struct gdbarch *gdbarch, int regno)
 {
-  if (regno < 0 || regno >= gdbarch_num_regs (gdbarch)
-			    + gdbarch_num_pseudo_regs (gdbarch))
+  if (regno < 0 || regno >= gdbarch_num_cooked_regs (gdbarch))
     internal_error (__FILE__, __LINE__,
 		    _("h8300_register_type: illegal register number %d"),
 		    regno);
@@ -1349,9 +1330,6 @@ h8300_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_skip_prologue (gdbarch, h8300_skip_prologue);
 
   /* Frame unwinder.  */
-  set_gdbarch_unwind_pc (gdbarch, h8300_unwind_pc);
-  set_gdbarch_unwind_sp (gdbarch, h8300_unwind_sp);
-  set_gdbarch_dummy_id (gdbarch, h8300_dummy_id);
   frame_base_set_default (gdbarch, &h8300_frame_base);
 
   /* 

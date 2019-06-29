@@ -1,5 +1,5 @@
 /* tc-i386.c -- Assemble Intel syntax code for ix86/x86-64
-   Copyright (C) 2009-2018 Free Software Foundation, Inc.
+   Copyright (C) 2009-2019 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -269,6 +269,12 @@ i386_intel_simplify_register (expressionS *e)
     reg_num = e->X_add_number;
   else
     reg_num = e->X_md - 1;
+
+  if (reg_num < 0 || reg_num >= (int) i386_regtab_size)
+    {
+      as_bad (_("invalid register number"));
+      return 0;
+    }
 
   if (!intel_state.in_bracket)
     {

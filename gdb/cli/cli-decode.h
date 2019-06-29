@@ -1,6 +1,6 @@
 /* Header file for GDB command decoding library.
 
-   Copyright (C) 2000-2018 Free Software Foundation, Inc.
+   Copyright (C) 2000-2019 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,8 +15,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#if !defined (CLI_DECODE_H)
-#define CLI_DECODE_H 1
+#ifndef CLI_CLI_DECODE_H
+#define CLI_CLI_DECODE_H
 
 /* This file defines the private interfaces for any code implementing
    command internals.  */
@@ -249,7 +249,7 @@ extern void help_cmd_list (struct cmd_list_element *, enum command_class,
 extern void help_cmd (const char *, struct ui_file *);
 
 extern void apropos_cmd (struct ui_file *, struct cmd_list_element *,
-                         compiled_regex &, const char *);
+			 bool verbose, compiled_regex &, const char *);
 
 /* Used to mark commands that don't do anything.  If we just leave the
    function field NULL, the command is interpreted as a help topic, or
@@ -261,6 +261,10 @@ extern void not_just_help_class_command (const char *arg, int from_tty);
 
 extern void print_doc_line (struct ui_file *, const char *);
 
+/* The enums of boolean commands.  */
+extern const char * const boolean_enums[];
+
+/* The enums of auto-boolean commands.  */
 extern const char * const auto_boolean_enums[];
 
 /* Verify whether a given cmd_list_element is a user-defined command.
@@ -270,4 +274,4 @@ extern int cli_user_command_p (struct cmd_list_element *);
 
 extern int find_command_name_length (const char *);
 
-#endif /* !defined (CLI_DECODE_H) */
+#endif /* CLI_CLI_DECODE_H */

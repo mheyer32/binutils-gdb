@@ -1,5 +1,5 @@
 /* Plugin support for BFD.
-   Copyright (C) 2009-2018 Free Software Foundation, Inc.
+   Copyright (C) 2009-2019 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -252,14 +252,14 @@ try_load_plugin (const char *pname, bfd *abfd, int *has_plugin_p)
        plugin_list_iter = plugin_list_iter->next)
     {
       if (plugin_handle == plugin_list_iter->handle)
-        {
-          dlclose (plugin_handle);
-          if (!plugin_list_iter->claim_file)
-            return 0;
+	{
+	  dlclose (plugin_handle);
+	  if (!plugin_list_iter->claim_file)
+	    return 0;
 
-          register_claim_file (plugin_list_iter->claim_file);
-          goto have_claim_file;
-        }
+	  register_claim_file (plugin_list_iter->claim_file);
+	  goto have_claim_file;
+	}
     }
 
   plugin_list_iter = (struct plugin_list_entry *) xmalloc (sizeof *plugin_list_iter);
@@ -530,12 +530,12 @@ bfd_plugin_canonicalize_symtab (bfd *abfd,
   struct plugin_data_struct *plugin_data = abfd->tdata.plugin_data;
   long nsyms = plugin_data->nsyms;
   const struct ld_plugin_symbol *syms = plugin_data->syms;
-  static asection fake_section;
-  static asection fake_common_section;
+  static asection fake_section
+    = BFD_FAKE_SECTION (fake_section, NULL, "plug", 0,
+			SEC_ALLOC | SEC_LOAD | SEC_CODE | SEC_HAS_CONTENTS);
+  static asection fake_common_section
+    = BFD_FAKE_SECTION (fake_common_section, NULL, "plug", 0, SEC_IS_COMMON);
   int i;
-
-  fake_section.name = ".text";
-  fake_common_section.flags = SEC_IS_COMMON;
 
   for (i = 0; i < nsyms; i++)
     {

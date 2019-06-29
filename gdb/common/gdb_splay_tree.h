@@ -1,6 +1,6 @@
 /* GDB wrapper for splay trees.
 
-   Copyright (C) 2017-2018 Free Software Foundation, Inc.
+   Copyright (C) 2017-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,8 +17,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef GDB_SPLAY_TREE_H
-#define GDB_SPLAY_TREE_H
+#ifndef COMMON_GDB_SPLAY_TREE_H
+#define COMMON_GDB_SPLAY_TREE_H
 
 #include "splay-tree.h"
 
@@ -39,4 +39,4 @@ struct splay_tree_deleter
 typedef std::unique_ptr<splay_tree_s, gdb::splay_tree_deleter>
     gdb_splay_tree_up;
 
-#endif /* ! GDB_SPLAY_TREE_H */
+#endif /* COMMON_GDB_SPLAY_TREE_H */

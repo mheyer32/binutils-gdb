@@ -1,4 +1,4 @@
-# Copyright (C) 2007-2018 Free Software Foundation, Inc.
+# Copyright (C) 2007-2019 Free Software Foundation, Inc.
 
 # This file is part of GDB.
 
@@ -73,6 +73,11 @@ WHICH = aarch64 \
 	rs6000/powerpc-isa205-32l rs6000/powerpc-isa205-64l \
 	rs6000/powerpc-isa205-altivec32l rs6000/powerpc-isa205-altivec64l \
 	rs6000/powerpc-isa205-vsx32l rs6000/powerpc-isa205-vsx64l \
+	rs6000/powerpc-isa205-ppr-dscr-vsx32l \
+	rs6000/powerpc-isa205-ppr-dscr-vsx64l \
+	rs6000/powerpc-isa207-vsx32l rs6000/powerpc-isa207-vsx64l \
+	rs6000/powerpc-isa207-htm-vsx32l \
+	rs6000/powerpc-isa207-htm-vsx64l \
 	s390-linux32 s390-linux64 s390x-linux64 \
 	s390-linux32v1 s390-linux64v1 s390x-linux64v1 \
 	s390-linux32v2 s390-linux64v2 s390x-linux64v2 \
@@ -167,6 +172,12 @@ XMLTOC = \
 	rs6000/powerpc-isa205-altivec64l.xml \
 	rs6000/powerpc-isa205-vsx32l.xml \
 	rs6000/powerpc-isa205-vsx64l.xml \
+	rs6000/powerpc-isa205-ppr-dscr-vsx32l.xml \
+	rs6000/powerpc-isa205-ppr-dscr-vsx64l.xml \
+	rs6000/powerpc-isa207-vsx32l.xml \
+	rs6000/powerpc-isa207-vsx64l.xml \
+	rs6000/powerpc-isa207-htm-vsx32l.xml \
+	rs6000/powerpc-isa207-htm-vsx64l.xml \
 	rs6000/powerpc-vsx32.xml \
 	rs6000/powerpc-vsx32l.xml \
 	rs6000/powerpc-vsx64.xml \
@@ -196,6 +207,7 @@ GDB = false
 #Targets which use feature based target descriptions.
 aarch64-feature = 1
 i386-feature = 1
+riscv-feature = 1
 tic6x-feature = 1
 
 all: $(OUTPUTS)
@@ -215,6 +227,7 @@ $(outdir)/%.dat: %.xml number-regs.xsl sort-regs.xsl gdbserver-regs.xsl
 
 FEATURE_XMLFILES = aarch64-core.xml \
 	aarch64-fpu.xml \
+	aarch64-pauth.xml \
 	i386/32bit-core.xml \
 	i386/32bit-sse.xml \
 	i386/32bit-linux.xml \
@@ -231,6 +244,12 @@ FEATURE_XMLFILES = aarch64-core.xml \
 	i386/64bit-pkeys.xml \
 	i386/64bit-sse.xml \
 	i386/x32-core.xml \
+	riscv/32bit-cpu.xml \
+	riscv/32bit-csr.xml \
+	riscv/32bit-fpu.xml \
+	riscv/64bit-cpu.xml \
+	riscv/64bit-csr.xml \
+	riscv/64bit-fpu.xml \
 	tic6x-c6xp.xml \
 	tic6x-core.xml \
 	tic6x-gp.xml
@@ -327,6 +346,10 @@ $(outdir)/i386/x32-avx-avx512.dat: i386/x32-core.xml i386/64bit-avx.xml \
 $(outdir)/i386/x32-avx-avx512-linux.dat: i386/x32-core.xml i386/64bit-avx.xml \
 			       i386/64bit-avx512.xml i386/64bit-linux.xml \
 			       i386/64bit-segments.xml
+
+# Regenerate RISC-V CSR feature lists.
+riscv/32bit-csr.xml riscv/64bit-csr.xml: ../../include/opcode/riscv-opc.h
+	./riscv/rebuild-csr-xml.sh ../../include/opcode/riscv-opc.h ./riscv
 
 # 'all' doesn't build the C files, so don't delete them in 'clean'
 # either.

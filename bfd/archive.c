@@ -1,5 +1,5 @@
 /* BFD back-end for archive files (libraries).
-   Copyright (C) 1990-2018 Free Software Foundation, Inc.
+   Copyright (C) 1990-2019 Free Software Foundation, Inc.
    Written by Cygnus Support.  Mostly Gumby Henkel-Wallace's fault.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -1012,6 +1012,7 @@ do_slurp_coff_armap (bfd *abfd)
   int *raw_armap, *rawptr;
   struct artdata *ardata = bfd_ardata (abfd);
   char *stringbase;
+  char *stringend;
   bfd_size_type stringsize;
   bfd_size_type parsed_size;
   carsym *carsyms;
@@ -1071,22 +1072,18 @@ do_slurp_coff_armap (bfd *abfd)
     }
 
   /* OK, build the carsyms.  */
-  for (i = 0; i < nsymz && stringsize > 0; i++)
+  stringend = stringbase + stringsize;
+  *stringend = 0;
+  for (i = 0; i < nsymz; i++)
     {
-      bfd_size_type len;
-
       rawptr = raw_armap + i;
       carsyms->file_offset = swap ((bfd_byte *) rawptr);
       carsyms->name = stringbase;
-      /* PR 17512: file: 4a1d50c1.  */
-      len = strnlen (stringbase, stringsize);
-      if (len < stringsize)
-	len ++;
-      stringbase += len;
-      stringsize -= len;
+      stringbase += strlen (stringbase);
+      if (stringbase != stringend)
+	++stringbase;
       carsyms++;
     }
-  *stringbase = 0;
 
   ardata->symdef_count = nsymz;
   ardata->first_file_filepos = bfd_tell (abfd);

@@ -1,5 +1,5 @@
 /* Cell SPU GNU/Linux support -- shared library handling.
-   Copyright (C) 2009-2018 Free Software Foundation, Inc.
+   Copyright (C) 2009-2019 Free Software Foundation, Inc.
 
    Contributed by Ulrich Weigand <uweigand@de.ibm.com>.
 
@@ -101,9 +101,8 @@ static void
 append_ocl_sos (struct so_list **link_ptr)
 {
   CORE_ADDR *ocl_program_addr_base;
-  struct objfile *objfile;
 
-  ALL_OBJFILES (objfile)
+  for (objfile *objfile : current_program_space->objfiles ())
     {
       ocl_program_addr_base
 	= (CORE_ADDR *) objfile_data (objfile, ocl_program_data_key);
@@ -111,7 +110,7 @@ append_ocl_sos (struct so_list **link_ptr)
         {
 	  enum bfd_endian byte_order = bfd_big_endian (objfile->obfd)?
 					 BFD_ENDIAN_BIG : BFD_ENDIAN_LITTLE;
-	  TRY
+	  try
 	    {
 	      CORE_ADDR data =
 		read_memory_unsigned_integer (*ocl_program_addr_base,
@@ -134,7 +133,7 @@ append_ocl_sos (struct so_list **link_ptr)
 		  link_ptr = &newobj->next;
 		}
 	    }
-	  CATCH (ex, RETURN_MASK_ALL)
+	  catch (const gdb_exception &ex)
 	    {
 	      /* Ignore memory errors.  */
 	      switch (ex.error)
@@ -142,11 +141,10 @@ append_ocl_sos (struct so_list **link_ptr)
 		case MEMORY_ERROR:
 		  break;
 		default:
-		  throw_exception (ex);
+		  throw;
 		  break;
 		}
 	    }
-	  END_CATCH
 	}
     }
 }
@@ -398,7 +396,7 @@ spu_lookup_lib_symbol (struct objfile *objfile,
 
   if (svr4_so_ops.lookup_lib_global_symbol != NULL)
     return svr4_so_ops.lookup_lib_global_symbol (objfile, name, domain);
-  return (struct block_symbol) {NULL, NULL};
+  return {};
 }
 
 /* Enable shared library breakpoint.  */

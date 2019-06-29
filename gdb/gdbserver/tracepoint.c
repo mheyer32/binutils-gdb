@@ -1,5 +1,5 @@
 /* Tracepoint code for remote server for GDB.
-   Copyright (C) 2009-2018 Free Software Foundation, Inc.
+   Copyright (C) 2009-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,8 +19,7 @@
 #include "server.h"
 #include "tracepoint.h"
 #include "gdbthread.h"
-#include "agent.h"
-#include "rsp-low.h"
+#include "common/rsp-low.h"
 
 #include <ctype.h>
 #include <fcntl.h>
@@ -29,6 +28,9 @@
 #include <inttypes.h>
 #include "ax.h"
 #include "tdesc.h"
+
+#define IPA_SYM_STRUCT_NAME ipa_sym_addresses
+#include "common/agent.h"
 
 #define DEFAULT_TRACE_BUFFER_SIZE 5242880 /* 5*1024*1024 */
 
@@ -7192,7 +7194,7 @@ gdb_agent_helper_thread (void *arg)
 
       if (listen_fd == -1)
 	{
-	  warning ("could not create sync socket\n");
+	  warning ("could not create sync socket");
 	  break;
 	}
 
@@ -7216,7 +7218,7 @@ gdb_agent_helper_thread (void *arg)
 
 	  if (fd < 0)
 	    {
-	      warning ("Accept returned %d, error: %s\n",
+	      warning ("Accept returned %d, error: %s",
 		       fd, strerror (errno));
 	      break;
 	    }
@@ -7328,7 +7330,6 @@ gdb_agent_init (void)
 }
 
 #include <sys/mman.h>
-#include <fcntl.h>
 
 IP_AGENT_EXPORT_VAR char *gdb_tp_heap_buffer;
 IP_AGENT_EXPORT_VAR char *gdb_jump_pad_buffer;

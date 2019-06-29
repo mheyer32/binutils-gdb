@@ -1,6 +1,6 @@
 /* Caching code for GDB, the GNU debugger.
 
-   Copyright (C) 1992-2018 Free Software Foundation, Inc.
+   Copyright (C) 1992-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -615,7 +615,7 @@ dcache_info_1 (DCACHE *dcache, const char *exp)
     }
 
   printf_filtered (_("Contains data for %s\n"),
-		   target_pid_to_str (dcache->ptid));
+		   target_pid_to_str (dcache->ptid).c_str ());
 
   refcount = 0;
 

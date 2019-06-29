@@ -1,5 +1,5 @@
 /* M32R-specific support for 32-bit ELF.
-   Copyright (C) 1996-2018 Free Software Foundation, Inc.
+   Copyright (C) 1996-2019 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -1310,7 +1310,7 @@ m32r_info_to_howto (bfd *abfd ATTRIBUTE_UNUSED,
   /* xgettext:c-format */
   _bfd_error_handler (_("%pB: unsupported relocation type %#x"), abfd, r_type);
   bfd_set_error (bfd_error_bad_value);
-  return FALSE;  
+  return FALSE;
 }
 
 
@@ -3807,15 +3807,11 @@ m32r_elf_check_relocs (bfd *abfd,
 	/* This relocation describes which C++ vtable entries are actually
 	   used.  Record for later use during GC.  */
 	case R_M32R_GNU_VTENTRY:
-	  BFD_ASSERT (h != NULL);
-	  if (h != NULL
-	      && !bfd_elf_gc_record_vtentry (abfd, sec, h, rel->r_offset))
+	  if (!bfd_elf_gc_record_vtentry (abfd, sec, h, rel->r_offset))
 	    return FALSE;
 	  break;
 	case R_M32R_RELA_GNU_VTENTRY:
-	  BFD_ASSERT (h != NULL);
-	  if (h != NULL
-	      && !bfd_elf_gc_record_vtentry (abfd, sec, h, rel->r_addend))
+	  if (!bfd_elf_gc_record_vtentry (abfd, sec, h, rel->r_addend))
 	    return FALSE;
 	  break;
 	}

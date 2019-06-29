@@ -1,5 +1,5 @@
 /* read.c - read a source file -
-   Copyright (C) 1986-2018 Free Software Foundation, Inc.
+   Copyright (C) 1986-2019 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -3780,7 +3780,8 @@ ignore_rest_of_line (void)
   input_line_pointer++;
 
   /* Return pointing just after end-of-line.  */
-  know (is_end_of_line[(unsigned char) input_line_pointer[-1]]);
+  if (input_line_pointer <= buffer_limit)
+    know (is_end_of_line[(unsigned char) input_line_pointer[-1]]);
 }
 
 /* Sets frag for given symbol to zero_address_frag, except when the
@@ -5276,7 +5277,7 @@ s_leb128 (int sign)
 
   do
     {
-      deferred_expression (&exp);
+      expression (&exp);
       emit_leb128_expr (&exp, sign);
     }
   while (*input_line_pointer++ == ',');
@@ -5388,8 +5389,6 @@ stringer (int bits_appendzero)
 	  if (append_zero)
 	    stringer_append_char (0, bitsize);
 
-	  know (input_line_pointer[-1] == '\"');
-
 #if !defined(NO_LISTING) && defined (OBJ_ELF)
 	  /* In ELF, when gcc is emitting DWARF 1 debugging output, it
 	     will emit .string with a filename in the .debug section
@@ -5414,8 +5413,11 @@ stringer (int bits_appendzero)
 	  c = get_single_number ();
 	  stringer_append_char (c, bitsize);
 	  if (*input_line_pointer != '>')
-	    as_bad (_("expected <nn>"));
-
+	    {
+	      as_bad (_("expected <nn>"));
+	      ignore_rest_of_line ();
+	      return;
+	    }
 	  input_line_pointer++;
 	  break;
 	case ',':
@@ -6236,10 +6238,7 @@ static char *saved_limit;
    overruns should not occur.  Saves the current input line pointer so that
    it can be restored by calling restore_ilp().
 
-   Does not support recursion.
-
-   FIXME: This function is currently only used by stabs.c but that
-   should be extended to other files in the gas source directory.  */
+   Does not support recursion.  */
 
 void
 temp_ilp (char *buf)

@@ -1,5 +1,5 @@
 /* tc-epiphany.c -- Assembler for the Adapteva EPIPHANY
-   Copyright (C) 2009-2018 Free Software Foundation, Inc.
+   Copyright (C) 2009-2019 Free Software Foundation, Inc.
    Contributed by Embecosm on behalf of Adapteva, Inc.
 
    This file is part of GAS, the GNU Assembler.
@@ -145,6 +145,8 @@ md_begin (void)
 
   /* Set the machine type.  */
   bfd_default_set_arch_mach (stdoutput, bfd_arch_epiphany, bfd_mach_epiphany32);
+
+  literal_prefix_dollar_hex = TRUE;
 }
 
 valueT
@@ -1007,9 +1009,6 @@ md_cgen_lookup_reloc (const CGEN_INSN *insn ATTRIBUTE_UNUSED,
    of type TYPE, and store the appropriate bytes in *LITP.  The number
    of LITTLENUMS emitted is stored in *SIZEP.  An error message is
    returned, or NULL on OK.  */
-
-/* Equal to MAX_PRECISION in atof-ieee.c.  */
-#define MAX_LITTLENUMS 6
 
 const char *
 md_atof (int type, char *litP, int *sizeP)

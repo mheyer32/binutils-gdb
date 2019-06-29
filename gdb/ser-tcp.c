@@ -1,6 +1,6 @@
 /* Serial interface for raw TCP connections on Un*x like systems.
 
-   Copyright (C) 1992-2018 Free Software Foundation, Inc.
+   Copyright (C) 1992-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -24,8 +24,8 @@
 #include "gdbcmd.h"
 #include "cli/cli-decode.h"
 #include "cli/cli-setshow.h"
-#include "filestuff.h"
-#include "netstuff.h"
+#include "common/filestuff.h"
+#include "common/netstuff.h"
 
 #include <sys/types.h>
 
@@ -36,11 +36,10 @@
 #include <sys/ioctl.h>  /* For FIONBIO.  */
 #endif
 
-#include "gdb_sys_time.h"
+#include "common/gdb_sys_time.h"
 
 #ifdef USE_WIN32API
-#include <winsock2.h>
-#include <wspiapi.h>
+#include <ws2tcpip.h>
 #ifndef ETIMEDOUT
 #define ETIMEDOUT WSAETIMEDOUT
 #endif
@@ -320,7 +319,7 @@ net_open (struct serial *scb, const char *name)
     {
       got_connrefused = false;
 
-      for (struct addrinfo *iter = ainfo; iter != NULL; iter = iter->ai_next)
+      for (addrinfo *iter = ainfo; iter != NULL; iter = iter->ai_next)
 	{
 	  /* Iterate over the list of possible addresses to connect
 	     to.  For each, we'll try to connect and see if it

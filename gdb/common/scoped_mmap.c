@@ -1,6 +1,6 @@
 /* scoped_mmap, automatically unmap files
 
-   Copyright (C) 2018 Free Software Foundation, Inc.
+   Copyright (C) 2018-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,16 +17,17 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "common-defs.h"
 #include "scoped_mmap.h"
 #include "scoped_fd.h"
+#include "common/filestuff.h"
 
 #ifdef HAVE_SYS_MMAN_H
 
 scoped_mmap
 mmap_file (const char *filename)
 {
-  scoped_fd fd (open (filename, O_RDONLY));
+  scoped_fd fd (gdb_open_cloexec (filename, O_RDONLY, 0));
   if (fd.get () < 0)
     perror_with_name (("open"));
 

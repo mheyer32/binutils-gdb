@@ -1,6 +1,6 @@
 /* Target-dependent code for GNU/Linux i386.
 
-   Copyright (C) 2000-2018 Free Software Foundation, Inc.
+   Copyright (C) 2000-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -38,7 +38,7 @@
 #include "xml-syscall.h"
 
 #include "i387-tdep.h"
-#include "x86-xstate.h"
+#include "common/x86-xstate.h"
 
 /* The syscall's XML filename for i386.  */
 #define XML_SYSCALL_FILENAME_I386 "syscalls/i386-linux.xml"
@@ -402,7 +402,7 @@ i386_linux_handle_segmentation_fault (struct gdbarch *gdbarch,
   if (!i386_mpx_enabled ())
     return;
 
-  TRY
+  try
     {
       /* Sigcode evaluates if the actual segfault is a boundary violation.  */
       sig_code = parse_and_eval_long ("$_siginfo.si_code\n");
@@ -414,11 +414,10 @@ i386_linux_handle_segmentation_fault (struct gdbarch *gdbarch,
       access
         = parse_and_eval_long ("$_siginfo._sifields._sigfault.si_addr");
     }
-  CATCH (exception, RETURN_MASK_ALL)
+  catch (const gdb_exception &exception)
     {
       return;
     }
-  END_CATCH
 
   /* If this is not a boundary violation just return.  */
   if (sig_code != SIG_CODE_BONDARY_FAULT)
@@ -694,7 +693,7 @@ i386_linux_read_description (uint64_t xcr0)
     [(xcr0 & X86_XSTATE_PKRU) ? 1 : 0];
 
   if (*tdesc == NULL)
-    *tdesc = i386_create_target_description (xcr0, true);
+    *tdesc = i386_create_target_description (xcr0, true, false);
 
   return *tdesc;
 }

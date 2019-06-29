@@ -1,6 +1,6 @@
 /* Core dump and executable file functions below target vector, for GDB.
 
-   Copyright (C) 1986-2018 Free Software Foundation, Inc.
+   Copyright (C) 1986-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -21,9 +21,6 @@
 #include "arch-utils.h"
 #include <signal.h>
 #include <fcntl.h>
-#ifdef HAVE_SYS_FILE_H
-#include <sys/file.h>		/* needed for F_OK and friends */
-#endif
 #include "frame.h"		/* required by inferior.h */
 #include "inferior.h"
 #include "infrun.h"
@@ -31,6 +28,7 @@
 #include "command.h"
 #include "bfd.h"
 #include "target.h"
+#include "process-stratum-target.h"
 #include "gdbcore.h"
 #include "gdbthread.h"
 #include "regcache.h"
@@ -44,7 +42,7 @@
 #include "objfiles.h"
 #include "gdb_bfd.h"
 #include "completer.h"
-#include "filestuff.h"
+#include "common/filestuff.h"
 
 #ifndef O_LARGEFILE
 #define O_LARGEFILE 0
@@ -61,7 +59,7 @@ static const target_info core_target_info = {
   N_("Use a core file as a target.  Specify the filename of the core file.")
 };
 
-class core_target final : public target_ops
+class core_target final : public process_stratum_target
 {
 public:
   core_target ();
@@ -85,13 +83,16 @@ public:
   bool thread_alive (ptid_t ptid) override;
   const struct target_desc *read_description () override;
 
-  const char *pid_to_str (ptid_t) override;
+  std::string pid_to_str (ptid_t) override;
 
   const char *thread_name (struct thread_info *) override;
 
+  bool has_all_memory () override { return false; }
   bool has_memory () override;
   bool has_stack () override;
   bool has_registers () override;
+  bool has_execution (ptid_t) override { return false; }
+
   bool info_proc (const char *, enum info_proc_what) override;
 
   /* A few helpers.  */
@@ -132,8 +133,6 @@ private: /* per-core data */
 
 core_target::core_target ()
 {
-  to_stratum = process_stratum;
-
   m_core_gdbarch = gdbarch_from_bfd (core_bfd);
 
   /* Find a suitable core file handler to munch on core_bfd */
@@ -286,7 +285,7 @@ add_to_thread_list (bfd *abfd, asection *asect, void *reg_sect_arg)
   int core_tid;
   int pid, lwpid;
   asection *reg_sect = (asection *) reg_sect_arg;
-  int fake_pid_p = 0;
+  bool fake_pid_p = false;
   struct inferior *inf;
 
   if (!startswith (bfd_section_name (abfd, asect), ".reg/"))
@@ -297,7 +296,7 @@ add_to_thread_list (bfd *abfd, asection *asect, void *reg_sect_arg)
   pid = bfd_core_file_pid (core_bfd);
   if (pid == 0)
     {
-      fake_pid_p = 1;
+      fake_pid_p = true;
       pid = CORELOW_PID;
     }
 
@@ -418,14 +417,7 @@ core_target_open (const char *arg, int from_tty)
   if (!exec_bfd)
     set_gdbarch_from_file (core_bfd);
 
-  push_target (target);
-  target_holder.release ();
-
-  /* Do this before acknowledging the inferior, so if
-     post_create_inferior throws (can happen easilly if you're loading
-     a core file with the wrong exec), we aren't left with threads
-     from the previous inferior.  */
-  init_thread_list ();
+  push_target (std::move (target_holder));
 
   inferior_ptid = null_ptid;
 
@@ -469,16 +461,15 @@ core_target_open (const char *arg, int from_tty)
      may be a thread_stratum target loaded on top of target core by
      now.  The layer above should claim threads found in the BFD
      sections.  */
-  TRY
+  try
     {
       target_update_thread_list ();
     }
 
-  CATCH (except, RETURN_MASK_ERROR)
+  catch (const gdb_exception_error &except)
     {
       exception_print (gdb_stderr, except);
     }
-  END_CATCH
 
   p = bfd_core_file_failing_command (core_bfd);
   if (p)
@@ -525,15 +516,14 @@ core_target_open (const char *arg, int from_tty)
      anything about threads.  That is why the test is >= 2.  */
   if (thread_count () >= 2)
     {
-      TRY
+      try
 	{
 	  thread_command (NULL, from_tty);
 	}
-      CATCH (except, RETURN_MASK_ERROR)
+      catch (const gdb_exception_error &except)
 	{
 	  exception_print (gdb_stderr, except);
 	}
-      END_CATCH
     }
 }
 
@@ -545,6 +535,8 @@ core_target::detach (inferior *inf, int from_tty)
      'this'.  */
   unpush_target (this);
 
+  /* Clear the register cache and the frame cache.  */
+  registers_changed ();
   reinit_frame_cache ();
   maybe_say_no_core_file_now (from_tty);
 }
@@ -993,10 +985,9 @@ core_target::read_description ()
   return this->beneath ()->read_description ();
 }
 
-const char *
+std::string
 core_target::pid_to_str (ptid_t ptid)
 {
-  static char buf[64];
   struct inferior *inf;
   int pid;
 
@@ -1021,8 +1012,7 @@ core_target::pid_to_str (ptid_t ptid)
     return normal_pid_to_str (ptid);
 
   /* No luck.  We simply don't have a valid PID to print.  */
-  xsnprintf (buf, sizeof buf, "<main task>");
-  return buf;
+  return "<main task>";
 }
 
 const char *

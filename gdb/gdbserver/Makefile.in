@@ -1,4 +1,4 @@
-# Copyright (C) 1989-2018 Free Software Foundation, Inc.
+# Copyright (C) 1989-2019 Free Software Foundation, Inc.
 
 # This file is part of GDB.
 
@@ -103,7 +103,7 @@ ustinc = @ustinc@
 # gnulib
 GNULIB_BUILDDIR = build-gnulib-gdbserver
 LIBGNU = $(GNULIB_BUILDDIR)/import/libgnu.a
-INCGNU = -I$(srcdir)/../gnulib/import -I$(GNULIB_BUILDDIR)/import
+INCGNU = -I$(srcdir)/../../gnulib/import -I$(GNULIB_BUILDDIR)/import
 
 # Generated headers in the gnulib directory.  These must be listed
 # so that they are generated before other files are compiled.
@@ -118,7 +118,7 @@ GNULIB_H = $(GNULIB_BUILDDIR)/import/string.h @GNULIB_STDINT_H@
 # in those directories should be included with the subdirectory.
 # e.g.: "target/wait.h".
 #
-INCLUDE_CFLAGS = -I. -I${srcdir} -I$(srcdir)/../common \
+INCLUDE_CFLAGS = -I. -I${srcdir} \
 	-I$(srcdir)/../regformats -I$(srcdir)/.. -I$(INCLUDE_DIR) \
 	$(INCGNU)
 
@@ -197,6 +197,7 @@ SFILES = \
 	$(srcdir)/arch/arm-get-next-pcs.c \
 	$(srcdir)/arch/arm-linux.c \
 	$(srcdir)/arch/ppc-linux-common.c \
+	$(srcdir)/../alloc.c \
 	$(srcdir)/common/btrace-common.c \
 	$(srcdir)/common/buffer.c \
 	$(srcdir)/common/cleanups.c \
@@ -238,6 +239,7 @@ SOURCES = $(SFILES)
 TAGFILES = $(SOURCES) ${HFILES} ${ALLPARAM} ${POSSLIBS}
 
 OBS = \
+	alloc.o \
 	ax.o \
 	common/agent.o \
 	common/btrace-common.o \
@@ -291,6 +293,7 @@ GDBREPLAY_OBS = \
 	common/cleanups.o \
 	common/common-exceptions.o \
 	common/common-utils.o \
+	common/rsp-low.o \
 	common/errors.o \
 	common/netstuff.o \
 	common/print-utils.o \
@@ -395,7 +398,7 @@ install-html:
 clean-info: force
 	@$(MAKE) $(FLAGS_TO_PASS) DO=$@ "DODIRS=$(SUBDIRS)" subdir_do
 
-gdbserver$(EXEEXT): $(OBS) ${ADD_DEPS} ${CDEPS} $(LIBGNU) $(LIBIBERTY)
+gdbserver$(EXEEXT): $(sort $(OBS)) ${CDEPS} $(LIBGNU) $(LIBIBERTY)
 	$(SILENCE) rm -f gdbserver$(EXEEXT)
 	$(ECHO_CXXLD) $(CC_LD) $(INTERNAL_CFLAGS) $(INTERNAL_LDFLAGS) \
 		-o gdbserver$(EXEEXT) $(OBS) $(LIBGNU) $(LIBIBERTY) \
@@ -406,13 +409,14 @@ all-lib: $(GNULIB_BUILDDIR)/Makefile $(LIBIBERTY_BUILDDIR)/Makefile
 	@$(MAKE) $(FLAGS_TO_PASS) DO=all DODIRS="$(SUBDIRS)" subdir_do
 .PHONY: all-lib
 
-gdbreplay$(EXEEXT): $(GDBREPLAY_OBS) $(LIBGNU) $(LIBIBERTY)
+gdbreplay$(EXEEXT): $(sort $(GDBREPLAY_OBS)) $(LIBGNU) $(LIBIBERTY)
 	$(SILENCE) rm -f gdbreplay$(EXEEXT)
 	$(ECHO_CXXLD) $(CC_LD) $(INTERNAL_CFLAGS) $(INTERNAL_LDFLAGS) \
 		-o gdbreplay$(EXEEXT) $(GDBREPLAY_OBS) $(XM_CLIBS) $(LIBGNU) \
 		$(LIBIBERTY)
 
 IPA_OBJS = \
+	alloc-ipa.o \
 	ax-ipa.o \
 	common/common-utils-ipa.o \
 	common/errors-ipa.o \
@@ -430,7 +434,7 @@ IPA_OBJS = \
 
 IPA_LIB = libinproctrace.so
 
-$(IPA_LIB): $(IPA_OBJS) ${ADD_DEPS} ${CDEPS}
+$(IPA_LIB): $(sort $(IPA_OBJS)) ${CDEPS}
 	$(SILENCE) rm -f $(IPA_LIB)
 	$(ECHO_CXXLD) $(CC_LD) -shared -fPIC -Wl,--soname=$(IPA_LIB) \
 		-Wl,--no-undefined $(INTERNAL_CFLAGS) $(INTERNAL_LDFLAGS) \
@@ -496,7 +500,7 @@ stamp-h: config.in config.status
 Makefile: Makefile.in config.status
 	CONFIG_HEADERS="" $(SHELL) ./config.status
 
-$(GNULIB_BUILDDIR)/Makefile: $(srcdir)/../gnulib/Makefile.in config.status
+$(GNULIB_BUILDDIR)/Makefile: $(srcdir)/../../gnulib/Makefile.in config.status
 	  @cd $(GNULIB_BUILDDIR); CONFIG_FILES="Makefile" \
 	  CONFIG_COMMANDS="depfiles" \
 	  CONFIG_HEADERS= \
@@ -544,9 +548,15 @@ regdat_sh = $(srcdir)/../regformats/regdat.sh
 
 UST_CFLAGS = $(ustinc) -DCONFIG_UST_GDB_INTEGRATION
 
+# Undo gnulib replacements for the IPA shared library build.
+# The gnulib headers are still needed, but gnulib is not linked
+# into the IPA lib so replacement apis don't work.
+UNDO_GNULIB_CFLAGS = -Drpl_strerror=strerror
+
 # Note, we only build the IPA if -fvisibility=hidden is supported in
 # the first place.
 IPAGENT_CFLAGS = $(INTERNAL_CFLAGS) $(UST_CFLAGS) \
+	$(UNDO_GNULIB_CFLAGS) \
 	-fPIC -DIN_PROCESS_AGENT \
 	-fvisibility=hidden
 
@@ -560,6 +570,10 @@ ax-ipa.o: ax.c
 
 ax.o: ax.c
 	$(COMPILE) $(WARN_CFLAGS_NO_FORMAT) $<
+	$(POSTCOMPILE)
+
+alloc-ipa.o: ../alloc.c
+	$(IPAGENT_COMPILE) $(WARN_CFLAGS_NO_FORMAT) $<
 	$(POSTCOMPILE)
 
 # Rules for objects that go in the in-process agent.
@@ -614,6 +628,10 @@ common/%.o: ../common/%.c
 	$(POSTCOMPILE)
 
 %.o: ../target/%.c
+	$(COMPILE) $<
+	$(POSTCOMPILE)
+
+%.o: ../%.c
 	$(COMPILE) $<
 	$(POSTCOMPILE)
 

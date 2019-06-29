@@ -1,5 +1,5 @@
 /* vms.c -- BFD back-end for EVAX (openVMS/Alpha) files.
-   Copyright (C) 1996-2018 Free Software Foundation, Inc.
+   Copyright (C) 1996-2019 Free Software Foundation, Inc.
 
    Initial version written by Klaus Kaempf (kkaempf@rmi.de)
    Major rewrite by Adacore.
@@ -4094,7 +4094,10 @@ _bfd_vms_write_etir (bfd * abfd, int objtype ATTRIBUTE_UNUSED)
 	    {
 	      /* Output rest of section.  */
 	      if (curr_addr > section->size)
-		_bfd_error_handler (_("size error in section %pA"), section);
+		{
+		  _bfd_error_handler (_("size error in section %pA"), section);
+		  return FALSE;
+		}
 	      size = section->size - curr_addr;
 	      sto_imm (abfd, section, size, curr_data, curr_addr);
 	      curr_data += size;

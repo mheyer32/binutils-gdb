@@ -1,5 +1,5 @@
 /* Support for the generic parts of COFF, for BFD.
-   Copyright (C) 1990-2018 Free Software Foundation, Inc.
+   Copyright (C) 1990-2019 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -37,6 +37,7 @@
    coff_data (abfd).  */
 
 #include "sysdep.h"
+#include <limits.h>
 #include "bfd.h"
 #include "libbfd.h"
 #include "coff/internal.h"
@@ -835,7 +836,7 @@ coff_mangle_symbols (bfd *bfd_ptr)
 	  for (i = 0; i < s->u.syment.n_numaux; i++)
 	    {
 	      combined_entry_type *a = s + i + 1;
-	      
+
 	      BFD_ASSERT (! a->is_sym);
 	      if (a->fix_tag)
 		{
@@ -2014,6 +2015,13 @@ coff_get_reloc_upper_bound (bfd *abfd, sec_ptr asect)
       bfd_set_error (bfd_error_invalid_operation);
       return -1;
     }
+#if SIZEOF_LONG == SIZEOF_INT
+  if (asect->reloc_count >= LONG_MAX / sizeof (arelent *))
+    {
+      bfd_set_error (bfd_error_file_too_big);
+      return -1;
+    }
+#endif
   return (asect->reloc_count + 1) * sizeof (arelent *);
 }
 
@@ -2294,7 +2302,7 @@ coff_find_nearest_line_with_names (bfd *abfd,
      information.  So try again, using a bias against the address sought.  */
   if (coff_data (abfd)->dwarf2_find_line_info != NULL)
     {
-      bfd_signed_vma bias;
+      bfd_signed_vma bias = 0;
 
       /* Create a cache of the result for the next call.  */
       if (sec_data == NULL && section->owner == abfd)
@@ -2306,10 +2314,11 @@ coff_find_nearest_line_with_names (bfd *abfd,
 
       if (sec_data != NULL && sec_data->saved_bias)
 	bias = sec_data->saved_bias;
-      else
+      else if (symbols)
 	{
 	  bias = _bfd_dwarf2_find_symbol_bias (symbols,
 					       & coff_data (abfd)->dwarf2_find_line_info);
+
 	  if (sec_data)
 	    {
 	      sec_data->saved_bias = TRUE;
@@ -2637,6 +2646,9 @@ _bfd_coff_section_already_linked (bfd *abfd,
   struct bfd_section_already_linked *l;
   struct bfd_section_already_linked_hash_entry *already_linked_list;
   struct coff_comdat_info *s_comdat;
+
+  if (sec->output_section == bfd_abs_section_ptr)
+    return FALSE;
 
   flags = sec->flags;
   if ((flags & SEC_LINK_ONCE) == 0)

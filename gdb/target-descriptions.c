@@ -1,6 +1,6 @@
 /* Target description support for GDB.
 
-   Copyright (C) 2006-2018 Free Software Foundation, Inc.
+   Copyright (C) 2006-2019 Free Software Foundation, Inc.
 
    Contributed by CodeSourcery.
 
@@ -26,7 +26,7 @@
 #include "reggroups.h"
 #include "target.h"
 #include "target-descriptions.h"
-#include "vec.h"
+#include "common/vec.h"
 #include "xml-support.h"
 #include "xml-tdesc.h"
 #include "osabi.h"
@@ -119,6 +119,11 @@ make_gdb_type (struct gdbarch *gdbarch, struct tdesc_type *ttype)
 
       switch (e->kind)
 	{
+	case TDESC_TYPE_IEEE_HALF:
+	  m_type = arch_float_type (m_gdbarch, -1, "builtin_type_ieee_half",
+				    floatformats_ieee_half);
+	  return;
+
 	case TDESC_TYPE_IEEE_SINGLE:
 	  m_type = arch_float_type (m_gdbarch, -1, "builtin_type_ieee_single",
 				    floatformats_ieee_single);
@@ -854,12 +859,11 @@ tdesc_register_name (struct gdbarch *gdbarch, int regno)
 {
   struct tdesc_reg *reg = tdesc_find_register (gdbarch, regno);
   int num_regs = gdbarch_num_regs (gdbarch);
-  int num_pseudo_regs = gdbarch_num_pseudo_regs (gdbarch);
 
   if (reg != NULL)
     return reg->name.c_str ();
 
-  if (regno >= num_regs && regno < num_regs + num_pseudo_regs)
+  if (regno >= num_regs && regno < gdbarch_num_cooked_regs (gdbarch))
     {
       struct tdesc_arch_data *data
 	= (struct tdesc_arch_data *) gdbarch_data (gdbarch, tdesc_data);
@@ -1139,18 +1143,10 @@ allocate_target_description (void)
   return new target_desc ();
 }
 
-static void
-free_target_description (void *arg)
+void
+target_desc_deleter::operator() (struct target_desc *target_desc) const
 {
-  struct target_desc *target_desc = (struct target_desc *) arg;
-
   delete target_desc;
-}
-
-struct cleanup *
-make_cleanup_free_target_description (struct target_desc *target_desc)
-{
-  return make_cleanup (free_target_description, target_desc);
 }
 
 void
@@ -1717,6 +1713,7 @@ maint_print_c_tdesc_cmd (const char *args, int from_tty)
   if (startswith (filename_after_features.c_str (), "i386/32bit-")
       || startswith (filename_after_features.c_str (), "i386/64bit-")
       || startswith (filename_after_features.c_str (), "i386/x32-core.xml")
+      || startswith (filename_after_features.c_str (), "riscv/")
       || startswith (filename_after_features.c_str (), "tic6x-")
       || startswith (filename_after_features.c_str (), "aarch64"))
     {

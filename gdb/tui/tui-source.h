@@ -1,6 +1,6 @@
 /* TUI display source window.
 
-   Copyright (C) 1998-2018 Free Software Foundation, Inc.
+   Copyright (C) 1998-2019 Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -19,15 +19,15 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef TUI_SOURCE_H
-#define TUI_SOURCE_H
+#ifndef TUI_TUI_SOURCE_H
+#define TUI_TUI_SOURCE_H
 
 #include "tui/tui-data.h"
 
 struct symtab;
 struct tui_win_info;
 
-extern void tui_set_source_content_nil (struct tui_win_info *, 
+extern void tui_set_source_content_nil (struct tui_source_window_base *,
 					const char *);
 
 extern enum tui_status tui_set_source_content (struct symtab *, 
@@ -36,7 +36,5 @@ extern void tui_show_symtab_source (struct gdbarch *, struct symtab *,
 				    struct tui_line_or_address,
 				    int);
 extern int tui_source_is_displayed (const char *);
-extern void tui_vertical_source_scroll (enum tui_scroll_direction,
-					int);
 
-#endif
+#endif /* TUI_TUI_SOURCE_H */

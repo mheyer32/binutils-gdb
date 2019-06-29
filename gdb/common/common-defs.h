@@ -1,6 +1,6 @@
 /* Common definitions.
 
-   Copyright (C) 1986-2018 Free Software Foundation, Inc.
+   Copyright (C) 1986-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,8 +17,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef COMMON_DEFS_H
-#define COMMON_DEFS_H
+#ifndef COMMON_COMMON_DEFS_H
+#define COMMON_COMMON_DEFS_H
 
 #include "config.h"
 
@@ -30,7 +30,7 @@
 #ifdef GDBSERVER
 #include "build-gnulib-gdbserver/config.h"
 #else
-#include "build-gnulib/config.h"
+#include "../../gnulib/config.h"
 #endif
 
 #undef PACKAGE_NAME
@@ -68,11 +68,26 @@
    enable it here in order to try to catch these problems earlier;
    plus this seems like a reasonable safety measure.  The check for
    optimization is required because _FORTIFY_SOURCE only works when
-   optimization is enabled.  */
+   optimization is enabled.  If _FORTIFY_SOURCE is already defined,
+   then we don't do anything.  */
 
-#if defined __OPTIMIZE__ && __OPTIMIZE__ > 0
+#if !defined _FORTIFY_SOURCE && defined __OPTIMIZE__ && __OPTIMIZE__ > 0
 #define _FORTIFY_SOURCE 2
 #endif
+
+/* We don't support Windows versions before XP, so we define
+   _WIN32_WINNT correspondingly to ensure the Windows API headers
+   expose the required symbols.  */
+#if defined (__MINGW32__) || defined (__CYGWIN__)
+# ifdef _WIN32_WINNT
+#  if _WIN32_WINNT < 0x0501
+#   undef _WIN32_WINNT
+#   define _WIN32_WINNT 0x0501
+#  endif
+# else
+#  define _WIN32_WINNT 0x0501
+# endif
+#endif	/* __MINGW32__ || __CYGWIN__ */
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -94,6 +109,12 @@
    is compatible with ATTRIBUTE_PRINTF, simply use it.  */
 #undef ATTRIBUTE_PRINTF
 #define ATTRIBUTE_PRINTF _GL_ATTRIBUTE_FORMAT_PRINTF
+
+#if GCC_VERSION >= 3004
+#define ATTRIBUTE_UNUSED_RESULT __attribute__ ((__warn_unused_result__))
+#else
+#define ATTRIBUTE_UNUSED_RESULT
+#endif
 
 #include "libiberty.h"
 #include "pathmax.h"
@@ -129,4 +150,4 @@ extern char *current_directory;
 #define HAVE_USEFUL_SBRK 1
 #endif
 
-#endif /* COMMON_DEFS_H */
+#endif /* COMMON_COMMON_DEFS_H */

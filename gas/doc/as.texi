@@ -1,5 +1,5 @@
 \input texinfo @c                               -*-Texinfo-*-
-@c  Copyright (C) 1991-2018 Free Software Foundation, Inc.
+@c  Copyright (C) 1991-2019 Free Software Foundation, Inc.
 @c UPDATE!!  On future updates--
 @c   (1)   check for new machine-dep cmdline options in
 @c         md_parse_option definitions in config/tc-*.c
@@ -39,6 +39,9 @@
 @end ifset
 @ifset Blackfin
 @set Blackfin
+@end ifset
+@ifset BPF
+@set BPF
 @end ifset
 @ifset H8/300
 @set H8
@@ -97,7 +100,7 @@
 This file documents the GNU Assembler "@value{AS}".
 
 @c man begin COPYRIGHT
-Copyright @copyright{} 1991-2018 Free Software Foundation, Inc.
+Copyright @copyright{} 1991-2019 Free Software Foundation, Inc.
 
 Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3
@@ -146,7 +149,7 @@ done.
 @end tex
 
 @vskip 0pt plus 1filll
-Copyright @copyright{} 1991-2018 Free Software Foundation, Inc.
+Copyright @copyright{} 1991-2019 Free Software Foundation, Inc.
 
       Permission is granted to copy, distribute and/or modify this document
       under the terms of the GNU Free Documentation License, Version 1.3
@@ -295,6 +298,11 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
    [@b{-mfdpic}]
    [@b{-mno-fdpic}]
    [@b{-mnopic}]
+@end ifset
+@ifset BPF
+
+@emph{Target BPF options:}
+   [@b{-EL}] [@b{-EB}]
 @end ifset
 @ifset CRIS
 
@@ -445,11 +453,15 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
    [@b{-mcrc}] [@b{-mno-crc}]
    [@b{-mginv}] [@b{-mno-ginv}]
    [@b{-mloongson-mmi}] [@b{-mno-loongson-mmi}]
+   [@b{-mloongson-cam}] [@b{-mno-loongson-cam}]
+   [@b{-mloongson-ext}] [@b{-mno-loongson-ext}]
+   [@b{-mloongson-ext2}] [@b{-mno-loongson-ext2}]
    [@b{-minsn32}] [@b{-mno-insn32}]
    [@b{-mfix7000}] [@b{-mno-fix7000}]
    [@b{-mfix-rm7000}] [@b{-mno-fix-rm7000}]
    [@b{-mfix-vr4120}] [@b{-mno-fix-vr4120}]
    [@b{-mfix-vr4130}] [@b{-mno-fix-vr4130}]
+   [@b{-mfix-r5900}] [@b{-mno-fix-r5900}]
    [@b{-mdebug}] [@b{-no-mdebug}]
    [@b{-mpdr}] [@b{-mno-pdr}]
 @end ifset
@@ -478,6 +490,9 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
     [@b{-m[no-]fpu-fma}] [@b{-mfpu-freg=@var{FREG}}] [@b{-mreduced-regs}]
     [@b{-mfull-regs}] [@b{-m[no-]dx-regs}] [@b{-mpic}] [@b{-mno-relax}]
     [@b{-mb2bb}]
+@end ifset
+@ifset OPENRISC
+@c OpenRISC has no machine-dependent assembler options.
 @end ifset
 @ifset PDP11
 
@@ -994,6 +1009,25 @@ the Blackfin processor family.
 
 @end ifset
 
+@ifset BPF
+
+@ifclear man
+@xref{BPF Options}, for the options available when @value{AS} is
+configured for the Linux kernel BPF processor family.
+@end ifclear
+
+@ifset man
+@c man begin OPTIONS
+The following options are available when @value{AS} is configured for
+the Linux kernel BPF processor family.
+@c man end
+@c man begin INCLUDE
+@include c-bpf.texi
+@c ended inside the included file
+@end ifset
+
+@end ifset
+
 @c man begin OPTIONS
 @ifset CRIS
 See the info pages for documentation of the CRIS-specific options.
@@ -1438,6 +1472,14 @@ of an mfhi or mflo instruction occurs in the following two instructions.
 Cause nops to be inserted if a dmult or dmultu instruction is
 followed by a load instruction.
 
+@item -mfix-r5900
+@itemx -mno-fix-r5900
+Do not attempt to schedule the preceding instruction into the delay slot
+of a branch instruction placed at the end of a short loop of six
+instructions or fewer and always schedule a @code{nop} instruction there
+instead.  The short loop bug under certain conditions causes loops to
+execute only once or twice, due to a hardware bug in the R5900 chip.
+
 @item -mdebug
 @itemx -no-mdebug
 Cause stabs-style debugging output to go into an ECOFF-style .mdebug
@@ -1572,6 +1614,25 @@ Generate code for the Loongson MultiMedia extensions Instructions (MMI)
 Application Specific Extension.  This tells the assembler to accept MMI
 instructions.
 @samp{-mno-loongson-mmi} turns off this option.
+
+@item -mloongson-cam
+@itemx -mno-loongson-cam
+Generate code for the Loongson Content Address Memory (CAM) instructions.
+This tells the assembler to accept Loongson CAM instructions.
+@samp{-mno-loongson-cam} turns off this option.
+
+@item -mloongson-ext
+@itemx -mno-loongson-ext
+Generate code for the Loongson EXTensions (EXT) instructions.
+This tells the assembler to accept Loongson EXT instructions.
+@samp{-mno-loongson-ext} turns off this option.
+
+@item -mloongson-ext2
+@itemx -mno-loongson-ext2
+Generate code for the Loongson EXTensions R2 (EXT2) instructions.
+This option implies @samp{-mloongson-ext}.
+This tells the assembler to accept Loongson EXT2 instructions.
+@samp{-mno-loongson-ext2} turns off this option.
 
 @item -minsn32
 @itemx -mno-insn32
@@ -7581,6 +7642,9 @@ subject, see the hardware manufacturer's manual.
 @ifset Blackfin
 * Blackfin-Dependent::		Blackfin Dependent Features
 @end ifset
+@ifset BPF
+* BPF-Dependent::		BPF Dependent Features
+@end ifset
 @ifset CR16
 * CR16-Dependent::              CR16 Dependent Features
 @end ifset
@@ -7630,7 +7694,7 @@ subject, see the hardware manufacturer's manual.
 * M68HC11-Dependent::           M68HC11 and 68HC12 Dependent Features
 @end ifset
 @ifset S12Z
-* S12Z-Dependent::            S12Z Dependent Features
+* S12Z-Dependent::              S12Z Dependent Features
 @end ifset
 @ifset METAG
 * Meta-Dependent ::             Meta Dependent Features
@@ -7655,6 +7719,9 @@ subject, see the hardware manufacturer's manual.
 @end ifset
 @ifset NS32K
 * NS32K-Dependent::		NS32K Dependent Features
+@end ifset
+@ifset OPENRISC
+* OpenRISC-Dependent::		OpenRISC 1000 Features
 @end ifset
 @ifset PDP11
 * PDP-11-Dependent::            PDP-11 Dependent Features
@@ -7763,6 +7830,10 @@ subject, see the hardware manufacturer's manual.
 
 @ifset Blackfin
 @include c-bfin.texi
+@end ifset
+
+@ifset BPF
+@include c-bpf.texi
 @end ifset
 
 @ifset CR16
@@ -7881,6 +7952,10 @@ family.
 
 @ifset NS32K
 @include c-ns32k.texi
+@end ifset
+
+@ifset OPENRISC
+@include c-or1k.texi
 @end ifset
 
 @ifset PDP11

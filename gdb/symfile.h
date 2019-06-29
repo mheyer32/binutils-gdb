@@ -1,6 +1,6 @@
 /* Definitions for reading symbol files into GDB.
 
-   Copyright (C) 1990-2018 Free Software Foundation, Inc.
+   Copyright (C) 1990-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -227,7 +227,7 @@ struct quick_symbol_functions
   void (*map_matching_symbols) (struct objfile *,
 				const char *name, domain_enum domain,
 				int global,
-				int (*callback) (struct block *,
+				int (*callback) (const struct block *,
 						 struct symbol *, void *),
 				void *data,
 				symbol_name_match_type match,
@@ -292,7 +292,8 @@ struct quick_symbol_functions
 struct sym_probe_fns
 {
   /* If non-NULL, return a reference to vector of probe objects.  */
-  const std::vector<probe *> &(*sym_get_probes) (struct objfile *);
+  const std::vector<std::unique_ptr<probe>> &(*sym_get_probes)
+    (struct objfile *);
 };
 
 /* Structure to keep track of symbol reading functions for various
@@ -610,16 +611,7 @@ extern bool dwarf2_initialize_objfile (struct objfile *objfile,
 extern void dwarf2_build_psymtabs (struct objfile *);
 extern void dwarf2_build_frame_info (struct objfile *);
 
-/* From mdebugread.c */
-
-extern void mdebug_build_psymtabs (minimal_symbol_reader &,
-				   struct objfile *,
-				   const struct ecoff_debug_swap *,
-				   struct ecoff_debug_info *);
-
-extern void elfmdebug_build_psymtabs (struct objfile *,
-				      const struct ecoff_debug_swap *,
-				      asection *);
+void dwarf2_free_objfile (struct objfile *);
 
 /* From minidebug.c.  */
 

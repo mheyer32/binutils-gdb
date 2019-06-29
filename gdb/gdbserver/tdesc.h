@@ -1,5 +1,5 @@
 /* Target description definitions for remote server for GDB.
-   Copyright (C) 2012-2018 Free Software Foundation, Inc.
+   Copyright (C) 2012-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,8 +16,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef TDESC_H
-#define TDESC_H
+#ifndef GDBSERVER_TDESC_H
+#define GDBSERVER_TDESC_H
 
 #include "common/tdesc.h"
 
@@ -93,4 +93,4 @@ void init_target_desc (struct target_desc *tdesc,
 
 const struct target_desc *current_target_desc (void);
 
-#endif /* TDESC_H */
+#endif /* GDBSERVER_TDESC_H */

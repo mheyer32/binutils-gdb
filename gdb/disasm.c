@@ -1,6 +1,6 @@
 /* Disassemble support for GDB.
 
-   Copyright (C) 2000-2018 Free Software Foundation, Inc.
+   Copyright (C) 2000-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -244,7 +244,8 @@ gdb_pretty_print_disassembler::pretty_print_insn (struct ui_out *uiout,
 	   the future.  */
 	uiout->text (" <");
 	if ((flags & DISASSEMBLY_OMIT_FNAME) == 0)
-	  uiout->field_string ("func-name", name.c_str ());
+	  uiout->field_string ("func-name", name.c_str (),
+			       ui_out_style_kind::FUNCTION);
 	uiout->text ("+");
 	uiout->field_int ("offset", offset);
 	uiout->text (">:\t");
@@ -433,8 +434,8 @@ do_mixed_source_and_assembly_deprecated
 						       "src_and_asm_line");
 		      print_source_lines (symtab, next_line, next_line + 1,
 					  psl_flags);
-		      ui_out_emit_list inner_list_emitter (uiout,
-							   "line_asm_insn");
+		      ui_out_emit_list temp_list_emitter (uiout,
+							  "line_asm_insn");
 		    }
 		  /* Print the last line and leave list open for
 		     asm instructions to be added.  */
@@ -660,7 +661,8 @@ do_mixed_source_and_assembly (struct gdbarch *gdbarch,
 		   l < end_preceding_line_to_display;
 		   ++l)
 		{
-		  ui_out_emit_tuple tuple_emitter (uiout, "src_and_asm_line");
+		  ui_out_emit_tuple line_tuple_emitter (uiout,
+							"src_and_asm_line");
 		  print_source_lines (sal.symtab, l, l + 1, psl_flags);
 		  ui_out_emit_list chain_line_emitter (uiout, "line_asm_insn");
 		}
@@ -941,7 +943,7 @@ set_disassembler_options (char *prospective_options)
   valid_options_and_args = gdbarch_valid_disassembler_options (gdbarch);
   if (valid_options_and_args == NULL)
     {
-      fprintf_filtered (gdb_stdlog, _("\
+      fprintf_filtered (gdb_stderr, _("\
 'set disassembler-options ...' is not supported on this architecture.\n"));
       return;
     }
@@ -977,7 +979,7 @@ set_disassembler_options (char *prospective_options)
 	  break;
       if (valid_options->name[i] == NULL)
 	{
-	  fprintf_filtered (gdb_stdlog,
+	  fprintf_filtered (gdb_stderr,
 			    _("Invalid disassembler option value: '%s'.\n"),
 			    opt);
 	  return;
@@ -1008,19 +1010,24 @@ show_disassembler_options_sfunc (struct ui_file *file, int from_tty,
   if (options == NULL)
     options = "";
 
-  fprintf_filtered (file, _("The current disassembler options are '%s'\n"),
+  fprintf_filtered (file, _("The current disassembler options are '%s'\n\n"),
 		    options);
 
   valid_options_and_args = gdbarch_valid_disassembler_options (gdbarch);
 
   if (valid_options_and_args == NULL)
-    return;
+    {
+      fputs_filtered (_("There are no disassembler options available "
+			"for this architecture.\n"),
+		      file);
+      return;
+    }
 
   valid_options = &valid_options_and_args->options;
 
-  fprintf_filtered (file, _("\n\
+  fprintf_filtered (file, _("\
 The following disassembler options are supported for use with the\n\
-'set disassembler-options <option>[,<option>...]' command:\n"));
+'set disassembler-options OPTION [,OPTION]...' command:\n"));
 
   if (valid_options->description != NULL)
     {
@@ -1129,7 +1136,7 @@ _initialize_disasm (void)
 					 &prospective_options, _("\
 Set the disassembler options.\n\
 Usage: set disassembler-options OPTION [,OPTION]...\n\n\
-See: 'show disassembler-options' for valid option values.\n"), _("\
+See: 'show disassembler-options' for valid option values."), _("\
 Show the disassembler options."), NULL,
 					 set_disassembler_options_sfunc,
 					 show_disassembler_options_sfunc,

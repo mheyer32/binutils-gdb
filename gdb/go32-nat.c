@@ -1,5 +1,5 @@
 /* Native debugging support for Intel x86 running DJGPP.
-   Copyright (C) 1997-2018 Free Software Foundation, Inc.
+   Copyright (C) 1997-2019 Free Software Foundation, Inc.
    Written by Robert Hoehne.
 
    This file is part of GDB.
@@ -89,7 +89,7 @@
 #include "inferior.h"
 #include "infrun.h"
 #include "gdbthread.h"
-#include "gdb_wait.h"
+#include "common/gdb_wait.h"
 #include "gdbcore.h"
 #include "command.h"
 #include "gdbcmd.h"
@@ -377,7 +377,7 @@ struct go32_nat_target final : public x86_nat_target<inf_child_target>
 
   bool thread_alive (ptid_t ptid) override;
 
-  const char *pid_to_str (ptid_t) override;
+  std::string pid_to_str (ptid_t) override;
 };
 
 static go32_nat_target the_go32_nat_target;
@@ -992,7 +992,7 @@ go32_nat_target::thread_alive (ptid_t ptid)
   return ptid != null_ptid;
 }
 
-const char *
+std::string
 go32_nat_target::pid_to_str (ptid_t ptid)
 {
   return normal_pid_to_str (ptid);

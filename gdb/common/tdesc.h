@@ -1,4 +1,4 @@
-/* Copyright (C) 2006-2018 Free Software Foundation, Inc.
+/* Copyright (C) 2006-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -15,8 +15,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef ARCH_TDESC_H
-#define ARCH_TDESC_H 1
+#ifndef COMMON_TDESC_H
+#define COMMON_TDESC_H
 
 struct tdesc_feature;
 struct tdesc_type;
@@ -147,6 +147,7 @@ enum tdesc_type_kind
   TDESC_TYPE_UINT128,
   TDESC_TYPE_CODE_PTR,
   TDESC_TYPE_DATA_PTR,
+  TDESC_TYPE_IEEE_HALF,
   TDESC_TYPE_IEEE_SINGLE,
   TDESC_TYPE_IEEE_DOUBLE,
   TDESC_TYPE_ARM_FPA_EXT,
@@ -404,4 +405,4 @@ private:
   std::string *m_buffer;
 };
 
-#endif /* ARCH_TDESC_H */
+#endif /* COMMON_TDESC_H */

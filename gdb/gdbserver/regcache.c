@@ -1,5 +1,5 @@
 /* Register support routines for the remote server for GDB.
-   Copyright (C) 2001-2018 Free Software Foundation, Inc.
+   Copyright (C) 2001-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,7 +20,7 @@
 #include "regdef.h"
 #include "gdbthread.h"
 #include "tdesc.h"
-#include "rsp-low.h"
+#include "common/rsp-low.h"
 #ifndef IN_PROCESS_AGENT
 
 struct regcache *

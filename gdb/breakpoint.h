@@ -1,5 +1,5 @@
 /* Data structures associated with breakpoints in GDB.
-   Copyright (C) 1992-2018 Free Software Foundation, Inc.
+   Copyright (C) 1992-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -21,10 +21,10 @@
 
 #include "frame.h"
 #include "value.h"
-#include "vec.h"
+#include "common/vec.h"
 #include "ax.h"
 #include "command.h"
-#include "break-common.h"
+#include "common/break-common.h"
 #include "probe.h"
 #include "location.h"
 #include <vector>
@@ -41,6 +41,16 @@ struct bp_location;
 struct linespec_result;
 struct linespec_sals;
 struct inferior;
+
+/* Enum for exception-handling support in 'catch throw', 'catch rethrow',
+   'catch catch' and the MI equivalent.  */
+
+enum exception_event_kind
+{
+  EX_EVENT_THROW,
+  EX_EVENT_RETHROW,
+  EX_EVENT_CATCH
+};
 
 /* Why are we removing the breakpoint from the target?  */
 
@@ -301,30 +311,18 @@ enum bp_loc_type
   bp_loc_other			/* Miscellaneous...  */
 };
 
-/* This structure is a collection of function pointers that, if
-   available, will be called instead of performing the default action
-   for this bp_loc_type.  */
-
-struct bp_location_ops
-{
-  /* Destructor.  Releases everything from SELF (but not SELF
-     itself).  */
-  void (*dtor) (struct bp_location *self);
-};
-
 class bp_location
 {
 public:
   bp_location () = default;
 
-  bp_location (const bp_location_ops *ops, breakpoint *owner);
+  bp_location (breakpoint *owner);
+
+  virtual ~bp_location ();
 
   /* Chain pointer to the next breakpoint location for
      the same parent breakpoint.  */
   bp_location *next = NULL;
-
-  /* Methods associated with this location.  */
-  const bp_location_ops *ops = NULL;
 
   /* The reference count.  */
   int refc = 0;
@@ -1678,5 +1676,23 @@ extern void maybe_print_thread_hit_breakpoint (struct ui_out *uiout);
 
 /* Print the specified breakpoint.  */
 extern void print_breakpoint (breakpoint *bp);
+
+/* Command element for the 'commands' command.  */
+extern cmd_list_element *commands_cmd_element;
+
+/* Whether to use the fixed output when printing information about a
+   multi-location breakpoint (see PR 9659).  */
+
+extern bool fix_multi_location_breakpoint_output_globally;
+
+/* Deal with "catch catch", "catch throw", and "catch rethrow" commands and
+   the MI equivalents.  Sets up to catch events of type EX_EVENT.  When
+   TEMPFLAG is true only the next matching event is caught after which the
+   catch-point is deleted.  If REGEX is not NULL then only exceptions whose
+   type name matches REGEX will trigger the event.  */
+
+extern void catch_exception_event (enum exception_event_kind ex_event,
+				   const char *regex, bool tempflag,
+				   int from_tty);
 
 #endif /* !defined (BREAKPOINT_H) */
