@@ -1889,6 +1889,12 @@ ifneq ($(CODESIGN_CERT),)
 endif
 
 # Convenience rule to handle recursion.
+$(LIBGNU) $(GNULIB_H): all-lib
+all-lib: $(GNULIB_BUILDDIR)/Makefile
+	@$(MAKE) $(FLAGS_TO_PASS) DO=all DODIRS=$(GNULIB_BUILDDIR) subdir_do
+.PHONY: all-lib
+
+# Convenience rule to handle recursion.
 .PHONY: all-data-directory
 all-data-directory: data-directory/Makefile
 	@$(MAKE) $(FLAGS_TO_PASS) DO=all DODIRS=data-directory subdir_do

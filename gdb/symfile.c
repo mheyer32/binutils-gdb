@@ -2902,7 +2902,7 @@ add_compunit_symtab_to_objfile (struct compunit_symtab *cu)
       struct linetable *l;
       int i;
 
-      ALL_COMPUNIT_FILETABS (cu, s)
+      for ((s) = (cu) -> filetabs; (s) != NULL; (s) = (s) -> next)
       {
 	l = SYMTAB_LINETABLE (s);
 	if (l)

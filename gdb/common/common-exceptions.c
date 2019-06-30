@@ -209,8 +209,6 @@ throw_exception (gdb_exception &&exception)
     gdb_assert_not_reached ("invalid return reason");
 }
 
-#endif
-
 void
 throw_exception (struct gdb_exception exception)
 {
