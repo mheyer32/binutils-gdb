@@ -31,11 +31,12 @@
 #define	m68030   0x008
 #define	m68040   0x010
 #define m68060   0x020
-#define	m68881   0x040
-#define	m68851   0x080
-#define cpu32	 0x100		/* e.g., 68332 */
-#define fido_a   0x200
-#define m68k_mask  0x3ff
+#define m68080   0x040
+#define	m68881   0x080
+#define	m68851   0x100
+#define cpu32	 0x200		/* e.g., 68332 */
+#define fido_a   0x400
+#define m68k_mask  0x7ff
 
 #define mcfmac   0x400		/* ColdFire MAC. */
 #define mcfemac  0x800		/* ColdFire EMAC. */
@@ -50,14 +51,14 @@
 #define mcf_mask 0x7e400
 
 /* Handy aliases.  */
-#define	m68040up   (m68040 | m68060)
+#define	m68040up   (m68040 | m68060 | m68080)
 #define	m68030up   (m68030 | m68040up)
 #define	m68020up   (m68020 | m68030up)
 #define	m68010up   (m68010 | cpu32 | fido_a | m68020up)
 #define	m68000up   (m68000 | m68010up)
 
-#define	mfloat  (m68881 | m68040 | m68060)
-#define	mmmu    (m68851 | m68030 | m68040 | m68060)
+#define	mfloat  (m68881 | m68040 | m68060 | m68080)
+#define	mmmu    (m68851 | m68030 | m68040 | m68060 | m68080)
 
 /* The structure used to hold information for an opcode.  */
 

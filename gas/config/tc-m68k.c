@@ -399,13 +399,13 @@ struct m68k_it
 
 /* Macros for determining if cpu supports a specific addressing mode.  */
 #define HAVE_LONG_DISP(x)	\
-	((x) & (m68020|m68030|m68040|m68060|cpu32|fido_a|mcfisa_b|mcfisa_c))
+	((x) & (m68020|m68030|m68040|m68060|m68080|cpu32|fido_a|mcfisa_b|mcfisa_c))
 #define HAVE_LONG_CALL(x)	\
-	((x) & (m68020|m68030|m68040|m68060|cpu32|fido_a|mcfisa_b|mcfisa_c))
+	((x) & (m68020|m68030|m68040|m68060|m68080|cpu32|fido_a|mcfisa_b|mcfisa_c))
 #define HAVE_LONG_COND(x)	\
-	((x) & (m68020|m68030|m68040|m68060|cpu32|fido_a|mcfisa_b|mcfisa_c))
+	((x) & (m68020|m68030|m68040|m68060|m68080|cpu32|fido_a|mcfisa_b|mcfisa_c))
 #define HAVE_LONG_BRANCH(x)	\
-	((x) & (m68020|m68030|m68040|m68060|cpu32|fido_a|mcfisa_b))
+	((x) & (m68020|m68030|m68040|m68060|m68080|cpu32|fido_a|mcfisa_b))
 #define LONG_BRANCH_VIA_COND(x) (HAVE_LONG_COND(x) && !HAVE_LONG_BRANCH(x))
 
 static struct m68k_it the_ins;	/* The instruction being assembled.  */
@@ -536,6 +536,7 @@ static const struct m68k_cpu m68k_archs[] =
   {m68030|m68881|m68851,			m68020_ctrl, "68030", 0},
   {m68040,					m68040_ctrl, "68040", 0},
   {m68060,					m68060_ctrl, "68060", 0},
+  {m68080,					m68060_ctrl, "68080", 0},
   {cpu32|m68881,				cpu32_ctrl, "cpu32", 0},
   {fido_a,					fido_ctrl, "fidoa", 0},
   {mcfisa_a|mcfhwdiv,				NULL, "isaa", 0},
@@ -591,6 +592,7 @@ static const struct m68k_cpu m68k_cpus[] =
   {m68040,					m68040_ctrl, "68ec040", 1},
   {m68060,					m68060_ctrl, "68060", 0},
   {m68060,					m68060_ctrl, "68ec060", 1},
+  {m68080,					m68060_ctrl, "68080", 0},
 
   {cpu32|m68881,				cpu32_ctrl, "cpu32",  0},
   {cpu32|m68881,				cpu32_ctrl, "68330", 1},
@@ -7828,8 +7830,8 @@ m68k_init_arch (void)
      with a coprocessor could be doing emulation.  */
   if (current_architecture & m68851)
     {
-      if (current_architecture & m68040)
-	as_warn (_("68040 and 68851 specified; mmu instructions may assemble incorrectly"));
+      if (current_architecture & (m68040|m68060|m68080))
+	as_warn (_("68040/68060/68080 and 68851 specified; mmu instructions may assemble incorrectly"));
     }
   /* What other incompatibilities could we check for?  */
 

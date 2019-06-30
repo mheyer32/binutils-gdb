@@ -3380,6 +3380,7 @@ amiga_set_arch_mach (
 	case bfd_mach_m68030:
 	case bfd_mach_m68040:
 	case bfd_mach_m68060:
+	case bfd_mach_m68080:
 	case 0:
 	  return TRUE;
 	default:

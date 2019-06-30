@@ -1219,6 +1219,10 @@ bfd_default_scan (const bfd_arch_info_type *info, const char *string)
       arch = bfd_arch_m68k;
       number = bfd_mach_m68060;
       break;
+    case 68080:
+      arch = bfd_arch_m68k;
+      number = bfd_mach_m68080;
+      break;
     case 68332:
       arch = bfd_arch_m68k;
       number = bfd_mach_cpu32;
