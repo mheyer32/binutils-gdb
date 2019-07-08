@@ -1430,16 +1430,19 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
       if (r->address <= offset)
 	{
 	  sym = *r->sym_ptr_ptr;
-	  // search the correct section
-	  sec = aux->sec;
-	  aux->sec = sym->section;
-	  asymbol * sym2 = find_symbol_for_address(vma, inf, NULL);
-	  aux->sec = sec;
+	  if (sym)
+	    {
+	      // search the correct section
+	      sec = aux->sec;
+	      aux->sec = sym->section;
+	      asymbol * sym2 = find_symbol_for_address(vma, inf, NULL);
+	      aux->sec = sec;
 
-	  // update vma and section and move relppp
-	  if (sym2)
-	    sym = sym2;
-	  sec = sym->section;
+	      // update vma and section and move relppp
+	      if (sym2)
+		sym = sym2;
+	      sec = sym->section;
+	    }
 	  ++*aux->relppp;
 	}
     }
@@ -1448,12 +1451,9 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
     {
       bfd_vma secaddr;
 
-//      (*inf->fprintf_func) (inf->stream, do_demangle ? " <%s" : " %s",
-//			    bfd_get_section_name (abfd, sec));
+      (*inf->fprintf_func) (inf->stream, do_demangle ? " <%s" : " %s",
+	    sanitize_string (bfd_get_section_name (abfd, sec)));
 
-//      (*inf->fprintf_func) (inf->stream, "#");
-//     (*inf->fprintf_func) (inf->stream, " <%s",
-//			    sanitize_string (bfd_get_section_name (abfd, sec)));
       secaddr = bfd_get_section_vma (abfd, sec);
       if (vma < secaddr)
 	{
@@ -1465,7 +1465,9 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
 	  (*inf->fprintf_func) (inf->stream, "+0x");
 	  objdump_print_value (vma - secaddr, inf, TRUE);
 	}
-//      (*inf->fprintf_func) (inf->stream, ">");
+
+      if (do_demangle)
+      (*inf->fprintf_func) (inf->stream, ">");
     }
   else
     {
