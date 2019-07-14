@@ -56,7 +56,11 @@ static inline int
 gdb_mkostemp_cloexec (char *name_template, int flags = 0)
 {
   /* gnulib provides a mkostemp replacement if needed.  */
+#ifdef __CYGWIN__
+  return mkstemp(name_template);
+#else
   return mkostemp (name_template, flags | O_CLOEXEC);
+#endif
 }
 
 /* Convenience wrapper for the above, which takes the filename as an

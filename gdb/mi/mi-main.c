@@ -67,7 +67,7 @@
 #ifdef __CYGWIN__
 #include <setjmp.h>
 extern jmp_buf pseudo;
-extern gdb_exception_RETURN_MASK_ERROR ex;
+extern gdb_exception ex;
 #endif
 
 enum
@@ -1947,18 +1947,20 @@ mi_execute_command (const char *cmd, int from_tty)
 #ifdef __CYGWIN__
   command = NULL;
   token = NULL;
-  int result = setjmp(pseudo);
-  if (result == 0) {
+  int r = setjmp(pseudo);
+  if (r == 0) {
     command = mi_parse (cmd, &token);
   } else
+    {
+      gdb_exception result(RETURN_ERROR, GENERIC_ERROR);
 #else
   try
     {
       command = mi_parse (cmd, &token);
     }
   catch (const gdb_exception &result)
+  {
 #endif
-    {
       mi_print_exception (token, result);
       xfree (token);
     }
@@ -1983,10 +1985,11 @@ mi_execute_command (const char *cmd, int from_tty)
 #ifdef __CYGWIN__
   ui_out *tmpuiout = current_uiout;
 //  struct interp * inter = command_interp();
-  int result = setjmp(pseudo);
-  if (result == 0) {
+  int r1 = setjmp(pseudo);
+  if (r1 == 0) {
       captured_mi_execute_command (current_uiout, command.get ());
   } else {
+      gdb_exception result(RETURN_ERROR, GENERIC_ERROR);
 	  current_uiout = tmpuiout;
 //	  interp_set (inter, 0);
 #else

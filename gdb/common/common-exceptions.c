@@ -23,7 +23,7 @@
 #ifdef __CYGWIN__
 #include <setjmp.h>
 extern jmp_buf pseudo;
-extern gdb_exception_RETURN_MASK_ERROR ex;
+extern gdb_exception ex;
 #endif
 
 /* Possible catcher states.  */

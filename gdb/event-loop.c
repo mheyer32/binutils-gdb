@@ -25,7 +25,7 @@
 #ifdef __CYGWIN__
 #include <setjmp.h>
 jmp_buf pseudo;
-gdb_exception_RETURN_MASK_ERROR ex;
+gdb_exception ex;
 #endif
 
 #ifdef HAVE_POLL
