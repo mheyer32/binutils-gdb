@@ -1094,6 +1094,9 @@ find_symbol_for_address (bfd_vma vma,
   abfd = aux->abfd;
   sec = aux->sec;
   opb = inf->octets_per_byte;
+  aux->relppp = NULL;
+  aux->buffer = NULL;
+  aux->pp = &aux->buffer;
 
   /* Perform a binary search looking for the closest symbol to the
      required value.  We are searching the range (min, max_count].  */
@@ -2708,7 +2711,7 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
   // create a lookup map where insns start.
   // do not create labels in a section having such a lookup map
   //   if the label is not at insn start
-  lookup = (bfd_byte *)xmalloc((section->size + 15) / 16);
+  lookup = (bfd_byte *)xmalloc(16 + (section->size + 15) / 16);
 
   if (sorted_symcount == 0)
     {
