@@ -167,7 +167,7 @@ struct objdump_disasm_info
 };
 
 /* Architecture to disassemble for, or default if NULL.  */
-static char *machine = NULL;
+static char *machine = "68040";
 
 /* Target specific options to the disassembler.  */
 static char *disassembler_options = NULL;
@@ -2793,8 +2793,11 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 		    case 0x2f0a:// move.l a2,-(sp)
 		    case 0x2f0b:// move.l a3,-(sp)
 		    case 0x2f0e:// move.l a6,-(sp)
+		    case 0x2f2f:// move.l 4(sp),-(sp)
 		    case 0x45ec:
 		    case 0x48e7:// movem.l ...
+		    case 0x4e55:// link.w a5
+		    case 0x4eba:// jsr
 		    case 0x4fef:// lea x(sp),sp
 		    case 0x598f:// subq.l #4,a7
 		    case 0x70ff:
