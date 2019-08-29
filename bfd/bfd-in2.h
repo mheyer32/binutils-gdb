@@ -6927,6 +6927,13 @@ typedef struct bfd_symbol
      with this name and type in use.  BSF_OBJECT must also be set.  */
 #define BSF_GNU_UNIQUE          (1 << 23)
 
+  /* this labels refers to code */
+#define BSF_CODE (1<<29)
+  /* this labels refers to data */
+#define BSF_DATA (1<<30)
+  /* this label was processed */
+#define BSF_VISITED (1<<31)
+
   flagword flags;
 
   /* A pointer to the section to which this symbol is

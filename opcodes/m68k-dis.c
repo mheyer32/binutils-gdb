@@ -47,6 +47,7 @@ struct objdump_disasm_info
   arelent **         dynrelbuf;
   long               dynrelcount;
   disassembler_ftype disassemble_fn;
+  const char *       symbol;
   arelent *          reloc;
   arelent ***        relppp; // pointer to relocations
   bfd_vma            vma; // code position

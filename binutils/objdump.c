@@ -71,6 +71,10 @@
 #include <sys/mman.h>
 #endif
 
+enum label_type {
+  LT_UNDEFINED, LT_CODE, LT_DATA
+};
+
 /* Internal headers for the ELF .stab-dump code - sorry.  */
 #define	BYTES_IN_WORD	32
 #include "aout/aout64.h"
@@ -126,9 +130,6 @@ static const char * disasm_sym;		/* Disassembly start symbol.  */
 
 static bfd_boolean omit_offsets;	/* -N */
 static bfd_boolean create_labels;       /* -L */
-
-#define SBF_PENDING (1<<30)
-#define SBF_DATA (1<<31)
 
 static int demangle_flags = DMGL_ANSI | DMGL_PARAMS;
 
@@ -1306,33 +1307,45 @@ find_closest_symbol_index(bfd_vma vma, asection * section)
 
   // find the index
   int index = thisplace;
-  while (index + 1 < sorted_symcount && (sorted_syms[index]->value < vma || sorted_syms[index]->section != section || (sorted_syms[index]->flags & SBF_DATA)))
+  while (index + 1 < sorted_symcount
+      && (sorted_syms[index]->value < vma || sorted_syms[index]->section != section))
     ++index;
-  while (index > 0 && (sorted_syms[index]->value > vma || sorted_syms[index]->section != section || (sorted_syms[index]->flags & SBF_DATA)))
+  while (index > 0
+      && (sorted_syms[index]->value > vma || sorted_syms[index]->section != section))
     --index;
-
 
   return index;
 }
 
 /**
  * Create the label and insert it.
+ *
+ *
  */
 static void
-create_label(bfd_vma vma, struct disassemble_info *inf, int is_data)
+create_label(bfd_vma vma, struct disassemble_info *inf, enum label_type lt_type)
 {
   int index = find_closest_symbol_index(vma, inf->section);
   asymbol * sym = sorted_syms[index];
 
+  // there is an exact label
   if (sym->value == vma)
-    return;
+    {
+      if (lt_type == LT_CODE)
+	sym->flags |= BSF_CODE;
+      return;
+    }
 
-  // was previous visited and label is inside?
-  if (sym->udata.i && vma < sym->udata.i && !(sym->flags & SBF_DATA) && !is_data)
+  // if it's a code label, and vma inside of the visited range,
+  // it must match the start of an insn.
+  if ((sym->flags & BSF_CODE) && sym->udata.i && vma < sym->udata.i)
     {
       int bit = 1 << vma % 15 / 2;
       if (!(lookup[(vma + 15) / 16] & bit))
 	return;
+
+      // force a code label, since it's inside code
+      lt_type = LT_CODE;
     }
 
   // insert correctly regardless of section
@@ -1359,9 +1372,12 @@ create_label(bfd_vma vma, struct disassemble_info *inf, int is_data)
 
   // copy common and mark the flags
   nsym->value = vma;
-  nsym->flags = sym->flags | SBF_PENDING;
-  if (is_data)
-    nsym->flags |= SBF_DATA;
+  nsym->flags = sym->flags & ~(BSF_VISITED|BSF_CODE|BSF_DATA);
+  if (lt_type == LT_DATA)
+    nsym->flags |= BSF_DATA;
+  else
+    if (lt_type == LT_CODE)
+      nsym->flags |= BSF_CODE;
   nsym->section = sym->section;
   nsym->the_bfd = sym->the_bfd;
   nsym->udata.i = 0;
@@ -1401,7 +1417,7 @@ create_label_address_func (bfd_vma vma, struct disassemble_info *inf)
   if ((aux->buffer[0] == 0x48 && aux->buffer[1] == 0x7a) // pea ...(pc)
 	||((aux->buffer[0] & 0xf1) == 0x41 && aux->buffer[1] == 0xfa) // lea ...(pc)
 	)
-	create_label(vma, inf, 1);
+	create_label(vma, inf, LT_UNDEFINED);
   else if (!(vma & 1)
       && (
          (*aux->buffer >= 0x60 && *aux->buffer <= 0x6f)
@@ -1410,7 +1426,7 @@ create_label_address_func (bfd_vma vma, struct disassemble_info *inf)
       || (aux->buffer[0] == 0x4e && aux->buffer[1] == 0xb9) // jsr
       || (aux->buffer[0] == 0x4e && aux->buffer[1] == 0xba) // jsr
       ))
-    create_label(vma, inf, 0);
+    create_label(vma, inf, LT_CODE);
 }
 
 
@@ -1421,7 +1437,7 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
 			     bfd_vma vma, struct disassemble_info *inf,
 			     bfd_boolean skip_zeroes)
 {
-  objdump_print_value (vma, inf, skip_zeroes);
+//  objdump_print_value (vma, inf, skip_zeroes);
 
   struct objdump_disasm_info *aux =
       (struct objdump_disasm_info *) inf->application_data;
@@ -2742,6 +2758,7 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
   asymbol * asym;
   int seen, oldcount;
   int pass = 0;
+  int guess = 0;
   do
     {
       fprintf(stderr, "pass %d:", ++pass);
@@ -2750,13 +2767,50 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
       for (index = 0; index < sorted_symcount; ++index)
 	{
 	  asym = sorted_syms[index];
-	  if (asym->udata.i || (asym->flags & (SBF_PENDING | SBF_DATA)))
+
+	  // do not search labels know to be data
+	  if (asym->udata.i || (asym->flags & (BSF_DATA|BSF_VISITED)))
 	      continue;
+	  // only search inside code
 	  if (strcmp(asym->section->name, ".text"))
 	    continue;
 
+	  // skip lto stuff
 	  if (asym->name && strstr(asym->name, "lto_pri"))
 	    continue;
+
+	  if ((asym->flags & BSF_CODE) == 0)
+	    {
+	      if (guess)
+		{
+		  bfd_vma pos = asym->value;
+		  unsigned short w = ((data[pos] & 0xff) << 8) | (data[pos + 1] & 0xff);
+		  switch (w)
+		  {
+		    case 0x2608:
+		    case 0x2f02:// move.l d2,-(sp)
+		    case 0x2f03:// move.l d3,-(sp)
+		    case 0x2f0a:// move.l a2,-(sp)
+		    case 0x2f0b:// move.l a3,-(sp)
+		    case 0x2f0e:// move.l a6,-(sp)
+		    case 0x45ec:
+		    case 0x48e7:// movem.l ...
+		    case 0x4fef:// lea x(sp),sp
+		    case 0x598f:// subq.l #4,a7
+		    case 0x70ff:
+		      asym->flags |= BSF_CODE;
+		      guess = 0;
+		      break;
+		    default:
+		      asym->flags |= BSF_DATA;
+		      break;
+		  }
+		}
+		if ((asym->flags & BSF_CODE) == 0)
+		  continue;
+	    }
+
+          asym->flags |= BSF_VISITED;
 
 	  if (!(++seen & 127))
 	    fprintf(stderr, " %d/%ld", index, sorted_symcount);
@@ -2794,7 +2848,7 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 		    {
 		      // add labels based on jump table
 		      bfd_vma base = pos + add;
-		      create_label(base, pinfo, 1);
+		      create_label(base, pinfo, LT_DATA);
 
 		      // search the limit
 		      unsigned limit = 0;
@@ -2832,7 +2886,7 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 				break;
 //			      fprintf(stderr, "jump to %08lx\n", base + offset);
 			      bfd_vma at = base + offset;
-			      create_label(at, pinfo, 0);
+			      create_label(at, pinfo, LT_CODE);
 			      entry += 2;
 			    }
 			}
@@ -2845,7 +2899,7 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 	  asym->udata.i = pos; // store end for this symbol
 	}
 
-      // create the symbol names and clear SBF_PENDING
+      // create the symbol names and clear BSF_PENDING
       bfd_vma end = 0;
       for (index = 0; index < sorted_symcount; ++index)
         {
@@ -2856,11 +2910,18 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
             end = asym->udata.i;
           if (end > asym->value && end < asym->udata.i)
             asym->udata.i = end;
-          asym->flags &= ~SBF_PENDING;
         }
+
+      // nothing changed start guessing one unknown label
+      if (!guess && seen == 0 && oldcount == sorted_symcount)
+	{
+	  guess = 1;
+	  continue;
+	}
+      guess = 0;
       fprintf(stderr, " %d/%ld\n", seen, sorted_symcount);
     }
-  while (seen || oldcount != sorted_symcount);
+  while (guess || seen || oldcount != sorted_symcount);
 
   for (index = 0; index < sorted_symcount; ++index)
     {
@@ -2871,7 +2932,7 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
       if (asym->name == 0)
 	{
 	  char lab[16];
-	  if (asym->flags & SBF_DATA)
+	  if (asym->flags & BSF_DATA)
 	    snprintf(lab, 32, ".D%d", ++m);
 	  else
 	    snprintf(lab, 32, ".L%d", ++n);
@@ -2880,7 +2941,6 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 	  asym->name = name;
 	} else if (asym->section == section)
 	  n = 0;
-      asym->flags &= ~SBF_PENDING;
     }
 
 
@@ -3087,7 +3147,7 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
       if (strcmp(".text", pinfo->section->name))
 	insns = FALSE;
 
-      if (sym && sym->flags & SBF_DATA)
+      if (sym && (sym->flags & BSF_DATA))
 	insns = FALSE;
 
       if (do_print)
