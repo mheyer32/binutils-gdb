@@ -3487,7 +3487,34 @@ amiga_find_nearest_line (
   aout_symbol_type  **stab_symbols = amiga_load_stab_symbols(abfd);
   if (stab_symbols)
     return aout_32_find_nearest_line(abfd, stab_symbols, section, offset, filename_ptr, functionname_ptr, line_ptr, discriminator_ptr);
-  return FALSE;
+
+  asymbol * best_sym = NULL;
+  bfd_vma best_vma = 0;
+  unsigned int index;
+  for (index = 0; index < abfd->symcount; ++index)
+    {
+      asymbol * asym = symbols[index];
+
+      // search only first section
+      if (asym->section != abfd->sections)
+	continue;
+
+      if (asym->value > offset)
+	continue;
+
+      if (asym->value < best_vma)
+	continue;
+
+      best_sym = asym;
+      best_vma = asym->value;
+    }
+
+  if (best_sym != NULL)
+    {
+      *functionname_ptr = best_sym->name;
+    }
+
+  return best_sym != NULL;
 }
 
 static reloc_howto_type *
