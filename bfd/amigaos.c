@@ -3488,6 +3488,12 @@ amiga_find_nearest_line (
   if (stab_symbols)
     return aout_32_find_nearest_line(abfd, stab_symbols, section, offset, filename_ptr, functionname_ptr, line_ptr, discriminator_ptr);
 
+  *filename_ptr = abfd->filename;
+  *functionname_ptr = NULL;
+  *line_ptr = 0;
+  if (discriminator_ptr)
+    *discriminator_ptr = 0;
+
   asymbol * best_sym = NULL;
   bfd_vma best_vma = 0;
   unsigned int index;
