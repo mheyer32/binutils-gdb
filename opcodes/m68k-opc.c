@@ -1452,7 +1452,6 @@ const struct m68k_opcode m68k_opcodes[] =
 {"illegal", 2,	one(0045374),	one(0177777), "",     m68000up | mcfisa_a },
 {"intouch", 2,	one(0xf428),	one(0xfff8), "As",    mcfisa_b | mcfisa_c },
 
-{"jmp", 2,	one(0060000),	one(0177777), "BW", m68000up | mcfisa_a },
 {"jmp", 2,	one(0047300),	one(0177700), "!s", m68000up | mcfisa_a },
 
 {"jra", 2,	one(0060000),	one(0177400), "Bb", m68000up | mcfisa_a },

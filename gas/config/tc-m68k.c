@@ -78,7 +78,7 @@ static int flag_long_jumps;	/* -S option.  */
 static int flag_keep_pcrel;	/* --pcrel option.  */
 static int flag_small_code;	/* -sc option */
 
-#define FLAG_SMALL_CODE (flag_small_code)
+#define FLAG_SMALL_CODE (0 && flag_small_code)
 
 #ifdef REGISTER_PREFIX_OPTIONAL
 int flag_reg_prefix_optional = REGISTER_PREFIX_OPTIONAL;
@@ -5154,7 +5154,7 @@ md_convert_frag_1 (fragS *fragP)
       fragP->fr_fix += 4;
       break;
     case TAB (BRABSJUNC, LONG):
-      if (FLAG_SMALL_CODE)
+      if (flag_small_code)
 	{
 	  as_bad (_("Long branch in small code model, not supported."));
 	}
@@ -5430,7 +5430,7 @@ md_estimate_size_before_relax (fragS *fragP, segT segment)
 	  {
 	    fragP->fr_subtype = TAB (TABTYPE (fragP->fr_subtype), BYTE);
 	  }
-	else if (flag_short_refs || FLAG_SMALL_CODE)
+	else if (flag_short_refs || flag_small_code)
 	  {
 	    /* Symbol is undefined and we want short ref.  */
 	    fragP->fr_subtype = TAB (TABTYPE (fragP->fr_subtype), SHORT);
