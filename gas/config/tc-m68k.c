@@ -78,7 +78,7 @@ static int flag_long_jumps;	/* -S option.  */
 static int flag_keep_pcrel;	/* --pcrel option.  */
 static int flag_small_code;	/* -sc option */
 
-#define FLAG_SMALL_CODE (0 && flag_small_code)
+#define FLAG_SMALL_CODE (flag_small_code)
 
 #ifdef REGISTER_PREFIX_OPTIONAL
 int flag_reg_prefix_optional = REGISTER_PREFIX_OPTIONAL;
