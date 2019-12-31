@@ -388,6 +388,7 @@ static const pseudo_typeS potable[] = {
   {"global", s_globl, 0},
   {"globl", s_globl, 0},
   {"hword", cons, 2},
+  {"ident", s_ignore, 0},
   {"if", s_if, (int) O_ne},
   {"ifb", s_ifb, 1},
   {"ifc", s_ifc, 0},
@@ -453,6 +454,7 @@ static const pseudo_typeS potable[] = {
   {"short", cons, 2},
   {"single", float_cons, 'f'},
 /* size  */
+  {"size", s_ignore, 0},
   {"space", s_space, 0},
   {"skip", s_space, 0},
   {"sleb128", s_leb128, 1},
