@@ -1457,7 +1457,6 @@ const struct m68k_opcode m68k_opcodes[] =
 {"jra", 2,	one(0060000),	one(0177400), "Bb", m68000up | mcfisa_a },
 {"jra", 2,	one(0047300),	one(0177700), "!s", m68000up | mcfisa_a },
 
-{"jsr", 2,	one(0060400),	one(0177400), "Bs", m68000up | mcfisa_a },
 {"jsr", 2,	one(0047200),	one(0177700), "!s", m68000up | mcfisa_a },
 
 {"jbsr", 2,	one(0060400),	one(0177400), "Bs", m68000up | mcfisa_a },
