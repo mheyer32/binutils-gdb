@@ -851,7 +851,7 @@ amiga_perform_reloc (
 	{
 	  DPRINT(5,("PC relative\n"));
 	  relocation = sym->value + target_section->output_offset
-	    - sec->output_offset;
+	    - sec->output_offset - r->address;
 	}
       break;
 
