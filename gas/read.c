@@ -3817,7 +3817,9 @@ pseudo_set (symbolS *symbolP)
     (void) deferred_expression (&exp);
 
 #if defined(OBJ_AMIGAHUNK)
-  exp.X_op = O_constant;
+// needed to get .stabs working
+  if (exp.X_op == O_absent && symbol_get_bfdsym (symbolP)->section == undefined_section)
+    exp.X_op = O_constant;
 #endif
 
   if (exp.X_op == O_illegal)
