@@ -34,6 +34,8 @@
 static void m68k_elf_cons (int);
 #endif
 
+extern const bfd_target amiga_vec;
+
 /* This string holds the chars that always start a comment.  If the
    pre-processor is disabled, these aren't very useful.  The macro
    tc_comment_chars points to this.  We use this, rather than the
@@ -8031,6 +8033,11 @@ md_pcrel_from (fixS *fixP)
   adjust = fixP->fx_pcrel_adjust;
   if (adjust == 64)
     adjust = -1;
+
+  /* Amiga Hunk adjusts to current address. */
+  if (stdoutput->xvec == &amiga_vec && fixP->fx_addsy && symbol_get_bfdsym (fixP->fx_addsy)->section == undefined_section)
+    return - adjust;
+
   return fixP->fx_where + fixP->fx_frag->fr_address - adjust;
 }
 
