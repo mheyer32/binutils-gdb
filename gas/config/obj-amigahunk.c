@@ -249,7 +249,9 @@ obj_amiga_section_name ()
     {
       char *end = input_line_pointer;
 
-      while (0 == strchr ("\n\t,; ", *end))
+      if (0 == strchr ("\n\t,; ", *end))
+	end++;
+      while (0 == strchr ("\n\t,.; ", *end))
 	end++;
       if (end == input_line_pointer)
 	{
@@ -272,11 +274,13 @@ static void obj_amiga_section(int push) {
 	char const * name = obj_amiga_section_name();
 	if (name == NULL)
 		return;
+	ignore_rest_of_line ();
+	--input_line_pointer;
 
 	if (0 == strncmp(".gnu.lto_", name, 9))
 	  s_gnu_lto(name);
 	else
-	if (0 == strcmp(".rodata", name))
+	if (0 == strcmp(".rodata", name) || 0 == strcmp(".text", name))
 		s_text(push);
 	else
 		s_data(push);
