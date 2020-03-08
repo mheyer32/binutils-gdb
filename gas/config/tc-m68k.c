@@ -2589,7 +2589,7 @@ m68k_ip (char *instring)
 		  outro = 11;
 		  break;
 		case 'x':
-		  baseo = 6;
+		  baseo = 5;
 		  outro = 15;
 		  break;
 		case 'p':
