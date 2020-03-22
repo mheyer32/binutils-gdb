@@ -14,6 +14,8 @@ SECTIONS
   {
     ${RELOCATING+__stext = .;}
     *(.text)
+    *(.gnu.linkonce.t.*)
+    *(.gnu.linkonce.r.*)
     ${RELOCATING+___datadata_relocs = .;}
     ${RELOCATING+__etext = .;}
     ${PAD_TEXT+${RELOCATING+. = ${DATA_ALIGNMENT};}}
@@ -25,6 +27,7 @@ SECTIONS
     ${RELOCATING+__sdata = .;}
     ${CONSTRUCTING+CONSTRUCTORS}
     *(.data)
+    *(.gnu.linkonce.d.*)
     ${RELOCATING+___a4_init = 0x7ffe;}
     ${RELOCATING+__edata = .;}
   }
