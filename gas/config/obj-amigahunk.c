@@ -45,7 +45,7 @@ static void obj_amiga_line (int);
 static void obj_amiga_weak (int);
 static void obj_amiga_section (int);
 static char * obj_amiga_section_name (void);
-static void s_gnu_lto(char const * secname);
+static void s_gnu_section(char const * secname);
 
 const pseudo_typeS obj_pseudo_table[] =
 {
@@ -101,13 +101,18 @@ void s_data_amiga (int which)
 }
 
 
-static void s_gnu_lto(char const * secname)
+static void s_gnu_section(char const * secname)
 {
   segT seg = subseg_new(secname, 0);
 
   if (!seg_info (seg)->hadone)
     {
-      bfd_set_section_flags (stdoutput, seg, SEC_READONLY | SEC_DEBUGGING);
+      int flags;
+      if (strstr(secname, "lto"))
+	flags = SEC_READONLY | SEC_DEBUGGING;
+      else
+	flags = SEC_READONLY | SEC_CODE;
+      bfd_set_section_flags (stdoutput, seg, flags);
       seg_info (seg)->hadone = 1;
       seg->name = xstrdup(secname);
     }
@@ -249,9 +254,7 @@ obj_amiga_section_name ()
     {
       char *end = input_line_pointer;
 
-      if (0 == strchr ("\n\t,; ", *end))
-	end++;
-      while (0 == strchr ("\n\t,.; ", *end))
+      while (0 == strchr ("\n\t,; ", *end))
 	end++;
       if (end == input_line_pointer)
 	{
@@ -277,8 +280,8 @@ static void obj_amiga_section(int push) {
 	ignore_rest_of_line ();
 	--input_line_pointer;
 
-	if (0 == strncmp(".gnu.lto_", name, 9))
-	  s_gnu_lto(name);
+	if (0 == strncmp(".gnu.", name, 5))
+	  s_gnu_section(name);
 	else
 	if (0 == strcmp(".rodata", name) || 0 == strcmp(".text", name))
 		s_text(push);
