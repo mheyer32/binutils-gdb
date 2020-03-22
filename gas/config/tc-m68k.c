@@ -35,6 +35,9 @@ static void m68k_elf_cons (int);
 #endif
 
 extern const bfd_target amiga_vec;
+long
+md_pcrel_from_m68k (fixS *fixP, segT current_section);
+
 
 /* This string holds the chars that always start a comment.  If the
    pre-processor is disabled, these aren't very useful.  The macro
@@ -1410,7 +1413,7 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
 			unsigned.  */
 		     + ((fixp->fx_pcrel_adjust & 0xff) ^ 0x80) - 0x80
 		     + fixp->fx_addnumber
-		     + md_pcrel_from (fixp));
+		     + md_pcrel_from (fixp, section));
 #endif
 
   reloc->howto = bfd_reloc_type_lookup (stdoutput, code);
@@ -8026,7 +8029,7 @@ md_section_align (segT segment ATTRIBUTE_UNUSED, valueT size)
    word.  The difference between the addresses of the offset and the
    first extension word is stored in fx_pcrel_adjust.  */
 long
-md_pcrel_from (fixS *fixP)
+md_pcrel_from_m68k (fixS *fixP, segT current_section)
 {
   int adjust;
 
@@ -8035,8 +8038,12 @@ md_pcrel_from (fixS *fixP)
     adjust = -1;
 
   /* Amiga Hunk adjusts to current address. */
-  if (stdoutput->xvec == &amiga_vec && fixP->fx_addsy && symbol_get_bfdsym (fixP->fx_addsy)->section == undefined_section)
-    return - adjust;
+  if (stdoutput->xvec == &amiga_vec && fixP->fx_addsy)
+    {
+      asymbol * sym = symbol_get_bfdsym (fixP->fx_addsy);
+      if (sym->section != current_section)
+	return - adjust;
+    }
 
   return fixP->fx_where + fixP->fx_frag->fr_address - adjust;
 }

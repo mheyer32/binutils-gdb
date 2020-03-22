@@ -22,3 +22,5 @@
     else						\
       (P2VAR) = 0;					\
   } while (0)
+
+#define MD_PCREL_FROM_SECTION(FIX, SEC) md_pcrel_from_m68k (FIX, SEC)
