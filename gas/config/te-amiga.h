@@ -24,3 +24,6 @@
   } while (0)
 
 #define MD_PCREL_FROM_SECTION(FIX, SEC) md_pcrel_from_m68k (FIX, SEC)
+
+#include "write.h"
+extern long md_pcrel_from_m68k (fixS *fixP, segT current_section);
