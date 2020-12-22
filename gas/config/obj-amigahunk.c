@@ -112,7 +112,7 @@ static void s_gnu_section(char const * secname)
 	flags = SEC_READONLY | SEC_DEBUGGING;
       else
 	flags = SEC_READONLY | SEC_CODE;
-      bfd_set_section_flags (stdoutput, seg, flags);
+      bfd_set_section_flags (seg, flags);
       seg_info (seg)->hadone = 1;
       seg->name = xstrdup(secname);
     }
@@ -217,12 +217,12 @@ obj_amiga_frob_file_before_fix ()
      VMAs, fake it out here....  */
   bfd_byte b = 0;
   bfd_boolean x = TRUE;
-  if (bfd_section_size (stdoutput, text_section) != 0)
+  if (bfd_section_size (text_section) != 0)
     {
       x = bfd_set_section_contents (stdoutput, text_section, &b, (file_ptr) 0,
 				    (bfd_size_type) 1);
     }
-  else if (bfd_section_size (stdoutput, data_section) != 0)
+  else if (bfd_section_size (data_section) != 0)
     {
       x = bfd_set_section_contents (stdoutput, data_section, &b, (file_ptr) 0,
 				    (bfd_size_type) 1);

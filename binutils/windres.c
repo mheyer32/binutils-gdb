@@ -1,5 +1,5 @@
 /* windres.c -- a program to manipulate Windows resources
-   Copyright (C) 1997-2019 Free Software Foundation, Inc.
+   Copyright (C) 1997-2020 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support.
    Rewritten by Kai Tietz, Onevision.
 
@@ -704,8 +704,7 @@ quot (const char *string)
   if ((buflen < slen * 2 + 2) || ! buf)
     {
       buflen = slen * 2 + 2;
-      if (buf)
-	free (buf);
+      free (buf);
       buf = (char *) xmalloc (buflen);
     }
 

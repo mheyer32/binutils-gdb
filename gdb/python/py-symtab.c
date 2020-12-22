@@ -1,6 +1,6 @@
 /* Python interface to symbol tables.
 
-   Copyright (C) 2008-2019 Free Software Foundation, Inc.
+   Copyright (C) 2008-2020 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -253,6 +253,7 @@ stpy_dealloc (PyObject *obj)
   if (symtab->next)
     symtab->next->prev = symtab->prev;
   symtab->symtab = NULL;
+  Py_TYPE (obj)->tp_free (obj);
 }
 
 

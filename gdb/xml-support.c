@@ -1,6 +1,6 @@
 /* Helper routines for parsing XML using Expat.
 
-   Copyright (C) 2006-2019 Free Software Foundation, Inc.
+   Copyright (C) 2006-2020 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,14 +19,15 @@
 
 #include "defs.h"
 #include "gdbcmd.h"
+#include "xml-builtin.h"
 #include "xml-support.h"
-#include "common/filestuff.h"
+#include "gdbsupport/filestuff.h"
 #include "safe-ctype.h"
 #include <vector>
 #include <string>
 
 /* Debugging flag.  */
-static int debug_xml;
+static bool debug_xml;
 
 /* The contents of this file are only useful if XML support is
    available.  */
@@ -919,7 +920,7 @@ xml_process_xincludes (std::string &result,
 const char *
 fetch_xml_builtin (const char *filename)
 {
-  const char *(*p)[2];
+  const char *const (*p)[2];
 
   for (p = xml_builtin; (*p)[0]; p++)
     if (strcmp ((*p)[0], filename) == 0)
@@ -976,13 +977,11 @@ xml_fetch_content_from_file (const char *filename, void *baton)
     {
       char *fullname = concat (dirname, "/", filename, (char *) NULL);
 
-      if (fullname == NULL)
-	malloc_failure (0);
-      file = gdb_fopen_cloexec (fullname, FOPEN_RT);
+      file = gdb_fopen_cloexec (fullname, FOPEN_RB);
       xfree (fullname);
     }
   else
-    file = gdb_fopen_cloexec (filename, FOPEN_RT);
+    file = gdb_fopen_cloexec (filename, FOPEN_RB);
 
   if (file == NULL)
     return {};
@@ -1009,8 +1008,10 @@ xml_fetch_content_from_file (const char *filename, void *baton)
   return text;
 }
 
+void _initialize_xml_support ();
+void _initialize_xml_support ();
 void
-_initialize_xml_support (void)
+_initialize_xml_support ()
 {
   add_setshow_boolean_cmd ("xml", class_maintenance, &debug_xml,
 			   _("Set XML parser debugging."),

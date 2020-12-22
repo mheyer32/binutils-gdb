@@ -1,6 +1,6 @@
 /* tc-aarch64.c -- Assemble for the AArch64 ISA
 
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009-2020 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of GAS.
@@ -246,12 +246,6 @@ set_fatal_syntax_error (const char *error)
 /* This is an invalid condition code that means no conditional field is
    present. */
 #define COND_ALWAYS 0x10
-
-typedef struct
-{
-  const char *template;
-  unsigned long value;
-} asm_barrier_opt;
 
 typedef struct
 {
@@ -529,7 +523,7 @@ const char EXP_CHARS[] = "eE";
 /* As in 0f12.456  */
 /* or	 0d1.2345e12  */
 
-const char FLT_CHARS[] = "rRsSfFdDxXeEpP";
+const char FLT_CHARS[] = "rRsSfFdDxXeEpPhH";
 
 /* Prefix character that indicates the start of an immediate value.  */
 #define is_immediate_prefix(C) ((C) == '#')
@@ -635,6 +629,54 @@ my_get_expression (expressionS * ep, char **str, int prefix_mode,
 const char *
 md_atof (int type, char *litP, int *sizeP)
 {
+  /* If this is a bfloat16 type, then parse it slightly differently -
+     as it does not follow the IEEE standard exactly.  */
+  if (type == 'b')
+    {
+      char * t;
+      LITTLENUM_TYPE words[MAX_LITTLENUMS];
+      FLONUM_TYPE generic_float;
+
+      t = atof_ieee_detail (input_line_pointer, 1, 8, words, &generic_float);
+
+      if (t)
+	input_line_pointer = t;
+      else
+	return _("invalid floating point number");
+
+      switch (generic_float.sign)
+	{
+	/* Is +Inf.  */
+	case 'P':
+	  words[0] = 0x7f80;
+	  break;
+
+	/* Is -Inf.  */
+	case 'N':
+	  words[0] = 0xff80;
+	  break;
+
+	/* Is NaN.  */
+	/* bfloat16 has two types of NaN - quiet and signalling.
+	   Quiet NaN has bit[6] == 1 && faction != 0, whereas
+	   signalling Nan's have bit[0] == 0 && fraction != 0.
+	   Chose this specific encoding as it is the same form
+	   as used by other IEEE 754 encodings in GAS.  */
+	case 0:
+	  words[0] = 0x7fff;
+	  break;
+
+	default:
+	  break;
+	}
+
+      *sizeP = 2;
+
+      md_number_to_chars (litP, (valueT) words[0], sizeof (LITTLENUM_TYPE));
+
+      return NULL;
+    }
+
   return ieee_md_atof (type, litP, sizeP, target_big_endian);
 }
 
@@ -835,7 +877,7 @@ parse_vector_type_for_operand (aarch64_reg_type reg_type,
       return FALSE;
     }
 
-elt_size:
+ elt_size:
   switch (TOLOWER (*ptr))
     {
     case 'b':
@@ -2106,6 +2148,8 @@ const pseudo_typeS md_pseudo_table[] = {
   {"dword", s_aarch64_elf_cons, 8},
   {"variant_pcs", s_variant_pcs, 0},
 #endif
+  {"float16", float_cons, 'h'},
+  {"bfloat16", float_cons, 'b'},
   {0, 0, 0}
 };
 
@@ -2140,7 +2184,7 @@ reg_name_p (char *str, aarch64_reg_type reg_type)
     return FALSE;
 
   skip_whitespace (str);
-  if (*str == ',' || is_end_of_line[(unsigned int) *str])
+  if (*str == ',' || is_end_of_line[(unsigned char) *str])
     return TRUE;
 
   return FALSE;
@@ -2374,7 +2418,7 @@ parse_aarch64_imm_float (char **ccp, int *immed, bfd_boolean dp_p,
   *ccp = str;
   return TRUE;
 
-invalid_fp:
+ invalid_fp:
   set_fatal_syntax_error (_("invalid floating-point constant"));
   return FALSE;
 }
@@ -3401,6 +3445,7 @@ parse_shifter_operand_reloc (char **str, aarch64_opnd_info *operand,
      [base,Xm,SXTX {#imm}]
      [base,Wm,(S|U)XTW {#imm}]
    Pre-indexed
+     [base]!                    // in ldraa/ldrab exclusive
      [base,#imm]!
    Post-indexed
      [base],#imm
@@ -3715,29 +3760,42 @@ parse_address_main (char **str, aarch64_opnd_info *operand,
     }
 
   /* If at this point neither .preind nor .postind is set, we have a
-     bare [Rn]{!}; reject [Rn]! accept [Rn] as a shorthand for [Rn,#0].
+     bare [Rn]{!}; only accept [Rn]! as a shorthand for [Rn,#0]! for ldraa and
+     ldrab, accept [Rn] as a shorthand for [Rn,#0].
      For SVE2 vector plus scalar offsets, allow [Zn.<T>] as shorthand for
      [Zn.<T>, xzr].  */
   if (operand->addr.preind == 0 && operand->addr.postind == 0)
     {
       if (operand->addr.writeback)
 	{
-	  /* Reject [Rn]!   */
-	  set_syntax_error (_("missing offset in the pre-indexed address"));
-	  return FALSE;
+	  if (operand->type == AARCH64_OPND_ADDR_SIMM10)
+            {
+              /* Accept [Rn]! as a shorthand for [Rn,#0]!   */
+              operand->addr.offset.is_reg = 0;
+              operand->addr.offset.imm = 0;
+              operand->addr.preind = 1;
+            }
+          else
+           {
+	     /* Reject [Rn]!   */
+	     set_syntax_error (_("missing offset in the pre-indexed address"));
+	     return FALSE;
+	   }
 	}
-
-      operand->addr.preind = 1;
-      if (operand->type == AARCH64_OPND_SVE_ADDR_ZX)
+       else
 	{
-	  operand->addr.offset.is_reg = 1;
-	  operand->addr.offset.regno = REG_ZR;
-	  *offset_qualifier = AARCH64_OPND_QLF_X;
-	}
-      else
-	{
-	  inst.reloc.exp.X_op = O_constant;
-	  inst.reloc.exp.X_add_number = 0;
+          operand->addr.preind = 1;
+          if (operand->type == AARCH64_OPND_SVE_ADDR_ZX)
+	   {
+	     operand->addr.offset.is_reg = 1;
+	     operand->addr.offset.regno = REG_ZR;
+	     *offset_qualifier = AARCH64_OPND_QLF_X;
+ 	   }
+          else
+	   {
+	     inst.reloc.exp.X_op = O_constant;
+	     inst.reloc.exp.X_add_number = 0;
+	   }
 	}
     }
 
@@ -3930,7 +3988,7 @@ static int
 parse_barrier (char **str)
 {
   char *p, *q;
-  const asm_barrier_opt *o;
+  const struct aarch64_name_value_pair *o;
 
   p = q = *str;
   while (ISALPHA (*q))
@@ -3962,7 +4020,7 @@ parse_barrier_psb (char **str,
   if (!o)
     {
       set_fatal_syntax_error
-	( _("unknown or missing option to PSB"));
+	( _("unknown or missing option to PSB/TSB"));
       return PARSE_FAIL;
     }
 
@@ -3970,7 +4028,7 @@ parse_barrier_psb (char **str,
     {
       /* PSB only accepts option name 'CSYNC'.  */
       set_syntax_error
-	(_("the specified option is not accepted for PSB"));
+	(_("the specified option is not accepted for PSB/TSB"));
       return PARSE_FAIL;
     }
 
@@ -4960,7 +5018,8 @@ get_aarch64_insn (char *buf)
 {
   unsigned char *where = (unsigned char *) buf;
   uint32_t result;
-  result = (where[0] | (where[1] << 8) | (where[2] << 16) | (where[3] << 24));
+  result = ((where[0] | (where[1] << 8) | (where[2] << 16)
+	     | ((uint32_t) where[3] << 24)));
   return result;
 }
 
@@ -5115,6 +5174,10 @@ vectype_to_qualifier (const struct vector_type_el *vectype)
       if (vectype->type == NT_b && vectype->width == 4)
 	return AARCH64_OPND_QLF_S_4B;
 
+      /* Special case S_2H.  */
+      if (vectype->type == NT_h && vectype->width == 2)
+	return AARCH64_OPND_QLF_S_2H;
+
       /* Vector element register.  */
       return AARCH64_OPND_QLF_S_B + vectype->type;
     }
@@ -5147,7 +5210,7 @@ vectype_to_qualifier (const struct vector_type_el *vectype)
       return offset;
     }
 
-vectype_conversion_fail:
+ vectype_conversion_fail:
   first_error (_("bad vector arrangement type"));
   return AARCH64_OPND_QLF_NIL;
 }
@@ -5733,11 +5796,20 @@ parse_operands (char *str, const aarch64_opcode *opcode)
 	      val = parse_vector_reg_list (&str, reg_type, &vectype);
 	      if (val == PARSE_FAIL)
 		goto failure;
+
 	      if (! reg_list_valid_p (val, /* accept_alternate */ 0))
 		{
 		  set_fatal_syntax_error (_("invalid register list"));
 		  goto failure;
 		}
+
+	      if (vectype.width != 0 && *str != ',')
+		{
+		  set_fatal_syntax_error
+		    (_("expected element type rather than vector type"));
+		  goto failure;
+		}
+
 	      info->reglist.first_regno = (val >> 2) & 0x1f;
 	      info->reglist.num_regs = (val & 0x3) + 1;
 	    }
@@ -6071,6 +6143,7 @@ parse_operands (char *str, const aarch64_opcode *opcode)
 	  break;
 
 	case AARCH64_OPND_EXCEPTION:
+	case AARCH64_OPND_UNDEFINED:
 	  po_misc_or_fail (parse_immediate_expression (&str, &inst.reloc.exp,
 						       imm_reg_type));
 	  assign_imm_if_const_or_fixup_later (&inst.reloc, info,
@@ -6356,6 +6429,7 @@ parse_operands (char *str, const aarch64_opcode *opcode)
 	  break;
 
 	case AARCH64_OPND_SVE_ADDR_RI_S4x16:
+	case AARCH64_OPND_SVE_ADDR_RI_S4x32:
 	case AARCH64_OPND_SVE_ADDR_RI_S4xVL:
 	case AARCH64_OPND_SVE_ADDR_RI_S4x2xVL:
 	case AARCH64_OPND_SVE_ADDR_RI_S4x3xVL:
@@ -6573,7 +6647,7 @@ parse_operands (char *str, const aarch64_opcode *opcode)
 	case AARCH64_OPND_SYSREG_TLBI:
 	  inst.base.operands[i].sysins_op =
 	    parse_sys_ins_reg (&str, aarch64_sys_regs_tlbi_hsh);
-sys_reg_ins:
+	sys_reg_ins:
 	  if (inst.base.operands[i].sysins_op == NULL)
 	    {
 	      set_fatal_syntax_error ( _("unknown or missing operation name"));
@@ -6628,7 +6702,7 @@ sys_reg_ins:
       inst.base.operands[i].present = 1;
       continue;
 
-failure:
+    failure:
       /* The parse routine should already have set the error, but in case
 	 not, set a default one here.  */
       if (! error_p ())
@@ -6694,7 +6768,7 @@ failure:
 	(_("unexpected characters following instruction"));
     }
 
-parse_operands_return:
+ parse_operands_return:
 
   if (error_p ())
     {
@@ -7353,7 +7427,7 @@ aarch64_init_frag (fragS * fragP, int max_chars)
 
   /* PR 21809: Do not set a mapping state for debug sections
      - it just confuses other tools.  */
-  if (bfd_get_section_flags (NULL, now_seg) & SEC_DEBUGGING)
+  if (bfd_section_flags (now_seg) & SEC_DEBUGGING)
     return;
 
   switch (fragP->fr_type)
@@ -7666,11 +7740,12 @@ fix_insn (fixS *fixP, uint32_t flags, offsetT value)
   switch (opnd)
     {
     case AARCH64_OPND_EXCEPTION:
+    case AARCH64_OPND_UNDEFINED:
       if (unsigned_overflow (value, 16))
 	as_bad_where (fixP->fx_file, fixP->fx_line,
 		      _("immediate out of range"));
       insn = get_aarch64_insn (buf);
-      insn |= encode_svc_imm (value);
+      insn |= (opnd == AARCH64_OPND_EXCEPTION) ? encode_svc_imm (value) : value;
       put_aarch64_insn (buf, insn);
       break;
 
@@ -8184,12 +8259,11 @@ md_apply_fix (fixS * fixP, valueT * valP, segT seg)
       break;
     }
 
-apply_fix_return:
+ apply_fix_return:
   /* Free the allocated the struct aarch64_inst.
      N.B. currently there are very limited number of fix-up types actually use
      this field, so the impact on the performance should be minimal .  */
-  if (fixP->tc_fix_data.inst != NULL)
-    free (fixP->tc_fix_data.inst);
+  free (fixP->tc_fix_data.inst);
 
   return;
 }
@@ -8704,12 +8778,15 @@ md_begin (void)
   for (i = 0; aarch64_hint_options[i].name != NULL; i++)
     {
       const char* name = aarch64_hint_options[i].name;
+      const char* upper_name = get_upper_str(name);
 
       checked_hash_insert (aarch64_hint_opt_hsh, name,
 			   (void *) (aarch64_hint_options + i));
-      /* Also hash the name in the upper case.  */
-      checked_hash_insert (aarch64_pldop_hsh, get_upper_str (name),
-			   (void *) (aarch64_hint_options + i));
+
+      /* Also hash the name in the upper case if not the same.  */
+      if (strcmp (name, upper_name) != 0)
+	checked_hash_insert (aarch64_hint_opt_hsh, upper_name,
+			     (void *) (aarch64_hint_options + i));
     }
 
   /* Set the cpu variant based on the command-line options.  */
@@ -8790,6 +8867,8 @@ struct aarch64_cpu_option_table
    recognized by GCC.  */
 static const struct aarch64_cpu_option_table aarch64_cpus[] = {
   {"all", AARCH64_ANY, NULL},
+  {"cortex-a34", AARCH64_FEATURE (AARCH64_ARCH_V8,
+				  AARCH64_FEATURE_CRC), "Cortex-A34"},
   {"cortex-a35", AARCH64_FEATURE (AARCH64_ARCH_V8,
 				  AARCH64_FEATURE_CRC), "Cortex-A35"},
   {"cortex-a53", AARCH64_FEATURE (AARCH64_ARCH_V8,
@@ -8809,6 +8888,26 @@ static const struct aarch64_cpu_option_table aarch64_cpus[] = {
   {"cortex-a76", AARCH64_FEATURE (AARCH64_ARCH_V8_2,
 				  AARCH64_FEATURE_RCPC | AARCH64_FEATURE_F16 | AARCH64_FEATURE_DOTPROD),
 				  "Cortex-A76"},
+  {"cortex-a76ae", AARCH64_FEATURE (AARCH64_ARCH_V8_2,
+				    AARCH64_FEATURE_F16 | AARCH64_FEATURE_RCPC
+				    | AARCH64_FEATURE_DOTPROD
+				    | AARCH64_FEATURE_SSBS),
+				    "Cortex-A76AE"},
+  {"cortex-a77", AARCH64_FEATURE (AARCH64_ARCH_V8_2,
+				  AARCH64_FEATURE_F16 | AARCH64_FEATURE_RCPC
+				  | AARCH64_FEATURE_DOTPROD
+				  | AARCH64_FEATURE_SSBS),
+				  "Cortex-A77"},
+  {"cortex-a65", AARCH64_FEATURE (AARCH64_ARCH_V8_2,
+				  AARCH64_FEATURE_F16 | AARCH64_FEATURE_RCPC
+				  | AARCH64_FEATURE_DOTPROD
+				  | AARCH64_FEATURE_SSBS),
+				  "Cortex-A65"},
+  {"cortex-a65ae", AARCH64_FEATURE (AARCH64_ARCH_V8_2,
+				    AARCH64_FEATURE_F16 | AARCH64_FEATURE_RCPC
+				    | AARCH64_FEATURE_DOTPROD
+				    | AARCH64_FEATURE_SSBS),
+				    "Cortex-A65AE"},
   {"ares", AARCH64_FEATURE (AARCH64_ARCH_V8_2,
 				  AARCH64_FEATURE_RCPC | AARCH64_FEATURE_F16
 				  | AARCH64_FEATURE_DOTPROD
@@ -8831,6 +8930,25 @@ static const struct aarch64_cpu_option_table aarch64_cpus[] = {
 				  | AARCH64_FEATURE_DOTPROD
 				  | AARCH64_FEATURE_PROFILE),
 				  "Neoverse N1"},
+  {"neoverse-n2", AARCH64_FEATURE (AARCH64_ARCH_V8_5,
+				   AARCH64_FEATURE_BFLOAT16
+				 | AARCH64_FEATURE_I8MM
+				 | AARCH64_FEATURE_F16
+				 | AARCH64_FEATURE_SVE
+				 | AARCH64_FEATURE_SVE2
+				 | AARCH64_FEATURE_SVE2_BITPERM
+				 | AARCH64_FEATURE_MEMTAG
+				 | AARCH64_FEATURE_RNG),
+				 "Neoverse N2"},
+  {"neoverse-v1", AARCH64_FEATURE (AARCH64_ARCH_V8_4,
+			    AARCH64_FEATURE_PROFILE
+			  | AARCH64_FEATURE_CVADP
+			  | AARCH64_FEATURE_SVE
+			  | AARCH64_FEATURE_SSBS
+			  | AARCH64_FEATURE_RNG
+			  | AARCH64_FEATURE_F16
+			  | AARCH64_FEATURE_BFLOAT16
+			  | AARCH64_FEATURE_I8MM), "Neoverse V1"},
   {"qdf24xx", AARCH64_FEATURE (AARCH64_ARCH_V8,
 			       AARCH64_FEATURE_CRC | AARCH64_FEATURE_CRYPTO
 			       | AARCH64_FEATURE_RDMA),
@@ -8872,6 +8990,7 @@ static const struct aarch64_arch_option_table aarch64_archs[] = {
   {"armv8.3-a", AARCH64_ARCH_V8_3},
   {"armv8.4-a", AARCH64_ARCH_V8_4},
   {"armv8.5-a", AARCH64_ARCH_V8_5},
+  {"armv8.6-a", AARCH64_ARCH_V8_6},
   {NULL, AARCH64_ARCH_NONE}
 };
 
@@ -8886,9 +9005,7 @@ struct aarch64_option_cpu_value_table
 static const struct aarch64_option_cpu_value_table aarch64_features[] = {
   {"crc",		AARCH64_FEATURE (AARCH64_FEATURE_CRC, 0),
 			AARCH64_ARCH_NONE},
-  {"crypto",		AARCH64_FEATURE (AARCH64_FEATURE_CRYPTO
-					 | AARCH64_FEATURE_AES
-					 | AARCH64_FEATURE_SHA2, 0),
+  {"crypto",		AARCH64_FEATURE (AARCH64_FEATURE_CRYPTO, 0),
 			AARCH64_FEATURE (AARCH64_FEATURE_SIMD, 0)},
   {"fp",		AARCH64_FEATURE (AARCH64_FEATURE_FP, 0),
 			AARCH64_ARCH_NONE},
@@ -8934,9 +9051,8 @@ static const struct aarch64_option_cpu_value_table aarch64_features[] = {
 			AARCH64_ARCH_NONE},
   {"sm4",		AARCH64_FEATURE (AARCH64_FEATURE_SM4, 0),
 			AARCH64_ARCH_NONE},
-  {"sha3",		AARCH64_FEATURE (AARCH64_FEATURE_SHA2
-					 | AARCH64_FEATURE_SHA3, 0),
-			AARCH64_ARCH_NONE},
+  {"sha3",		AARCH64_FEATURE (AARCH64_FEATURE_SHA3, 0),
+			AARCH64_FEATURE (AARCH64_FEATURE_SHA2, 0)},
   {"rng",		AARCH64_FEATURE (AARCH64_FEATURE_RNG, 0),
 			AARCH64_ARCH_NONE},
   {"ssbs",		AARCH64_FEATURE (AARCH64_FEATURE_SSBS, 0),
@@ -8954,8 +9070,16 @@ static const struct aarch64_option_cpu_value_table aarch64_features[] = {
   {"sve2-sha3",		AARCH64_FEATURE (AARCH64_FEATURE_SVE2_SHA3, 0),
 			AARCH64_FEATURE (AARCH64_FEATURE_SVE2
 					 | AARCH64_FEATURE_SHA3, 0)},
-  {"bitperm",		AARCH64_FEATURE (AARCH64_FEATURE_SVE2_BITPERM, 0),
+  {"sve2-bitperm",	AARCH64_FEATURE (AARCH64_FEATURE_SVE2_BITPERM, 0),
 			AARCH64_FEATURE (AARCH64_FEATURE_SVE2, 0)},
+  {"bf16",		AARCH64_FEATURE (AARCH64_FEATURE_BFLOAT16, 0),
+			AARCH64_ARCH_NONE},
+  {"i8mm",		AARCH64_FEATURE (AARCH64_FEATURE_I8MM, 0),
+			AARCH64_ARCH_NONE},
+  {"f32mm",		AARCH64_FEATURE (AARCH64_FEATURE_F32MM, 0),
+			AARCH64_FEATURE (AARCH64_FEATURE_SVE, 0)},
+  {"f64mm",		AARCH64_FEATURE (AARCH64_FEATURE_F64MM, 0),
+			AARCH64_FEATURE (AARCH64_FEATURE_SVE, 0)},
   {NULL,		AARCH64_ARCH_NONE, AARCH64_ARCH_NONE},
 };
 
@@ -9445,8 +9569,7 @@ aarch64_elf_copy_symbol_attributes (symbolS *dest, symbolS *src)
     }
   else
     {
-      if (destelf->size != NULL)
-	free (destelf->size);
+      free (destelf->size);
       destelf->size = NULL;
     }
   S_SET_SIZE (dest, S_GET_SIZE (src));

@@ -1,5 +1,5 @@
 /* rddbg.c -- Read debugging information into a generic form.
-   Copyright (C) 1995-2019 Free Software Foundation, Inc.
+   Copyright (C) 1995-2020 Free Software Foundation, Inc.
    Written by Ian Lance Taylor <ian@cygnus.com>.
 
    This file is part of GNU Binutils.
@@ -121,7 +121,7 @@ read_section_stabs_debugging_info (bfd *abfd, asymbol **syms, long symcount,
 	  bfd_byte *stab;
 	  bfd_size_type stroff, next_stroff;
 
-	  stabsize = bfd_section_size (abfd, sec);
+	  stabsize = bfd_section_size (sec);
 	  stabs = (bfd_byte *) xmalloc (stabsize);
 	  if (! bfd_get_section_contents (abfd, sec, stabs, 0, stabsize))
 	    {
@@ -133,7 +133,7 @@ read_section_stabs_debugging_info (bfd *abfd, asymbol **syms, long symcount,
 	      return FALSE;
 	    }
 
-	  strsize = bfd_section_size (abfd, strsec);
+	  strsize = bfd_section_size (strsec);
 	  strings = (bfd_byte *) xmalloc (strsize + 1);
 	  if (! bfd_get_section_contents (abfd, strsec, strings, 0, strsize))
 	    {
@@ -319,8 +319,7 @@ read_symbol_stabs_debugging_info (bfd *abfd, asymbol **syms, long symcount,
 	      sc[strlen (sc) - 1] = '\0';
 	      n = concat (sc, bfd_asymbol_name (*ps), (const char *) NULL);
 	      free (sc);
-	      if (f != NULL)
-		free (f);
+	      free (f);
 	      f = n;
 	      s = n;
 	    }
@@ -372,8 +371,7 @@ static int saved_stabs_index;
 static void
 save_stab (int type, int desc, bfd_vma value, const char *string)
 {
-  if (saved_stabs[saved_stabs_index].string != NULL)
-    free (saved_stabs[saved_stabs_index].string);
+  free (saved_stabs[saved_stabs_index].string);
   saved_stabs[saved_stabs_index].type = type;
   saved_stabs[saved_stabs_index].desc = desc;
   saved_stabs[saved_stabs_index].value = value;
@@ -428,11 +426,8 @@ free_saved_stabs (void)
 
   for (i = 0; i < SAVE_STABS_COUNT; i++)
     {
-      if (saved_stabs[i].string != NULL)
-	{
-	  free (saved_stabs[i].string);
-	  saved_stabs[i].string = NULL;
-	}
+      free (saved_stabs[i].string);
+      saved_stabs[i].string = NULL;
     }
 
   saved_stabs_index = 0;

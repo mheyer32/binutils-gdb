@@ -1,6 +1,6 @@
 /* Target-dependent code for GNU/Linux UltraSPARC.
 
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003-2020 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,7 +20,7 @@
 #include "defs.h"
 #include "frame.h"
 #include "frame-unwind.h"
-#include "dwarf2-frame.h"
+#include "dwarf2/frame.h"
 #include "regset.h"
 #include "regcache.h"
 #include "gdbarch.h"
@@ -120,7 +120,7 @@ sparc64_linux_sigframe_init (const struct tramp_frame *self,
    gdbarch hook.
    Displays information related to ADI memory corruptions.  */
 
-void
+static void
 sparc64_linux_handle_segmentation_fault (struct gdbarch *gdbarch,
 				      struct ui_out *uiout)
 {
@@ -150,19 +150,19 @@ sparc64_linux_handle_segmentation_fault (struct gdbarch *gdbarch,
       uiout->text ("\n");
       uiout->field_string ("sigcode-meaning", _("ADI disabled"));
       uiout->text (_(" while accessing address "));
-      uiout->field_fmt ("bound-access", "%s", paddress (gdbarch, addr));
+      uiout->field_core_addr ("bound-access", gdbarch, addr);
       break;
     case SEGV_ADIDERR:	/* disrupting mismatch */
       uiout->text ("\n");
       uiout->field_string ("sigcode-meaning", _("ADI deferred mismatch"));
       uiout->text (_(" while accessing address "));
-      uiout->field_fmt ("bound-access", "%s", paddress (gdbarch, addr));
+      uiout->field_core_addr ("bound-access", gdbarch, addr);
       break;
     case SEGV_ADIPERR:	/* precise mismatch */
       uiout->text ("\n");
       uiout->field_string ("sigcode-meaning", _("ADI precise mismatch"));
       uiout->text (_(" while accessing address "));
-      uiout->field_fmt ("bound-access", "%s", paddress (gdbarch, addr));
+      uiout->field_core_addr ("bound-access", gdbarch, addr);
       break;
     default:
       break;
@@ -408,8 +408,9 @@ sparc64_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 					 sparc64_linux_handle_segmentation_fault);
 }
 
+void _initialize_sparc64_linux_tdep ();
 void
-_initialize_sparc64_linux_tdep (void)
+_initialize_sparc64_linux_tdep ()
 {
   gdbarch_register_osabi (bfd_arch_sparc, bfd_mach_sparc_v9,
 			  GDB_OSABI_LINUX, sparc64_linux_init_abi);

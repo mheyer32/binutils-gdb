@@ -1,5 +1,5 @@
 /* tc-m68k.c -- Assemble for the m68k family
-   Copyright (C) 1987-2019 Free Software Foundation, Inc.
+   Copyright (C) 1987-2020 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -32,6 +32,8 @@
 #include "elf/m68k.h"
 
 static void m68k_elf_cons (int);
+static void m68k_elf_gnu_attribute (int);
+
 #endif
 
 extern const bfd_target amiga_vec;
@@ -927,6 +929,7 @@ const pseudo_typeS md_pseudo_table[] =
   {"align", s_align_bytes, 0},
   {"swbeg", s_ignore, 0},
   {"long", m68k_elf_cons, 4},
+  {"gnu_attribute", m68k_elf_gnu_attribute, 0},
 #endif
   {"extend", float_cons, 'x'},
   {"ldouble", float_cons, 'x'},
@@ -2917,7 +2920,7 @@ m68k_ip (char *instring)
 		      && opP->index.reg <= ZDATA7)
 		    nextword |= (opP->index.reg - ZDATA0) << 12;
 		  else if (opP->index.reg >= ZADDR0
-			   || opP->index.reg <= ZADDR7)
+			   && opP->index.reg <= ZADDR7)
 		    nextword |= (opP->index.reg - ZADDR0 + 8) << 12;
 		}
 
@@ -6388,8 +6391,7 @@ pop_mri_control (void)
 
   n = mri_control_stack;
   mri_control_stack = n->outer;
-  if (n->top != NULL)
-    free (n->top);
+  free (n->top);
   free (n->next);
   free (n->bottom);
   free (n);
@@ -8235,6 +8237,26 @@ m68k_elf_cons (int nbytes /* 4=.long */)
   /* Put terminator back into stream.  */
   input_line_pointer--;
   demand_empty_rest_of_line ();
+}
+#endif
+
+#if defined (OBJ_ELF)
+/* Parse a .gnu_attribute directive.  */
+static void
+m68k_elf_gnu_attribute (int ignored ATTRIBUTE_UNUSED)
+{
+  int tag = obj_elf_vendor_attribute (OBJ_ATTR_GNU);
+
+  /* Check validity of defined m68k tags.  */
+  if (tag == Tag_GNU_M68K_ABI_FP)
+    {
+      unsigned int val;
+
+      val = bfd_elf_get_obj_attr_int (stdoutput, OBJ_ATTR_GNU, tag);
+
+      if (tag == Tag_GNU_M68K_ABI_FP && val > 2)
+	as_warn (_("unknown .gnu_attribute value"));
+    }
 }
 #endif
 

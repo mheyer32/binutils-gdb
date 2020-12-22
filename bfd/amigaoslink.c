@@ -1138,8 +1138,8 @@ amiga_final_link (
   if (bfd_get_flavour (abfd) == bfd_target_aout_flavour)
     return aout_amiga_final_link (abfd, info);
 
-  bfd_get_outsymbols (abfd) = (asymbol **) NULL;
-  bfd_get_symcount (abfd) = 0;
+  abfd->outsymbols = (asymbol **) NULL;
+  abfd->symcount = 0;
   outsymalloc = 0;
 
   /* Mark all sections which will be included in the output file.  */

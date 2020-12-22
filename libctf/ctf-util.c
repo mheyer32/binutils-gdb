@@ -1,5 +1,5 @@
 /* Miscellaneous utilities.
-   Copyright (C) 2019 Free Software Foundation, Inc.
+   Copyright (C) 2019-2020 Free Software Foundation, Inc.
 
    This file is part of libctf.
 
@@ -80,6 +80,14 @@ ctf_list_delete (ctf_list_t *lp, void *existing)
     lp->l_prev = p->l_prev;
 }
 
+/* Return 1 if the list is empty.  */
+
+int
+ctf_list_empty_p (ctf_list_t *lp)
+{
+  return (lp->l_next == NULL && lp->l_prev == NULL);
+}
+
 /* Convert a 32-bit ELF symbol into Elf64 and return a pointer to it.  */
 
 Elf64_Sym *
@@ -95,42 +103,7 @@ ctf_sym_to_elf64 (const Elf32_Sym *src, Elf64_Sym *dst)
   return dst;
 }
 
-/* Convert an encoded CTF string name into a pointer to a C string by looking
-  up the appropriate string table buffer and then adding the offset.  */
-
-const char *
-ctf_strraw (ctf_file_t *fp, uint32_t name)
-{
-  ctf_strs_t *ctsp = &fp->ctf_str[CTF_NAME_STID (name)];
-
-  if (ctsp->cts_strs != NULL && CTF_NAME_OFFSET (name) < ctsp->cts_len)
-    return (ctsp->cts_strs + CTF_NAME_OFFSET (name));
-
-  /* String table not loaded or corrupt offset.  */
-  return NULL;
-}
-
-const char *
-ctf_strptr (ctf_file_t *fp, uint32_t name)
-{
-  const char *s = ctf_strraw (fp, name);
-  return (s != NULL ? s : "(?)");
-}
-
-/* Same as strdup(3C), but use ctf_alloc() to do the memory allocation. */
-
-_libctf_malloc_ char *
-ctf_strdup (const char *s1)
-{
-  char *s2 = ctf_alloc (strlen (s1) + 1);
-
-  if (s2 != NULL)
-    (void) strcpy (s2, s1);
-
-  return s2;
-}
-
-/* A string appender working on dynamic strings.  */
+/* A string appender working on dynamic strings.  Returns NULL on OOM.  */
 
 char *
 ctf_str_append (char *s, const char *append)
@@ -152,6 +125,32 @@ ctf_str_append (char *s, const char *append)
   s[s_len + append_len] = '\0';
 
   return s;
+}
+
+/* A version of ctf_str_append that returns the old string on OOM.  */
+
+char *
+ctf_str_append_noerr (char *s, const char *append)
+{
+  char *new_s;
+
+  new_s = ctf_str_append (s, append);
+  if (!new_s)
+    return s;
+  return new_s;
+}
+
+/* A realloc() that fails noisily if called with any ctf_str_num_users.  */
+void *
+ctf_realloc (ctf_file_t *fp, void *ptr, size_t size)
+{
+  if (fp->ctf_str_num_refs > 0)
+    {
+      ctf_dprintf ("%p: attempt to realloc() string table with %lu active refs\n",
+		   (void *) fp, (unsigned long) fp->ctf_str_num_refs);
+      return NULL;
+    }
+  return realloc (ptr, size);
 }
 
 /* Store the specified error code into errp if it is non-NULL, and then

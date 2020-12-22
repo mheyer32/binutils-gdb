@@ -1,5 +1,5 @@
 # Expect script for MIPS ELF linker tests
-#   Copyright (C) 2002-2019 Free Software Foundation, Inc.
+#   Copyright (C) 2002-2020 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -29,7 +29,7 @@ if {[istarget "mips*-*-vxworks"]} {
 	{"VxWorks executable test 1 (dynamic)" \
 	 "tmpdir/libvxworks1.so -Tvxworks1.ld -q --force-dynamic" ""
 	 "-mips2" {vxworks1.s}
-	 {{readelf --relocs vxworks1.rd} {objdump -dr vxworks1.dd}}
+        {{readelf {--relocs -T} vxworks1.rd} {objdump -dr vxworks1.dd}}
 	 "vxworks1"}
 	{"VxWorks executable test 2 (dynamic)" \
 	 "-Tvxworks1.ld -q --force-dynamic" ""
@@ -854,9 +854,8 @@ if { $linux_gnu } {
 
 run_dump_test_n32 "emit-relocs-1" {{as -EB} {ld -EB}}
 
-run_dump_test "hash1a"
-run_dump_test "hash1b"
-run_dump_test "hash1c"
+run_dump_test "hash1"
+run_dump_test "hash2"
 
 if { $linux_gnu && $has_abi(o32) } {
     # The number of symbols that are always included in the symbol table
@@ -1576,7 +1575,7 @@ proc run_mips_undefweak_test { name abi args } {
 		[list \
 		    [list objdump -d pr21375${objsuf}.dd] \
 		    [list readelf -A pr21375${rdesuf}.gd] \
-		    [list readelf --dyn-syms pr21375${rdesuf}${irixsuf}.sd] \
+		    [list readelf {--dyn-syms --wide} pr21375${rdesuf}${irixsuf}.sd] \
 		    [list readelf -h pr21375${abisuf}.hd]] \
 		"pr21375${binsuf}${dsosuf}"]]
     }

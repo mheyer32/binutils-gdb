@@ -1,36 +1,47 @@
-2019-06-28  Alan Modra  <amodra@gmail.com>
+2020-11-16  Mark Wielaard  <mark@klomp.org>
 
-	* powerpc.h (R_PPC64_REL16_HIGH, R_PPC64_REL16_HIGHA),
-	(R_PPC64_REL16_HIGHER, R_PPC64_REL16_HIGHERA),
-	(R_PPC64_REL16_HIGHEST, R_PPC64_REL16_HIGHESTA): Define.
+	Backport from the mainline:
+	2020-09-25  Alan Modra  <amodra@gmail.com>
 
-2019-05-16  Andre Vieira  <andre.simoesdiasvieira@arm.com>
+	* dwarf.h (DW_FIRST_UT, DW_UT, DW_END_UT): Define.
 
-	* arm.h (Tag_MVE_arch): Define new enum value.
+2020-07-04  Nick Clifton  <nickc@redhat.com>
 
-2019-04-15  Sudakshina Das  <sudi.das@arm.com>
+	Binutils 2.35 branch created.
 
-	* arm.h (R_ARM_THM_BF12): New relocation code.
+2020-06-26  Nick Alcock  <nick.alcock@oracle.com>
 
-2019-04-15  Sudakshina Das  <sudi.das@arm.com>
+	* elfcpp_swap.h (bswap_16): Do not assume that presence of
+	<byteswap.h> means this is declared.  Make static inline, matching
+	recent change to libctf, since there is no non-inline definition
+	of these functions.
+	(bswap_32): Likewise.
+	(bswap_64): Likewise.
 
-	* arm.h (R_ARM_THM_BF18): New relocation code.
+2020-06-18  Fangrui Song  <i@maskray.me>
 
-2019-04-15  Sudakshina Das  <sudi.das@arm.com>
+	PR gold/26039
+	* elfcpp.h (enum DF_1): New enum member DF_1_PIE.
 
-	* arm.h (R_ARM_THM_BF16): New relocation code.
+2020-06-06  Alan Modra  <amodra@gmail.com>
 
-2018-06-24  Nick Clifton  <nickc@redhat.com>
+	* powerpc.h: Rename
+	R_PPC64_GOT_TLSGD34 to R_PPC64_GOT_TLSGD_PCREL34,
+	R_PPC64_GOT_TLSLD34 to R_PPC64_GOT_TLSLD_PCREL34,
+	R_PPC64_GOT_TPREL34 to R_PPC64_GOT_TPREL_PCREL34, and
+	R_PPC64_GOT_DTPREL34 to R_PPC64_GOT_DTPREL_PCREL34.
 
-	2.32 branch created.
+2020-01-18  Nick Clifton  <nickc@redhat.com>
 
-2019-01-01  Alan Modra  <amodra@gmail.com>
+	Binutils 2.34 branch created.
+
+2020-01-01  Alan Modra  <amodra@gmail.com>
 
 	Update year range in copyright notice of all files.
 
-For older changes see ChangeLog-2018
+For older changes see ChangeLog-2019
 
-Copyright (C) 2019 Free Software Foundation, Inc.
+Copyright (C) 2020 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

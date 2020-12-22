@@ -29,6 +29,7 @@ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  */
 #include "bfd.h"
 #include "bfdlink.h"
 #include "getopt.h"
+#include "ctf-api.h"
 
 #include "ld.h"
 #include "ldmain.h"
@@ -269,6 +270,7 @@ struct ld_emulation_xfer_struct ld_${EMULATION_NAME}_emulation =
   amiga_after_parse,			/* after_parse */
   amiga_after_open,			/* after_open */
   after_check_relocs_default,
+  before_place_orphans_default,
   amiga_after_allocation,		/* after_allocation */
   set_output_arch_default,		/* set_output_arch */
   ldemul_default_target,		/* choose_target */
@@ -289,6 +291,9 @@ struct ld_emulation_xfer_struct ld_${EMULATION_NAME}_emulation =
   NULL,					/* recognized_file */
   NULL,					/* find potential_libraries */
   NULL,					/* new_vers_pattern */
-  NULL					/* extra_map_file_text */
+  NULL,	/* extra_map_file_text */
+  NULL, /* emit_ctf_early */
+  NULL, /* examine_strtab_for_ctf */
+  NULL  /* print_symbol */
 };
 EOF

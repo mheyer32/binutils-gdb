@@ -1,6 +1,6 @@
 # Test NOCROSSREFS in a linker script.
 # By Ian Lance Taylor, Cygnus Support.
-#   Copyright (C) 2000-2019 Free Software Foundation, Inc.
+#   Copyright (C) 2000-2020 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -38,12 +38,10 @@ if { ![check_compiler_available] } {
     return
 }
 
-global CFLAGS
 set old_CFLAGS "$CFLAGS"
 
 # Pass -fplt to CC since -fno-plt doesn't work with NOCROSSREFS tests.
 # Also add $NOPIE_CFLAGS since PIE doesn't work NOCROSSREFS tests.
-global PLT_CFLAGS NOPIE_CFLAGS
 set old_CC "$CC"
 set CC "$CC $PLT_CFLAGS $NOPIE_CFLAGS"
 

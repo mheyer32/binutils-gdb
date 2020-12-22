@@ -1,5 +1,5 @@
 /* Styling for ui_file
-   Copyright (C) 2018-2019 Free Software Foundation, Inc.
+   Copyright (C) 2018-2020 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -222,6 +222,12 @@ struct ui_file_style
      case, N_READ is updated to reflect the number of chars read from
      BUF.  */
   bool parse (const char *buf, size_t *n_read);
+
+  /* We need this because we can't pass a reference via va_args.  */
+  const ui_file_style *ptr () const
+  {
+    return this;
+  }
 
 private:
 

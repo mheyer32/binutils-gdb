@@ -1,6 +1,6 @@
 /* General Compile and inject code
 
-   Copyright (C) 2014-2019 Free Software Foundation, Inc.
+   Copyright (C) 2014-2020 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -35,14 +35,14 @@
 #include "source.h"
 #include "block.h"
 #include "arch-utils.h"
-#include "common/filestuff.h"
+#include "gdbsupport/filestuff.h"
 #include "target.h"
 #include "osabi.h"
-#include "common/gdb_wait.h"
+#include "gdbsupport/gdb_wait.h"
 #include "valprint.h"
-#include "common/gdb_optional.h"
-#include "common/gdb_unlinker.h"
-#include "common/pathstuff.h"
+#include "gdbsupport/gdb_optional.h"
+#include "gdbsupport/gdb_unlinker.h"
+#include "gdbsupport/pathstuff.h"
 
 
 
@@ -56,7 +56,7 @@ static struct cmd_list_element *compile_command_list;
 
 /* Debug flag for "compile" commands.  */
 
-int compile_debug;
+bool compile_debug;
 
 /* Object of this type are stored in the compiler's symbol_err_map.  */
 
@@ -241,7 +241,7 @@ show_compile_debug (struct ui_file *file, int from_tty,
 struct compile_options
 {
   /* For -raw.  */
-  int raw = false;
+  bool raw = false;
 };
 
 using compile_flag_option_def
@@ -635,7 +635,7 @@ get_args (const compile_instance *compiler, struct gdbarch *gdbarch,
   int argc_compiler;
   char **argv_compiler;
 
-  build_argc_argv (gdbarch_gcc_target_options (gdbarch),
+  build_argc_argv (gdbarch_gcc_target_options (gdbarch).c_str (),
 		   argcp, argvp);
 
   cs_producer_options = get_selected_pc_producer_options ();
@@ -691,13 +691,11 @@ compile_to_object (struct command_line *cmd, const char *cmd_string,
   expr_pc = get_frame_address_in_block (get_selected_frame (NULL));
 
   /* Set up instance and context for the compiler.  */
-  if (current_language->la_get_compile_instance == NULL)
+  std::unique_ptr <compile_instance> compiler
+			(current_language->get_compile_instance ());
+  if (compiler == nullptr)
     error (_("No compiler support for language %s."),
 	   current_language->la_name);
-
-  compile_instance *compiler_instance
-    = current_language->la_get_compile_instance ();
-  std::unique_ptr<compile_instance> compiler (compiler_instance);
   compiler->set_print_callback (print_callback, NULL);
   compiler->set_scope (scope);
   compiler->set_block (expr_block);
@@ -726,8 +724,8 @@ compile_to_object (struct command_line *cmd, const char *cmd_string,
     error (_("Neither a simple expression, or a multi-line specified."));
 
   std::string code
-    = current_language->la_compute_program (compiler.get (), input, gdbarch,
-					    expr_block, expr_pc);
+    = current_language->compute_program (compiler.get (), input, gdbarch,
+					 expr_block, expr_pc);
   if (compile_debug)
     fprintf_unfiltered (gdb_stdlog, "debug output:\n\n%s", code.c_str ());
 
@@ -957,8 +955,9 @@ compile_instance::compile (const char *filename, int verbose_level)
 /* See compile.h.  */
 cmd_list_element *compile_cmd_element = nullptr;
 
+void _initialize_compile ();
 void
-_initialize_compile (void)
+_initialize_compile ()
 {
   struct cmd_list_element *c = NULL;
 
@@ -971,13 +970,14 @@ Command to compile source code and inject it into the inferior."),
   const auto compile_opts = make_compile_options_def_group (nullptr);
 
   static const std::string compile_code_help
-    = gdb::option::build_help (N_("\
+    = gdb::option::build_help (_("\
 Compile, inject, and execute code.\n\
 \n\
 Usage: compile code [OPTION]... [CODE]\n\
 \n\
 Options:\n\
 %OPTIONS%\n\
+\n\
 The source code may be specified as a simple one line expression, e.g.:\n\
 \n\
     compile code printf(\"Hello world\\n\");\n\
@@ -994,7 +994,7 @@ indicate the end of the expression."),
   set_cmd_completer_handle_brkchars (c, compile_code_command_completer);
 
 static const std::string compile_file_help
-    = gdb::option::build_help (N_("\
+    = gdb::option::build_help (_("\
 Evaluate a file containing source code.\n\
 \n\
 Usage: compile file [OPTION].. [FILENAME]\n\
@@ -1011,13 +1011,14 @@ Options:\n\
   const auto compile_print_opts = make_value_print_options_def_group (nullptr);
 
   static const std::string compile_print_help
-    = gdb::option::build_help (N_("\
+    = gdb::option::build_help (_("\
 Evaluate EXPR by using the compiler and print result.\n\
 \n\
 Usage: compile print [[OPTION]... --] [/FMT] [EXPR]\n\
 \n\
 Options:\n\
-%OPTIONS%\
+%OPTIONS%\n\
+\n\
 Note: because this command accepts arbitrary expressions, if you\n\
 specify any command option, you must use a double dash (\"--\")\n\
 to mark the end of option processing.  E.g.: \"compile print -o -- myobj\".\n\
@@ -1049,8 +1050,8 @@ When on, compile command debugging is enabled."),
 
   add_setshow_string_cmd ("compile-args", class_support,
 			  &compile_args,
-			  _("Set compile command GCC command-line arguments"),
-			  _("Show compile command GCC command-line arguments"),
+			  _("Set compile command GCC command-line arguments."),
+			  _("Show compile command GCC command-line arguments."),
 			  _("\
 Use options like -I (include file directory) or ABI settings.\n\
 String quoting is parsed like in shell, for example:\n\
@@ -1078,9 +1079,9 @@ String quoting is parsed like in shell, for example:\n\
   add_setshow_optional_filename_cmd ("compile-gcc", class_support,
 				     &compile_gcc,
 				     _("Set compile command "
-				       "GCC driver filename"),
+				       "GCC driver filename."),
 				     _("Show compile command "
-				       "GCC driver filename"),
+				       "GCC driver filename."),
 				     _("\
 It should be absolute filename of the gcc executable.\n\
 If empty the default target triplet will be searched in $PATH."),

@@ -1,7 +1,7 @@
 /* Support for connecting Guile's stdio to GDB's.
    as well as r/w memory via ports.
 
-   Copyright (C) 2014-2019 Free Software Foundation, Inc.
+   Copyright (C) 2014-2020 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,11 +22,11 @@
    conventions, et.al.  */
 
 #include "defs.h"
-#include "gdb_select.h"
+#include "gdbsupport/gdb_select.h"
 #include "top.h"
 #include "target.h"
 #include "guile-internal.h"
-#include "common/gdb_optional.h"
+#include "gdbsupport/gdb_optional.h"
 
 #ifdef HAVE_POLL
 #if defined (HAVE_POLL_H)
@@ -234,7 +234,7 @@ ioscm_fill_input (SCM port)
   gdb_flush (gdb_stdout);
   gdb_flush (gdb_stderr);
 
-  count = ui_file_read (gdb_stdin, (char *) pt->read_buf, pt->read_buf_size);
+  count = gdb_stdin->read ((char *) pt->read_buf, pt->read_buf_size);
   if (count == -1)
     scm_syserror (FUNC_NAME);
   if (count == 0)

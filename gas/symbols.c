@@ -1,5 +1,5 @@
 /* symbols.c -symbol table-
-   Copyright (C) 1987-2019 Free Software Foundation, Inc.
+   Copyright (C) 1987-2020 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -73,10 +73,6 @@ struct symbol_flags
      before.  It is cleared as soon as any direct reference to the
      symbol is present.  */
   unsigned int sy_weakrefd : 1;
-
-  /* This if set if the unit of the symbol value is "octets" instead
-     of "bytes".  */
-  unsigned int sy_octets : 1;
 };
 
 /* The information we keep for a symbol.  Note that the symbol table
@@ -118,7 +114,7 @@ struct symbol
 /* A pointer in the symbol may point to either a complete symbol
    (struct symbol above) or to a local symbol (struct local_symbol
    defined here).  The symbol code can detect the case by examining
-   the first field.  It is always NULL for a local symbol.
+   the first field which is present in both structs.
 
    We do this because we ordinarily only need a small amount of
    information for a local symbol.  The symbol table takes up a lot of
@@ -331,14 +327,14 @@ local_symbol_make (const char *name, segT section, valueT val, fragS *frag)
 {
   const char *name_copy;
   struct local_symbol *ret;
+  struct symbol_flags flags = { .sy_local_symbol = 1, .sy_resolved = 0 };
 
   ++local_symbol_count;
 
   name_copy = save_symbol_name (name);
 
   ret = (struct local_symbol *) obstack_alloc (&notes, sizeof *ret);
-  ret->lsy_flags.sy_local_symbol = 1;
-  ret->lsy_flags.sy_resolved = 0;
+  ret->lsy_flags = flags;
   ret->lsy_name = name_copy;
   ret->lsy_section = section;
   local_symbol_set_frag (ret, frag);
@@ -850,9 +846,7 @@ symbol_temp_new_now (void)
 symbolS *
 symbol_temp_new_now_octets (void)
 {
-  symbolS * symb = symbol_temp_new (now_seg, frag_now_fix_octets (), frag_now);
-  symb->sy_flags.sy_octets = 1;
-  return symb;
+  return symbol_temp_new (now_seg, frag_now_fix_octets (), frag_now);
 }
 
 symbolS *
@@ -929,14 +923,12 @@ symbol_find_noref (const char *name, int noref)
 	*copy++ = TOUPPER (c);
       *copy = '\0';
 
-      if (copy2 != NULL)
-	free (copy2);
+      free (copy2);
       copy = (char *) name;
     }
 
   result = symbol_find_exact_noref (name, noref);
-  if (copy != NULL)
-    free (copy);
+  free (copy);
   return result;
 }
 
@@ -1223,7 +1215,13 @@ resolve_symbol_value (symbolS *symp)
       if (local_symbol_resolved_p (locsym))
 	return final_val;
 
-      final_val += local_symbol_get_frag (locsym)->fr_address / OCTETS_PER_BYTE;
+      /* Symbols whose section has SEC_ELF_OCTETS set,
+	 resolve to octets instead of target bytes. */
+      if (locsym->lsy_section->flags & SEC_OCTETS)
+	final_val += local_symbol_get_frag (locsym)->fr_address;
+      else
+	final_val += (local_symbol_get_frag (locsym)->fr_address
+		      / OCTETS_PER_BYTE);
 
       if (finalize_syms)
 	{
@@ -1237,11 +1235,18 @@ resolve_symbol_value (symbolS *symp)
   if (symp->sy_flags.sy_resolved)
     {
       final_val = 0;
-      while (symp->sy_value.X_op == O_symbol
-	     && symp->sy_value.X_add_symbol->sy_flags.sy_resolved)
+      while (symp->sy_value.X_op == O_symbol)
 	{
 	  final_val += symp->sy_value.X_add_number;
 	  symp = symp->sy_value.X_add_symbol;
+	  if (LOCAL_SYMBOL_CHECK (symp))
+	    {
+	      struct local_symbol *locsym = (struct local_symbol *) symp;
+	      final_val += locsym->lsy_value;
+	      return final_val;
+	    }
+	  if (!symp->sy_flags.sy_resolved)
+	    return 0;
 	}
       if (symp->sy_value.X_op == O_constant)
 	final_val += symp->sy_value.X_add_number;
@@ -1336,7 +1341,9 @@ resolve_symbol_value (symbolS *symp)
 	  /* Fall through.  */
 
 	case O_constant:
-	  if (symp->sy_flags.sy_octets)
+	  /* Symbols whose section has SEC_ELF_OCTETS set,
+	     resolve to octets instead of target bytes. */
+	  if (symp->bsym->section->flags & SEC_OCTETS)
 	    final_val += symp->sy_frag->fr_address;
 	  else
 	    final_val += symp->sy_frag->fr_address / OCTETS_PER_BYTE;
@@ -1377,6 +1384,12 @@ resolve_symbol_value (symbolS *symp)
 	      resolved = symbol_resolved_p (add_symbol);
 	      break;
 	    }
+
+	  /* Don't leave symbol loops.  */
+	  if (finalize_syms
+	      && !LOCAL_SYMBOL_CHECK (add_symbol)
+	      && add_symbol->sy_flags.sy_resolving)
+	    break;
 
 	  if (finalize_syms && final_val == 0)
 	    {
@@ -1636,7 +1649,7 @@ resolve_symbol_value (symbolS *symp)
   if (finalize_syms)
     S_SET_VALUE (symp, final_val);
 
-exit_dont_set_value:
+ exit_dont_set_value:
   /* Always set the segment, even if not finalizing the value.
      The segment is used to determine whether a symbol is defined.  */
     S_SET_SEGMENT (symp, final_seg);
@@ -2310,14 +2323,14 @@ S_IS_LOCAL (symbolS *s)
   if ((flags & BSF_LOCAL) && (flags & BSF_GLOBAL))
     abort ();
 
-  if (bfd_get_section (s->bsym) == reg_section)
+  if (bfd_asymbol_section (s->bsym) == reg_section)
     return 1;
 
   if (flag_strip_local_absolute
       /* Keep BSF_FILE symbols in order to allow debuggers to identify
 	 the source file even when the object file is stripped.  */
       && (flags & (BSF_GLOBAL | BSF_FILE)) == 0
-      && bfd_get_section (s->bsym) == absolute_section)
+      && bfd_asymbol_section (s->bsym) == absolute_section)
     return 1;
 
   name = S_GET_NAME (s);
@@ -2651,18 +2664,6 @@ symbol_set_value_now (symbolS *sym)
   symbol_set_frag (sym, frag_now);
 }
 
-/* Set the value of SYM to the current position in the current segment,
-   in octets.  */
-
-void
-symbol_set_value_now_octets (symbolS *sym)
-{
-  S_SET_SEGMENT (sym, now_seg);
-  S_SET_VALUE (sym, frag_now_fix_octets ());
-  symbol_set_frag (sym, frag_now);
-  sym->sy_flags.sy_octets = 1;
-}
-
 /* Set the frag of a symbol.  */
 
 void
@@ -2932,13 +2933,6 @@ symbol_set_bfdsym (symbolS *s, asymbol *bsym)
   if ((s->bsym->flags & BSF_SECTION_SYM) == 0)
     s->bsym = bsym;
   /* else XXX - What do we do now ?  */
-}
-
-/* Return whether symbol unit is "octets" (instead of "bytes").  */
-
-int symbol_octets_p (symbolS *s)
-{
-  return s->sy_flags.sy_octets;
 }
 
 #ifdef OBJ_SYMFIELD_TYPE

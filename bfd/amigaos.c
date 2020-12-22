@@ -192,7 +192,7 @@ static reloc_howto_type *howto_for_raw_reloc PARAMS ((unsigned long, bfd_boolean
 static reloc_howto_type *howto_for_reloc PARAMS ((unsigned long));
 static bfd_boolean get_long PARAMS ((bfd *, unsigned long *));
 static bfd_boolean get_word PARAMS ((bfd *, unsigned long *));
-static const struct bfd_target *amiga_object_p PARAMS ((bfd *));
+static bfd_cleanup amiga_object_p PARAMS ((bfd *));
 static sec_ptr amiga_get_section_by_hunk_number PARAMS ((bfd *, long));
 static bfd_boolean amiga_add_reloc PARAMS ((bfd *, sec_ptr, bfd_size_type,
 	amiga_symbol_type *, reloc_howto_type *, long));
@@ -252,7 +252,7 @@ static bfd_boolean amiga_bfd_copy_private_section_data PARAMS ((bfd *,
 	sec_ptr, bfd *, sec_ptr));
 static bfd_boolean amiga_slurp_armap PARAMS ((bfd *));
 static void amiga_truncate_arname PARAMS ((bfd *, const char *, char *));
-static const struct bfd_target *amiga_archive_p PARAMS ((bfd *));
+static bfd_cleanup amiga_archive_p PARAMS ((bfd *));
 static bfd *amiga_openr_next_archived_file PARAMS ((bfd *, bfd *));
 static PTR amiga_read_ar_hdr PARAMS ((bfd *));
 static int amiga_generic_stat_arch_elt PARAMS ((bfd *, struct stat *));
@@ -416,7 +416,7 @@ get_word (bfd * abfd, unsigned long *n)
   return TRUE;
 }
 
-static const struct bfd_target *
+static bfd_cleanup
 amiga_object_p (bfd * abfd)
 {
   unsigned long x;
@@ -457,7 +457,7 @@ amiga_object_p (bfd * abfd)
   /* So we can link on 68000 AMIGAs... */
   abfd->arch_info = bfd_scan_arch ("m68k:68000");
 
-  return abfd->xvec;
+  return _bfd_no_cleanup;
 }
 
 static sec_ptr amiga_get_section_by_hunk_number (bfd *abfd, long hunk_number)
@@ -1191,7 +1191,7 @@ amiga_handle_cdb_hunk (
       current_section->size = current_section->rawsize =
 	((hunk_size==(unsigned long)-1) ? len : hunk_size);
       current_section->target_index = hunk_number;
-      bfd_set_section_flags (abfd, current_section, secflags);
+      bfd_set_section_flags (current_section, secflags);
 
       amiga_per_section(current_section)->disk_size = len; /* size on disk */
       amiga_per_section(current_section)->attribute = hunk_attribute;
@@ -1307,7 +1307,7 @@ amiga_handle_cdb_hunk (
 	      current_section->filepos = adata(abfd).sym_filepos;
 	      current_section->size = amiga_data->symtab_size;
 	      current_section->target_index = hunk_number;
-	      bfd_set_section_flags (abfd, current_section, SEC_ALLOC | SEC_DEBUGGING | SEC_HAS_CONTENTS);
+	      bfd_set_section_flags (current_section, SEC_ALLOC | SEC_DEBUGGING | SEC_HAS_CONTENTS);
 
 	      amiga_per_section(current_section)->disk_size = amiga_data->symtab_size; /* size on disk */
 	      amiga_per_section(current_section)->attribute = 0;
@@ -1320,7 +1320,7 @@ amiga_handle_cdb_hunk (
 	      current_section->filepos = adata(abfd).str_filepos;
 	      current_section->size = amiga_data->stringtab_size;
 	      current_section->target_index = hunk_number + 1;
-	      bfd_set_section_flags (abfd, current_section, SEC_ALLOC | SEC_DEBUGGING | SEC_HAS_CONTENTS);
+	      bfd_set_section_flags (current_section, SEC_ALLOC | SEC_DEBUGGING | SEC_HAS_CONTENTS);
 
 	      amiga_per_section(current_section)->disk_size = amiga_data->stringtab_size; /* size on disk */
 	      amiga_per_section(current_section)->attribute = 0;
@@ -3628,7 +3628,7 @@ amiga_slurp_armap (
       len = n & 0xffffff;
       len <<= 2;
       csym->name = symblock;
-      csym->name[len] = '\0';
+      symblock[len] = '\0';
       csym->file_offset = syms->unit_offset;
       ++csym;
     }
@@ -3638,7 +3638,7 @@ amiga_slurp_armap (
       fprintf(stderr, "slurp_armap: read not enough symbols\n");
       exit(1);
     }
-  bfd_has_map (abfd) = TRUE;
+  abfd->has_armap = TRUE;
   return TRUE;
 }
 
@@ -3650,7 +3650,7 @@ amiga_truncate_arname (
 {
 }
 
-static const struct bfd_target *
+static bfd_cleanup
 amiga_archive_p (
   bfd *abfd)
 {
@@ -3705,7 +3705,7 @@ amiga_archive_p (
       if (amiga_slurp_armap (abfd))
 	{
 	  bfd_set_error (bfd_error_no_more_archived_files);
-	return abfd->xvec;
+	return _bfd_no_cleanup;
     }
     }
 
@@ -3911,6 +3911,7 @@ bfd_boolean amiga_final_link PARAMS ((bfd *, struct bfd_link_info *));
 #define amiga_bfd_lookup_section_flags             bfd_generic_lookup_section_flags
 #define amiga_bfd_merge_sections                   bfd_generic_merge_sections
 #define amiga_bfd_is_group_section                 bfd_generic_is_group_section
+#define amiga_bfd_group_name			  bfd_generic_group_name
 #define amiga_bfd_discard_group                    bfd_generic_discard_group
 #define amiga_section_already_linked               _bfd_generic_section_already_linked
 #define amiga_bfd_define_common_symbol             bfd_generic_define_common_symbol

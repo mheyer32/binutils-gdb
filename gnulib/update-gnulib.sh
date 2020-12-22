@@ -1,6 +1,6 @@
 #! /bin/sh
 
-# Copyright (C) 2011-2019 Free Software Foundation, Inc.
+# Copyright (C) 2011-2020 Free Software Foundation, Inc.
 #
 # This file is part of GDB.
 #
@@ -32,6 +32,7 @@
 IMPORTED_GNULIB_MODULES="\
     alloca \
     canonicalize-lgpl \
+    count-one-bits \
     dirent \
     dirfd \
     errno \
@@ -55,9 +56,11 @@ IMPORTED_GNULIB_MODULES="\
     setenv \
     signal-h \
     strchrnul \
+    strerror_r-posix \
     strstr \
     strtok_r \
     sys_stat \
+    time_r \
     unistd \
     unsetenv \
     update-copyright \
@@ -66,7 +69,7 @@ IMPORTED_GNULIB_MODULES="\
 "
 
 # The gnulib commit ID to use for the update.
-GNULIB_COMMIT_SHA1="38237baf99386101934cd93278023aa4ae523ec0"
+GNULIB_COMMIT_SHA1="e22cd2677a4b7beacbf30b93bb0559f7b89f96ce"
 
 # The expected version number for the various auto tools we will
 # use after the import.
@@ -162,18 +165,15 @@ fi
 # Apply our local patches.
 apply_patches ()
 {
-    patch -p3 -f -i "$1"
+    patch -p2 -f -i "$1"
     if [ $? -ne 0 ]; then
         echo "Failed to apply some patches.  Aborting."
         exit 1
     fi
 }
 
-apply_patches "patches/0001-Fix-PR-gdb-23558-Use-system-s-getcwd-when-cross-comp.patch"
-apply_patches "patches/0002-mkostemp-mkostemps-Fix-compilation-error-in-C-mode-o.patch"
-
 # Regenerate all necessary files...
-aclocal -Iimport/m4 -I../config &&
+aclocal &&
 autoconf &&
 autoheader &&
 automake
@@ -181,15 +181,3 @@ if [ $? -ne 0 ]; then
    echo "Error: Failed to regenerate Makefiles and configure scripts."
    exit 1
 fi
-
-# Update aclocal-m4-deps.mk
-ACLOCAL_M4_DEPS_FILE=aclocal-m4-deps.mk
-cat > ${ACLOCAL_M4_DEPS_FILE}.tmp <<EOF
-# THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi :set ro:
-aclocal_m4_deps = \\
-$(find import/m4 -type f -name "*.m4" | LC_COLLATE=C sort | \
-  sed 's/^/	/; s/$/ \\/; $s/ \\//g')
-EOF
-
-../move-if-change ${ACLOCAL_M4_DEPS_FILE}.tmp ${ACLOCAL_M4_DEPS_FILE}
-rm -f ${ACLOCAL_M4_DEPS_FILE}.tmp

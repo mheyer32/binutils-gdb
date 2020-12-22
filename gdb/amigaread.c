@@ -49,29 +49,38 @@
 #include "auxv.h"
 #include "libamiga.h"
 #include "mdebugread.h"
+#include "ctfread.h"
+#include "gdbsupport/gdb_string_view.h"
+#include "gdbsupport/scoped_fd.h"
+#include "debuginfod-support.h"
+
+void
+_initialize_amigaread (void);
+
 
 /* Forward declarations.  */
 extern const struct sym_fns amiga_sym_fns_gdb_index;
 extern const struct sym_fns amiga_sym_fns_debug_names;
 extern const struct sym_fns amiga_sym_fns_lazy_psyms;
 
-/* The struct elfinfo is available only during ELF symbol table and
+/* The struct amigainfo is available only during AMIGA symbol table and
    psymtab reading.  It is destroyed at the completion of psymtab-reading.
    It's local to amiga_symfile_read.  */
 
-struct elfinfo
+struct amigainfo
   {
     asection *stabsect;		/* Section pointer for .stab section */
     asection *mdebugsect;	/* Section pointer for .mdebug section */
+    asection *ctfsect;		/* Section pointer for .ctf section */
   };
 
 /* Type for per-BFD data.  */
 
-typedef std::vector<std::unique_ptr<probe>> elfread_data;
+typedef std::vector<std::unique_ptr<probe>> amigaread_data;
 
 /* Per-BFD data for probe info.  */
 
-static const struct bfd_key<elfread_data> probe_key;
+static const struct bfd_key<amigaread_data> probe_key;
 
 /* Minimal symbols located at the GOT entries for .plt - that is the real
    pointer where the given entry will jump to.  It gets updated by the real
@@ -82,14 +91,13 @@ static const struct bfd_key<elfread_data> probe_key;
 
 /* Locate the segments in ABFD.  */
 
-static struct symfile_segment_data *
+static symfile_segment_data_up
 amiga_symfile_segments (bfd *abfd)
 {
   Elf_Internal_Phdr *phdrs = 0, **segments;
 //  long phdrs_size;
   int num_phdrs = -1, num_segments, num_sections, i;
   asection *sect;
-  struct symfile_segment_data *data;
 
 #if 0
   phdrs_size = bfd_get_amiga_phdr_upper_bound (abfd);
@@ -111,25 +119,22 @@ amiga_symfile_segments (bfd *abfd)
   if (num_segments == 0)
     return NULL;
 
-  data = XCNEW (struct symfile_segment_data);
-  data->num_segments = num_segments;
-  data->segment_bases = XCNEWVEC (CORE_ADDR, num_segments);
-  data->segment_sizes = XCNEWVEC (CORE_ADDR, num_segments);
+  symfile_segment_data_up data (new symfile_segment_data);
+  data->segments.reserve (num_segments);
 
   for (i = 0; i < num_segments; i++)
-    {
-      data->segment_bases[i] = segments[i]->p_vaddr;
-      data->segment_sizes[i] = segments[i]->p_memsz;
-    }
+    data->segments.emplace_back (segments[i]->p_vaddr, segments[i]->p_memsz);
 
   num_sections = bfd_count_sections (abfd);
-  data->segment_info = XCNEWVEC (int, num_sections);
+
+  /* All elements are initialized to 0 (map to no segment).  */
+  data->segment_info.resize (num_sections);
 
   for (i = 0, sect = abfd->sections; sect != NULL; i++, sect = sect->next)
     {
       int j;
 
-      if ((bfd_get_section_flags (abfd, sect) & SEC_ALLOC) == 0)
+      if ((bfd_section_flags (sect) & SEC_ALLOC) == 0)
 	continue;
 
       Elf_Internal_Shdr *this_hdr = &elf_section_data (sect)->this_hdr;
@@ -144,16 +149,16 @@ amiga_symfile_segments (bfd *abfd)
       /* We should have found a segment for every non-empty section.
 	 If we haven't, we will not relocate this section by any
 	 offsets we apply to the segments.  As an exception, do not
-	 warn about SHT_NOBITS sections; in normal ELF execution
+	 warn about SHT_NOBITS sections; in normal AMIGA execution
 	 environments, SHT_NOBITS means zero-initialized and belongs
 	 in a segment, but in no-OS environments some tools (e.g. ARM
 	 RealView) use SHT_NOBITS for uninitialized data.  Since it is
 	 uninitialized, it doesn't need a program header.  Such
 	 binaries are not relocatable.  */
-      if (bfd_get_section_size (sect) > 0 && j == num_segments
-	  && (bfd_get_section_flags (abfd, sect) & SEC_LOAD) != 0)
-	warning (_("Loadable section \"%s\" outside of ELF segments"),
-		 bfd_section_name (abfd, sect));
+      if (bfd_section_size (sect) > 0 && j == num_segments
+	  && (bfd_section_flags (sect) & SEC_LOAD) != 0)
+	warning (_("Loadable section \"%s\" outside of Amiga Hunks"),
+		 bfd_section_name (sect));
     }
 
   return data;
@@ -166,7 +171,7 @@ amiga_symfile_segments (bfd *abfd)
 
    For now we recognize the dwarf debug information sections and
    line number sections from matching their section names.  The
-   ELF definition is no real help here since it has no direct
+   AMIGA definition is no real help here since it has no direct
    knowledge of DWARF (by design, so any debugging format can be
    used).
 
@@ -181,9 +186,9 @@ amiga_symfile_segments (bfd *abfd)
 static void
 amiga_locate_sections (bfd *ignore_abfd, asection *sectp, void *eip)
 {
-  struct elfinfo *ei;
+  struct amigainfo *ei;
 
-  ei = (struct elfinfo *) eip;
+  ei = (struct amigainfo *) eip;
   if (strcmp (sectp->name, ".stab") == 0)
     {
       ei->stabsect = sectp;
@@ -192,35 +197,50 @@ amiga_locate_sections (bfd *ignore_abfd, asection *sectp, void *eip)
     {
       ei->mdebugsect = sectp;
     }
+  else if (strcmp (sectp->name, ".ctf") == 0)
+    {
+      ei->ctfsect = sectp;
+    }
 }
 
 static struct minimal_symbol *
 record_minimal_symbol (minimal_symbol_reader &reader,
-		       const char *name, int name_len, bool copy_name,
+		       gdb::string_view name, bool copy_name,
 		       CORE_ADDR address,
 		       enum minimal_symbol_type ms_type,
 		       asection *bfd_section, struct objfile *objfile)
 {
-  struct gdbarch *gdbarch = get_objfile_arch (objfile);
+  struct gdbarch *gdbarch = objfile->arch ();
 
   if (ms_type == mst_text || ms_type == mst_file_text
       || ms_type == mst_text_gnu_ifunc)
     address = gdbarch_addr_bits_remove (gdbarch, address);
 
-  return reader.record_full (name, name_len, copy_name, address,
-			     ms_type,
-			     gdb_bfd_section_index (objfile->obfd,
-						    bfd_section));
+  /* We only setup section information for allocatable sections.  Usually
+     we'd only expect to find msymbols for allocatable sections, but if the
+     AMIGA is malformed then this might not be the case.  In that case don't
+     create an msymbol that references an uninitialised section object.  */
+  int section_index = 0;
+  if ((bfd_section_flags (bfd_section) & SEC_ALLOC) == SEC_ALLOC)
+    section_index = gdb_bfd_section_index (objfile->obfd, bfd_section);
+
+  struct minimal_symbol *result
+    = reader.record_full (name, copy_name, address, ms_type, section_index);
+  if ((objfile->flags & OBJF_MAINLINE) == 0
+      && (ms_type == mst_data || ms_type == mst_bss))
+    result->maybe_copied = 1;
+
+  return result;
 }
 
-/* Read the symbol table of an ELF file.
+/* Read the symbol table of an Amiga file.
 
    Given an objfile, a symbol table, and a flag indicating whether the
    symbol table contains regular, dynamic, or synthetic symbols, add all
    the global function and data symbols to the minimal symbol table.
 
-   In stabs-in-ELF, as implemented by Sun, there are some local symbols
-   defined in the ELF symbol table, which can be used to locate
+   In stabs-in-AMIGA, as implemented by Sun, there are some local symbols
+   defined in the AMIGA symbol table, which can be used to locate
    the beginnings of sections from each ".o" file that was linked to
    form the executable objfile.  We gather any such info and record it
    in data structures hung off the objfile's private data.  */
@@ -235,7 +255,7 @@ amiga_symtab_read (minimal_symbol_reader &reader,
 		 long number_of_symbols, asymbol **symbol_table,
 		 bool copy_names)
 {
-  struct gdbarch *gdbarch = get_objfile_arch (objfile);
+  struct gdbarch *gdbarch = objfile->arch ();
   asymbol *sym;
   long i;
   CORE_ADDR symaddr;
@@ -246,7 +266,7 @@ amiga_symtab_read (minimal_symbol_reader &reader,
   int stripped = (bfd_get_symcount (objfile->obfd) == 0);
 #if 0
   int amiga_make_msymbol_special_p
-    = gdbarch_make_msymbol_special_p (gdbarch);
+    = gdbarch_amiga_make_msymbol_special_p (gdbarch);
 #endif
   for (i = 0; i < number_of_symbols; i++)
     {
@@ -294,12 +314,12 @@ amiga_symtab_read (minimal_symbol_reader &reader,
 	     covers the stub's address.  */
 	  for (sect = abfd->sections; sect != NULL; sect = sect->next)
 	    {
-	      if ((bfd_get_section_flags (abfd, sect) & SEC_ALLOC) == 0)
+	      if ((bfd_section_flags (sect) & SEC_ALLOC) == 0)
 		continue;
 
-	      if (symaddr >= bfd_get_section_vma (abfd, sect)
-		  && symaddr < bfd_get_section_vma (abfd, sect)
-			       + bfd_get_section_size (sect))
+	      if (symaddr >= bfd_section_vma (sect)
+		  && symaddr < bfd_section_vma (sect)
+			       + bfd_section_size (sect))
 		break;
 	    }
 	  if (!sect)
@@ -323,14 +343,14 @@ amiga_symtab_read (minimal_symbol_reader &reader,
 	    continue;
 
 	  msym = record_minimal_symbol
-	    (reader, sym->name, strlen (sym->name), copy_names,
+	    (reader, sym->name, copy_names,
 	     symaddr, mst_solib_trampoline, sect, objfile);
 	  if (msym != NULL)
 	    {
 	      msym->filename = filesymname;
 #if 0
 	      if (amiga_make_msymbol_special_p)
-		gdbarch_make_msymbol_special (gdbarch, sym, msym);
+		gdbarch_amiga_make_msymbol_special (gdbarch, sym, msym);
 #endif
 	    }
 	  continue;
@@ -342,11 +362,7 @@ amiga_symtab_read (minimal_symbol_reader &reader,
       if (type == ST_DYNAMIC && !stripped)
 	continue;
       if (sym->flags & BSF_FILE)
-	{
-	  filesymname
-	    = ((const char *) objfile->per_bfd->filename_cache.insert
-	       (sym->name, strlen (sym->name) + 1));
-	}
+	filesymname = objfile->intern (sym->name);
       else if (sym->flags & BSF_SECTION_SYM)
 	continue;
       else if (sym->flags & (BSF_GLOBAL | BSF_LOCAL | BSF_WEAK
@@ -369,7 +385,7 @@ amiga_symtab_read (minimal_symbol_reader &reader,
 		 with special section indices for dynamic symbols.
 
 		 NOTE: uweigand-20071112: Synthetic symbols do not
-		 have an ELF-private part, so do not touch those.  */
+		 have an AMIGA-private part, so do not touch those.  */
 	      unsigned int shndx = type == ST_SYNTHETIC ? 0 :
 		((elf_symbol_type *) sym)->internal_elf_sym.st_shndx;
 
@@ -469,7 +485,7 @@ amiga_symtab_read (minimal_symbol_reader &reader,
 	      continue;	/* Skip this symbol.  */
 	    }
 	  msym = record_minimal_symbol
-	    (reader, sym->name, strlen (sym->name), copy_names, symaddr,
+	    (reader, sym->name, copy_names, symaddr,
 	     ms_type, sym->section, objfile);
 
 	  if (msym)
@@ -500,8 +516,10 @@ amiga_symtab_read (minimal_symbol_reader &reader,
 		{
 		  int len = atsign - sym->name;
 
-		  record_minimal_symbol (reader, sym->name, len, true, symaddr,
-					 ms_type, sym->section, objfile);
+		  record_minimal_symbol (reader,
+					 gdb::string_view (sym->name, len),
+					 true, symaddr, ms_type, sym->section,
+					 objfile);
 		}
 	    }
 
@@ -517,10 +535,9 @@ amiga_symtab_read (minimal_symbol_reader &reader,
 		{
 		  struct minimal_symbol *mtramp;
 
-		  mtramp = record_minimal_symbol (reader, sym->name, len - 4,
-						  true, symaddr,
-						  mst_solib_trampoline,
-						  sym->section, objfile);
+		  mtramp = record_minimal_symbol
+		    (reader, gdb::string_view (sym->name, len - 4), true,
+		     symaddr, mst_solib_trampoline, sym->section, objfile);
 		  if (mtramp)
 		    {
 		      SET_MSYMBOL_SIZE (mtramp, MSYMBOL_SIZE (msym));
@@ -549,6 +566,103 @@ static void
 amiga_rel_plt_read (minimal_symbol_reader &reader,
 		  struct objfile *objfile, asymbol **dyn_symbol_table)
 {
+#if 0
+  bfd *obfd = objfile->obfd;
+  const struct amiga_backend_data *bed = get_amiga_backend_data (obfd);
+  asection *relplt, *got_plt;
+  bfd_size_type reloc_count, reloc;
+  struct gdbarch *gdbarch = objfile->arch ();
+  struct type *ptr_type = builtin_type (gdbarch)->builtin_data_ptr;
+  size_t ptr_size = TYPE_LENGTH (ptr_type);
+
+  if (objfile->separate_debug_objfile_backlink)
+    return;
+
+  got_plt = bfd_get_section_by_name (obfd, ".got.plt");
+  if (got_plt == NULL)
+    {
+      /* For platforms where there is no separate .got.plt.  */
+      got_plt = bfd_get_section_by_name (obfd, ".got");
+      if (got_plt == NULL)
+	return;
+    }
+
+  /* Depending on system, we may find jump slots in a relocation
+     section for either .got.plt or .plt.  */
+  asection *plt = bfd_get_section_by_name (obfd, ".plt");
+  int plt_amiga_idx = (plt != NULL) ? elf_section_data (plt)->this_idx : -1;
+
+  int got_plt_amiga_idx = elf_section_data (got_plt)->this_idx;
+
+  /* This search algorithm is from _bfd_amiga_canonicalize_dynamic_reloc.  */
+  for (relplt = obfd->sections; relplt != NULL; relplt = relplt->next)
+    {
+      const auto &this_hdr = elf_section_data (relplt)->this_hdr;
+
+      if (this_hdr.sh_type == SHT_REL || this_hdr.sh_type == SHT_RELA)
+	{
+	  if (this_hdr.sh_info == plt_amiga_idx
+	      || this_hdr.sh_info == got_plt_amiga_idx)
+	    break;
+}
+    }
+  if (relplt == NULL)
+    return;
+
+  if (! bed->s->slurp_reloc_table (obfd, relplt, dyn_symbol_table, TRUE))
+    return;
+
+  std::string string_buffer;
+
+  /* Does ADDRESS reside in SECTION of OBFD?  */
+  auto within_section = [obfd] (asection *section, CORE_ADDR address)
+    {
+      if (section == NULL)
+	return false;
+
+      return (bfd_section_vma (section) <= address
+	      && (address < bfd_section_vma (section)
+		  + bfd_section_size (section)));
+    };
+
+  reloc_count = relplt->size / elf_section_data (relplt)->this_hdr.sh_entsize;
+  for (reloc = 0; reloc < reloc_count; reloc++)
+    {
+      const char *name;
+      struct minimal_symbol *msym;
+      CORE_ADDR address;
+      const char *got_suffix = SYMBOL_GOT_PLT_SUFFIX;
+      const size_t got_suffix_len = strlen (SYMBOL_GOT_PLT_SUFFIX);
+
+      name = bfd_asymbol_name (*relplt->relocation[reloc].sym_ptr_ptr);
+      address = relplt->relocation[reloc].address;
+
+      asection *msym_section;
+
+      /* Does the pointer reside in either the .got.plt or .plt
+	 sections?  */
+      if (within_section (got_plt, address))
+	msym_section = got_plt;
+      else if (within_section (plt, address))
+	msym_section = plt;
+      else
+	continue;
+
+      /* We cannot check if NAME is a reference to
+	 mst_text_gnu_ifunc/mst_data_gnu_ifunc as in OBJFILE the
+	 symbol is undefined and the objfile having NAME defined may
+	 not yet have been loaded.  */
+
+      string_buffer.assign (name);
+      string_buffer.append (got_suffix, got_suffix + got_suffix_len);
+
+      msym = record_minimal_symbol (reader, string_buffer,
+				    true, address, mst_slot_got_plt,
+				    msym_section, objfile);
+      if (msym)
+	SET_MSYMBOL_SIZE (msym, ptr_size);
+    }
+#endif    
 }
 
 /* The data pointer is htab_t for gnu_ifunc_record_cache_unchecked.  */
@@ -602,7 +716,6 @@ static int
 amiga_gnu_ifunc_record_cache (const char *name, CORE_ADDR addr)
 {
   struct bound_minimal_symbol msym;
-  asection *sect;
   struct objfile *objfile;
   htab_t htab;
   struct amiga_gnu_ifunc_cache entry_local, *entry_p;
@@ -613,13 +726,11 @@ amiga_gnu_ifunc_record_cache (const char *name, CORE_ADDR addr)
     return 0;
   if (BMSYMBOL_VALUE_ADDRESS (msym) != addr)
     return 0;
-  /* minimal symbols have always SYMBOL_OBJ_SECTION non-NULL.  */
-  sect = MSYMBOL_OBJ_SECTION (msym.objfile, msym.minsym)->the_bfd_section;
   objfile = msym.objfile;
 
   /* If .plt jumps back to .plt the symbol is still deferred for later
      resolution and it has no use for GDB.  */
-  const char *target_name = MSYMBOL_LINKAGE_NAME (msym.minsym);
+  const char *target_name = msym.minsym->linkage_name ();
   size_t len = strlen (target_name);
 
   /* Note we check the symbol's name instead of checking whether the
@@ -649,7 +760,7 @@ amiga_gnu_ifunc_record_cache (const char *name, CORE_ADDR addr)
     {
       struct amiga_gnu_ifunc_cache *entry_found_p
 	= (struct amiga_gnu_ifunc_cache *) *slot;
-      struct gdbarch *gdbarch = get_objfile_arch (objfile);
+      struct gdbarch *gdbarch = objfile->arch ();
 
       if (entry_found_p->addr != addr)
 	{
@@ -727,7 +838,7 @@ amiga_gnu_ifunc_resolve_by_got (const char *name, CORE_ADDR *addr_p)
   for (objfile *objfile : current_program_space->objfiles ())
     {
       bfd *obfd = objfile->obfd;
-      struct gdbarch *gdbarch = get_objfile_arch (objfile);
+      struct gdbarch *gdbarch = objfile->arch ();
       struct type *ptr_type = builtin_type (gdbarch)->builtin_data_ptr;
       size_t ptr_size = TYPE_LENGTH (ptr_type);
       CORE_ADDR pointer_address, addr;
@@ -768,21 +879,21 @@ amiga_gnu_ifunc_resolve_by_got (const char *name, CORE_ADDR *addr_p)
 
 /* Try to find the target resolved function entry address of a STT_GNU_IFUNC
    function NAME.  If the address is found it is stored to *ADDR_P (if ADDR_P
-   is not NULL) and the function returns 1.  It returns 0 otherwise.
+   is not NULL) and the function returns true.  It returns false otherwise.
 
    Both the amiga_objfile_gnu_ifunc_cache_data hash table and
    SYMBOL_GOT_PLT_SUFFIX locations are searched by this function.  */
 
-static int
+static bool
 amiga_gnu_ifunc_resolve_name (const char *name, CORE_ADDR *addr_p)
 {
   if (amiga_gnu_ifunc_resolve_by_cache (name, addr_p))
-    return 1;
+    return true;
 
   if (amiga_gnu_ifunc_resolve_by_got (name, addr_p))
-    return 1;
+    return true;
 
-  return 0;
+  return false;
 }
 
 /* Call STT_GNU_IFUNC - a function returning addresss of a real function to
@@ -950,7 +1061,7 @@ amiga_gnu_ifunc_resolver_return_stop (struct breakpoint *b)
 
 static void
 amiga_read_minimal_symbols (struct objfile *objfile, int symfile_flags,
-			  const struct elfinfo *ei)
+			  const struct amigainfo *ei)
 {
   bfd *synth_abfd, *abfd = objfile->obfd;
   long symcount = 0, dynsymcount = 0, synthcount, storage_needed;
@@ -971,7 +1082,8 @@ amiga_read_minimal_symbols (struct objfile *objfile, int symfile_flags,
      go away once all types of symbols are in the per-BFD object.  */
   if (objfile->per_bfd->minsyms_read
       && ei->stabsect == NULL
-      && ei->mdebugsect == NULL)
+      && ei->mdebugsect == NULL
+      && ei->ctfsect == NULL)
     {
       if (symtab_create_debug)
 	fprintf_unfiltered (gdb_stdlog,
@@ -981,7 +1093,7 @@ amiga_read_minimal_symbols (struct objfile *objfile, int symfile_flags,
 
   minimal_symbol_reader reader (objfile);
 
-  /* Process the normal ELF symbol table first.  */
+  /* Process the normal AMIGA symbol table first.  */
 
   storage_needed = bfd_get_symtab_upper_bound (objfile->obfd);
   if (storage_needed < 0)
@@ -1037,8 +1149,8 @@ amiga_read_minimal_symbols (struct objfile *objfile, int symfile_flags,
   /* Contrary to binutils --strip-debug/--only-keep-debug the strip command from
      elfutils (eu-strip) moves even the .symtab section into the .debug file.
 
-     bfd_get_synthetic_symtab on ppc64 for each function descriptor ELF symbol
-     'name' creates a new BSF_SYNTHETIC ELF symbol '.name' with its code
+     bfd_get_synthetic_symtab on ppc64 for each function descriptor AMIGA symbol
+     'name' creates a new BSF_SYNTHETIC AMIGA symbol '.name' with its code
      address.  But with eu-strip files bfd_get_synthetic_symtab would fail to
      read the code address from .opd while it reads the .symtab section from
      a separate debug info file as the .opd section is SHT_NOBITS there.
@@ -1101,7 +1213,7 @@ amiga_read_minimal_symbols (struct objfile *objfile, int symfile_flags,
    elfstab_build_psymtabs() handles STABS symbols;
    mdebug_build_psymtabs() handles ECOFF debugging information.
 
-   Note that ELF files have a "minimal" symbol table, which looks a lot
+   Note that AMIGA files have a "minimal" symbol table, which looks a lot
    like a COFF symbol table, but has only the minimal information necessary
    for linking.  We process this also, and use the information to
    build gdb's minimal symbol table.  This gives us some minimal debugging
@@ -1111,7 +1223,8 @@ static void
 amiga_symfile_read (struct objfile *objfile, symfile_add_flags symfile_flags)
 {
   bfd *abfd = objfile->obfd;
-  struct elfinfo ei;
+  struct amigainfo ei;
+  bool has_dwarf2 = false;
 
   memset ((char *) &ei, 0, sizeof (ei));
   if (!(objfile->flags & OBJF_READNEVER))
@@ -1119,7 +1232,7 @@ amiga_symfile_read (struct objfile *objfile, symfile_add_flags symfile_flags)
 
   amiga_read_minimal_symbols (objfile, symfile_flags, &ei);
 
-  /* ELF debugging information is inserted into the psymtab in the
+  /* AMIGA debugging information is inserted into the psymtab in the
      order of least informative first - most informative last.  Since
      the psymtab table is searched `most recent insertion first' this
      increases the probability that more detailed debug information
@@ -1156,10 +1269,10 @@ amiga_symfile_read (struct objfile *objfile, symfile_add_flags symfile_flags)
 	elfstab_build_psymtabs (objfile,
 				ei.stabsect,
 				str_sect->filepos,
-				bfd_section_size (abfd, str_sect));
+				bfd_section_size (str_sect));
     }
 
-  if (dwarf2_has_info (objfile, NULL))
+  if (dwarf2_has_info (objfile, NULL, true))
     {
       dw_index_kind index_kind;
 
@@ -1216,6 +1329,42 @@ amiga_symfile_read (struct objfile *objfile, symfile_add_flags symfile_flags)
 	  symbol_file_add_separate (debug_bfd.get (), debugfile.c_str (),
 				    symfile_flags, objfile);
 	}
+      else
+	{
+	  has_dwarf2 = false;
+	  const struct bfd_build_id *build_id = build_id_bfd_get (objfile->obfd);
+
+	  if (build_id != nullptr)
+	    {
+	      gdb::unique_xmalloc_ptr<char> symfile_path;
+	      scoped_fd fd (debuginfod_debuginfo_query (build_id->data,
+							build_id->size,
+							objfile->original_name,
+							&symfile_path));
+
+	      if (fd.get () >= 0)
+		{
+		  /* File successfully retrieved from server.  */
+		  gdb_bfd_ref_ptr debug_bfd (symfile_bfd_open (symfile_path.get ()));
+
+		  if (debug_bfd == nullptr)
+		    warning (_("File \"%s\" from debuginfod cannot be opened as bfd"),
+			     objfile->original_name);
+		  else if (build_id_verify (debug_bfd.get (), build_id->size, build_id->data))
+		    {
+		      symbol_file_add_separate (debug_bfd.get (), symfile_path.get (),
+						symfile_flags, objfile);
+		      has_dwarf2 = true;
+		    }
+		}
+	    }
+	}
+    }
+
+  /* Read the CTF section only if there is no DWARF info.  */
+  if (!has_dwarf2 && ei.ctfsect)
+    {
+      elfctf_build_psymtabs (objfile);
     }
 }
 
@@ -1230,10 +1379,7 @@ read_psyms (struct objfile *objfile)
 
 /* Initialize anything that needs initializing when a completely new symbol
    file is specified (not just adding some symbols from another file, e.g. a
-   shared library).
-
-   We reinitialize buildsym, since we may be reading stabs from an ELF
-   file.  */
+   shared library).  */
 
 static void
 amiga_new_init (struct objfile *ignore)
@@ -1252,12 +1398,12 @@ amiga_symfile_finish (struct objfile *objfile)
 //  dwarf2_free_objfile (objfile);
 }
 
-/* ELF specific initialization routine for reading symbols.  */
+/* AMIGA specific initialization routine for reading symbols.  */
 
 static void
 amiga_symfile_init (struct objfile *objfile)
 {
-  /* ELF objects may be reordered, so set OBJF_REORDERED.  If we
+  /* AMIGA objects may be reordered, so set OBJF_REORDERED.  If we
      find this causes a significant slowdown in gdb then we could
      set it in the debug symbol readers only when necessary.  */
   objfile->flags |= OBJF_REORDERED;
@@ -1265,10 +1411,10 @@ amiga_symfile_init (struct objfile *objfile)
 
 /* Implementation of `sym_get_probes', as documented in symfile.h.  */
 
-static const elfread_data &
+static const amigaread_data &
 amiga_get_probes (struct objfile *objfile)
 {
-  elfread_data *probes_per_bfd = probe_key.get (objfile->obfd);
+  amigaread_data *probes_per_bfd = probe_key.get (objfile->obfd);
 
   if (probes_per_bfd == NULL)
     {
@@ -1292,7 +1438,7 @@ static const struct sym_probe_fns amiga_probe_fns =
   amiga_get_probes,		    /* sym_get_probes */
 };
 
-/* Register that we are able to handle ELF object file formats.  */
+/* Register that we are able to handle AMIGA object file formats.  */
 
 static const struct sym_fns amiga_sym_fns =
 {
@@ -1336,7 +1482,7 @@ const struct sym_fns amiga_sym_fns_gdb_index =
   amiga_symfile_read,		/* read a symbol file into symtab */
   NULL,				/* sym_read_psymbols */
   amiga_symfile_finish,		/* finished with file, cleanup */
-  default_symfile_offsets,	/* Translate ext. to int. relocatin */
+  default_symfile_offsets,	/* Translate ext. to int. relocation */
   amiga_symfile_segments,		/* Get segment information from a file.  */
   NULL,
   default_symfile_relocate,	/* Relocate a debug section.  */
@@ -1353,7 +1499,7 @@ const struct sym_fns amiga_sym_fns_debug_names =
   amiga_symfile_read,		/* read a symbol file into symtab */
   NULL,				/* sym_read_psymbols */
   amiga_symfile_finish,		/* finished with file, cleanup */
-  default_symfile_offsets,	/* Translate ext. to int. relocatin */
+  default_symfile_offsets,	/* Translate ext. to int. relocation */
   amiga_symfile_segments,		/* Get segment information from a file.  */
   NULL,
   default_symfile_relocate,	/* Relocate a debug section.  */

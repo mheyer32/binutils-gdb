@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2019 Free Software Foundation, Inc.
+   Copyright 2019-2020 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -62,6 +62,7 @@ create_map (const char *name)
   m->keys = NULL;
   m->values = NULL;
   m->show_header = 0;
+  return m;
 }
 
 void
@@ -85,6 +86,7 @@ create_map_map (void)
   mm->length = 0;
   mm->values = NULL;
   mm->show_header = 0;
+  return mm;
 }
 
 void

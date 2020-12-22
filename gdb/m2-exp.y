@@ -1,5 +1,5 @@
 /* YACC grammar for Modula-2 expressions, for GDB.
-   Copyright (C) 1986-2019 Free Software Foundation, Inc.
+   Copyright (C) 1986-2020 Free Software Foundation, Inc.
    Generated from expread.y (now c-exp.y) and contributed by the Department
    of Computer Science at the State University of New York at Buffalo, 1991.
 
@@ -599,7 +599,6 @@ type
 	:	TYPENAME
 			{ $$
 			    = lookup_typename (pstate->language (),
-					       pstate->gdbarch (),
 					       copy_name ($1).c_str (),
 					       pstate->expression_context_block,
 					       0);
@@ -974,7 +973,7 @@ yylex (void)
 			 VAR_DOMAIN, 0).symbol;
     if (sym && SYMBOL_CLASS (sym) == LOC_BLOCK)
       return BLOCKNAME;
-    if (lookup_typename (pstate->language (), pstate->gdbarch (),
+    if (lookup_typename (pstate->language (),
 			 tmp.c_str (), pstate->expression_context_block, 1))
       return TYPENAME;
 

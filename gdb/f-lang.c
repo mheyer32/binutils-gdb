@@ -1,6 +1,6 @@
 /* Fortran language support routines for GDB, the GNU debugger.
 
-   Copyright (C) 1993-2019 Free Software Foundation, Inc.
+   Copyright (C) 1993-2020 Free Software Foundation, Inc.
 
    Contributed by Motorola.  Adapted from the C parser by Farooq Butt
    (fmbutt@engage.sps.mot.com).
@@ -35,14 +35,11 @@
 #include "charset.h"
 #include "c-lang.h"
 #include "target-float.h"
+#include "gdbarch.h"
 
 #include <math.h>
 
 /* Local functions */
-
-static void f_printchar (int c, struct type *type, struct ui_file * stream);
-static void f_emit_char (int c, struct type *type,
-			 struct ui_file * stream, int quoter);
 
 /* Return the encoding that should be used for the character type
    TYPE.  */
@@ -58,7 +55,7 @@ f_get_encoding (struct type *type)
       encoding = target_charset (get_type_arch (type));
       break;
     case 4:
-      if (gdbarch_byte_order (get_type_arch (type)) == BFD_ENDIAN_BIG)
+      if (type_byte_order (type) == BFD_ENDIAN_BIG)
 	encoding = "UTF-32BE";
       else
 	encoding = "UTF-32LE";
@@ -71,53 +68,6 @@ f_get_encoding (struct type *type)
   return encoding;
 }
 
-/* Print the character C on STREAM as part of the contents of a literal
-   string whose delimiter is QUOTER.  Note that that format for printing
-   characters and strings is language specific.
-   FIXME:  This is a copy of the same function from c-exp.y.  It should
-   be replaced with a true F77 version.  */
-
-static void
-f_emit_char (int c, struct type *type, struct ui_file *stream, int quoter)
-{
-  const char *encoding = f_get_encoding (type);
-
-  generic_emit_char (c, type, stream, quoter, encoding);
-}
-
-/* Implementation of la_printchar.  */
-
-static void
-f_printchar (int c, struct type *type, struct ui_file *stream)
-{
-  fputs_filtered ("'", stream);
-  LA_EMIT_CHAR (c, type, stream, '\'');
-  fputs_filtered ("'", stream);
-}
-
-/* Print the character string STRING, printing at most LENGTH characters.
-   Printing stops early if the number hits print_max; repeat counts
-   are printed as appropriate.  Print ellipses at the end if we
-   had to stop before printing LENGTH characters, or if FORCE_ELLIPSES.
-   FIXME:  This is a copy of the same function from c-exp.y.  It should
-   be replaced with a true F77 version.  */
-
-static void
-f_printstr (struct ui_file *stream, struct type *type, const gdb_byte *string,
-	    unsigned int length, const char *encoding, int force_ellipses,
-	    const struct value_print_options *options)
-{
-  const char *type_encoding = f_get_encoding (type);
-
-  if (TYPE_LENGTH (type) == 4)
-    fputs_filtered ("4_", stream);
-
-  if (!encoding || !*encoding)
-    encoding = type_encoding;
-
-  generic_printstr (stream, type, string, length, encoding,
-		    force_ellipses, '\'', 0, options);
-}
 
 
 /* Table of operators and their precedences for printing expressions.  */
@@ -164,85 +114,9 @@ enum f_primitive_types {
   nr_f_primitive_types
 };
 
-static void
-f_language_arch_info (struct gdbarch *gdbarch,
-		      struct language_arch_info *lai)
-{
-  const struct builtin_f_type *builtin = builtin_f_type (gdbarch);
-
-  lai->string_char_type = builtin->builtin_character;
-  lai->primitive_type_vector
-    = GDBARCH_OBSTACK_CALLOC (gdbarch, nr_f_primitive_types + 1,
-                              struct type *);
-
-  lai->primitive_type_vector [f_primitive_type_character]
-    = builtin->builtin_character;
-  lai->primitive_type_vector [f_primitive_type_logical]
-    = builtin->builtin_logical;
-  lai->primitive_type_vector [f_primitive_type_logical_s1]
-    = builtin->builtin_logical_s1;
-  lai->primitive_type_vector [f_primitive_type_logical_s2]
-    = builtin->builtin_logical_s2;
-  lai->primitive_type_vector [f_primitive_type_logical_s8]
-    = builtin->builtin_logical_s8;
-  lai->primitive_type_vector [f_primitive_type_real]
-    = builtin->builtin_real;
-  lai->primitive_type_vector [f_primitive_type_real_s8]
-    = builtin->builtin_real_s8;
-  lai->primitive_type_vector [f_primitive_type_real_s16]
-    = builtin->builtin_real_s16;
-  lai->primitive_type_vector [f_primitive_type_complex_s8]
-    = builtin->builtin_complex_s8;
-  lai->primitive_type_vector [f_primitive_type_complex_s16]
-    = builtin->builtin_complex_s16;
-  lai->primitive_type_vector [f_primitive_type_void]
-    = builtin->builtin_void;
-
-  lai->bool_type_symbol = "logical";
-  lai->bool_type_default = builtin->builtin_logical_s2;
-}
-
-/* Remove the modules separator :: from the default break list.  */
-
-static const char *
-f_word_break_characters (void)
-{
-  static char *retval;
-
-  if (!retval)
-    {
-      char *s;
-
-      retval = xstrdup (default_word_break_characters ());
-      s = strchr (retval, ':');
-      if (s)
-	{
-	  char *last_char = &s[strlen (s) - 1];
-
-	  *s = *last_char;
-	  *last_char = 0;
-	}
-    }
-  return retval;
-}
-
-/* Consider the modules separator :: as a valid symbol name character
-   class.  */
-
-static void
-f_collect_symbol_completion_matches (completion_tracker &tracker,
-				     complete_symbol_mode mode,
-				     symbol_name_match_type compare_name,
-				     const char *text, const char *word,
-				     enum type_code code)
-{
-  default_collect_symbol_completion_matches_break_on (tracker, mode,
-						      compare_name,
-						      text, word, ":", code);
-}
-
 /* Special expression evaluation cases for Fortran.  */
-struct value *
+
+static struct value *
 evaluate_subexp_f (struct type *expect_type, struct expression *exp,
 		   int *pos, enum noside noside)
 {
@@ -266,7 +140,7 @@ evaluate_subexp_f (struct type *expect_type, struct expression *exp,
       if (noside == EVAL_SKIP)
 	return eval_skip_value (exp);
       type = value_type (arg1);
-      switch (TYPE_CODE (type))
+      switch (type->code ())
 	{
 	case TYPE_CODE_FLT:
 	  {
@@ -290,9 +164,9 @@ evaluate_subexp_f (struct type *expect_type, struct expression *exp,
       if (noside == EVAL_SKIP)
 	return eval_skip_value (exp);
       type = value_type (arg1);
-      if (TYPE_CODE (type) != TYPE_CODE (value_type (arg2)))
+      if (type->code () != value_type (arg2)->code ())
 	error (_("non-matching types for parameters to MOD ()"));
-      switch (TYPE_CODE (type))
+      switch (type->code ())
 	{
 	case TYPE_CODE_FLT:
 	  {
@@ -323,7 +197,7 @@ evaluate_subexp_f (struct type *expect_type, struct expression *exp,
 	if (noside == EVAL_SKIP)
 	  return eval_skip_value (exp);
 	type = value_type (arg1);
-	if (TYPE_CODE (type) != TYPE_CODE_FLT)
+	if (type->code () != TYPE_CODE_FLT)
 	  error (_("argument to CEILING must be of type float"));
 	double val
 	  = target_float_to_host_double (value_contents (arg1),
@@ -338,7 +212,7 @@ evaluate_subexp_f (struct type *expect_type, struct expression *exp,
 	if (noside == EVAL_SKIP)
 	  return eval_skip_value (exp);
 	type = value_type (arg1);
-	if (TYPE_CODE (type) != TYPE_CODE_FLT)
+	if (type->code () != TYPE_CODE_FLT)
 	  error (_("argument to FLOOR must be of type float"));
 	double val
 	  = target_float_to_host_double (value_contents (arg1),
@@ -354,10 +228,10 @@ evaluate_subexp_f (struct type *expect_type, struct expression *exp,
 	if (noside == EVAL_SKIP)
 	  return eval_skip_value (exp);
 	type = value_type (arg1);
-	if (TYPE_CODE (type) != TYPE_CODE (value_type (arg2)))
+	if (type->code () != value_type (arg2)->code ())
 	  error (_("non-matching types for parameters to MODULO ()"));
         /* MODULO(A, P) = A - FLOOR (A / P) * P */
-	switch (TYPE_CODE (type))
+	switch (type->code ())
 	  {
 	  case TYPE_CODE_INT:
 	    {
@@ -397,7 +271,7 @@ evaluate_subexp_f (struct type *expect_type, struct expression *exp,
       arg1 = evaluate_subexp (NULL, exp, pos, EVAL_AVOID_SIDE_EFFECTS);
       type = value_type (arg1);
 
-      switch (TYPE_CODE (type))
+      switch (type->code ())
         {
           case TYPE_CODE_STRUCT:
           case TYPE_CODE_UNION:
@@ -410,22 +284,11 @@ evaluate_subexp_f (struct type *expect_type, struct expression *exp,
         return value_from_longest (builtin_type (exp->gdbarch)->builtin_int,
 				   TYPE_LENGTH (type));
       return value_from_longest (builtin_type (exp->gdbarch)->builtin_int,
-				 TYPE_LENGTH (TYPE_TARGET_TYPE(type)));
+				 TYPE_LENGTH (TYPE_TARGET_TYPE (type)));
     }
 
   /* Should be unreachable.  */
   return nullptr;
-}
-
-/* Return true if TYPE is a string.  */
-
-static bool
-f_is_string_type_p (struct type *type)
-{
-  type = check_typedef (type);
-  return (TYPE_CODE (type) == TYPE_CODE_STRING
-	  || (TYPE_CODE (type) == TYPE_CODE_ARRAY
-	      && TYPE_CODE (TYPE_TARGET_TYPE (type)) == TYPE_CODE_CHAR));
 }
 
 /* Special expression lengths for Fortran.  */
@@ -626,7 +489,9 @@ static const struct exp_descriptor exp_descriptor_f =
   evaluate_subexp_f
 };
 
-extern const struct language_defn f_language_defn =
+/* Constant data that describes the Fortran language.  */
+
+extern const struct language_data f_language_data =
 {
   "fortran",
   "Fortran",
@@ -637,50 +502,225 @@ extern const struct language_defn f_language_defn =
   macro_expansion_no,
   f_extensions,
   &exp_descriptor_f,
-  f_parse,			/* parser */
-  null_post_parser,
-  f_printchar,			/* Print character constant */
-  f_printstr,			/* function to print string constant */
-  f_emit_char,			/* Function to print a single character */
-  f_print_type,			/* Print a type using appropriate syntax */
-  default_print_typedef,	/* Print a typedef using appropriate syntax */
-  f_val_print,			/* Print a value using appropriate syntax */
-  c_value_print,		/* FIXME */
-  default_read_var_value,	/* la_read_var_value */
-  NULL,				/* Language specific skip_trampoline */
   NULL,                    	/* name_of_this */
   false,			/* la_store_sym_names_in_linkage_form_p */
-  cp_lookup_symbol_nonlocal,	/* lookup_symbol_nonlocal */
-  basic_lookup_transparent_type,/* lookup_transparent_type */
-
-  /* We could support demangling here to provide module namespaces
-     also for inferiors with only minimal symbol table (ELF symbols).
-     Just the mangling standard is not standardized across compilers
-     and there is no DW_AT_producer available for inferiors with only
-     the ELF symbols to check the mangling kind.  */
-  NULL,				/* Language specific symbol demangler */
-  NULL,
-  NULL,				/* Language specific
-				   class_name_from_physname */
   f_op_print_tab,		/* expression operators for printing */
   0,				/* arrays are first-class (not c-style) */
   1,				/* String lower bound */
-  f_word_break_characters,
-  f_collect_symbol_completion_matches,
-  f_language_arch_info,
-  default_print_array_index,
-  default_pass_by_reference,
-  default_get_string,
-  c_watch_location_expression,
-  NULL,				/* la_get_symbol_name_matcher */
-  iterate_over_symbols,
-  default_search_name_hash,
   &default_varobj_ops,
-  NULL,
-  NULL,
-  f_is_string_type_p,
   "(...)"			/* la_struct_too_deep_ellipsis */
 };
+
+/* Class representing the Fortran language.  */
+
+class f_language : public language_defn
+{
+public:
+  f_language ()
+    : language_defn (language_fortran, f_language_data)
+  { /* Nothing.  */ }
+
+  /* See language.h.  */
+  void language_arch_info (struct gdbarch *gdbarch,
+			   struct language_arch_info *lai) const override
+  {
+    const struct builtin_f_type *builtin = builtin_f_type (gdbarch);
+
+    lai->string_char_type = builtin->builtin_character;
+    lai->primitive_type_vector
+      = GDBARCH_OBSTACK_CALLOC (gdbarch, nr_f_primitive_types + 1,
+				struct type *);
+
+    lai->primitive_type_vector [f_primitive_type_character]
+      = builtin->builtin_character;
+    lai->primitive_type_vector [f_primitive_type_logical]
+      = builtin->builtin_logical;
+    lai->primitive_type_vector [f_primitive_type_logical_s1]
+      = builtin->builtin_logical_s1;
+    lai->primitive_type_vector [f_primitive_type_logical_s2]
+      = builtin->builtin_logical_s2;
+    lai->primitive_type_vector [f_primitive_type_logical_s8]
+      = builtin->builtin_logical_s8;
+    lai->primitive_type_vector [f_primitive_type_real]
+      = builtin->builtin_real;
+    lai->primitive_type_vector [f_primitive_type_real_s8]
+      = builtin->builtin_real_s8;
+    lai->primitive_type_vector [f_primitive_type_real_s16]
+      = builtin->builtin_real_s16;
+    lai->primitive_type_vector [f_primitive_type_complex_s8]
+      = builtin->builtin_complex_s8;
+    lai->primitive_type_vector [f_primitive_type_complex_s16]
+      = builtin->builtin_complex_s16;
+    lai->primitive_type_vector [f_primitive_type_void]
+      = builtin->builtin_void;
+
+    lai->bool_type_symbol = "logical";
+    lai->bool_type_default = builtin->builtin_logical_s2;
+  }
+
+  /* See language.h.  */
+  unsigned int search_name_hash (const char *name) const override
+  {
+    return cp_search_name_hash (name);
+  }
+
+  /* See language.h.  */
+
+  char *demangle (const char *mangled, int options) const override
+  {
+      /* We could support demangling here to provide module namespaces
+	 also for inferiors with only minimal symbol table (ELF symbols).
+	 Just the mangling standard is not standardized across compilers
+	 and there is no DW_AT_producer available for inferiors with only
+	 the ELF symbols to check the mangling kind.  */
+    return nullptr;
+  }
+
+  /* See language.h.  */
+
+  void print_type (struct type *type, const char *varstring,
+		   struct ui_file *stream, int show, int level,
+		   const struct type_print_options *flags) const override
+  {
+    f_print_type (type, varstring, stream, show, level, flags);
+  }
+
+  /* See language.h.  This just returns default set of word break
+     characters but with the modules separator `::' removed.  */
+
+  const char *word_break_characters (void) const override
+  {
+    static char *retval;
+
+    if (!retval)
+      {
+	char *s;
+
+	retval = xstrdup (language_defn::word_break_characters ());
+	s = strchr (retval, ':');
+	if (s)
+	  {
+	    char *last_char = &s[strlen (s) - 1];
+
+	    *s = *last_char;
+	    *last_char = 0;
+	  }
+      }
+    return retval;
+  }
+
+
+  /* See language.h.  */
+
+  void collect_symbol_completion_matches (completion_tracker &tracker,
+					  complete_symbol_mode mode,
+					  symbol_name_match_type name_match_type,
+					  const char *text, const char *word,
+					  enum type_code code) const override
+  {
+    /* Consider the modules separator :: as a valid symbol name character
+       class.  */
+    default_collect_symbol_completion_matches_break_on (tracker, mode,
+							name_match_type,
+							text, word, ":",
+							code);
+  }
+
+  /* See language.h.  */
+
+  void value_print_inner
+	(struct value *val, struct ui_file *stream, int recurse,
+	 const struct value_print_options *options) const override
+  {
+    return f_value_print_inner (val, stream, recurse, options);
+  }
+
+  /* See language.h.  */
+
+  struct block_symbol lookup_symbol_nonlocal
+	(const char *name, const struct block *block,
+	 const domain_enum domain) const override
+  {
+    return cp_lookup_symbol_nonlocal (this, name, block, domain);
+  }
+
+  /* See language.h.  */
+
+  int parser (struct parser_state *ps) const override
+  {
+    return f_parse (ps);
+  }
+
+  /* See language.h.  */
+
+  void emitchar (int ch, struct type *chtype,
+		 struct ui_file *stream, int quoter) const override
+  {
+    const char *encoding = f_get_encoding (chtype);
+    generic_emit_char (ch, chtype, stream, quoter, encoding);
+  }
+
+  /* See language.h.  */
+
+  void printchar (int ch, struct type *chtype,
+		  struct ui_file *stream) const override
+  {
+    fputs_filtered ("'", stream);
+    LA_EMIT_CHAR (ch, chtype, stream, '\'');
+    fputs_filtered ("'", stream);
+  }
+
+  /* See language.h.  */
+
+  void printstr (struct ui_file *stream, struct type *elttype,
+		 const gdb_byte *string, unsigned int length,
+		 const char *encoding, int force_ellipses,
+		 const struct value_print_options *options) const override
+  {
+    const char *type_encoding = f_get_encoding (elttype);
+
+    if (TYPE_LENGTH (elttype) == 4)
+      fputs_filtered ("4_", stream);
+
+    if (!encoding || !*encoding)
+      encoding = type_encoding;
+
+    generic_printstr (stream, elttype, string, length, encoding,
+		      force_ellipses, '\'', 0, options);
+  }
+
+  /* See language.h.  */
+
+  void print_typedef (struct type *type, struct symbol *new_symbol,
+		      struct ui_file *stream) const override
+  {
+    f_print_typedef (type, new_symbol, stream);
+  }
+
+  /* See language.h.  */
+
+  bool is_string_type_p (struct type *type) const override
+  {
+    type = check_typedef (type);
+    return (type->code () == TYPE_CODE_STRING
+	    || (type->code () == TYPE_CODE_ARRAY
+		&& TYPE_TARGET_TYPE (type)->code () == TYPE_CODE_CHAR));
+  }
+
+protected:
+
+  /* See language.h.  */
+
+  symbol_name_matcher_ftype *get_symbol_name_matcher_inner
+	(const lookup_name_info &lookup_name) const override
+  {
+    return cp_get_symbol_name_matcher (lookup_name);
+  }
+};
+
+/* Single instance of the Fortran language class.  */
+
+static f_language f_language_defn;
 
 static void *
 build_fortran_types (struct gdbarch *gdbarch)
@@ -740,14 +780,16 @@ build_fortran_types (struct gdbarch *gdbarch)
       = arch_type (gdbarch, TYPE_CODE_ERROR, 128, "real*16");
 
   builtin_f_type->builtin_complex_s8
-    = arch_complex_type (gdbarch, "complex*8",
-			 builtin_f_type->builtin_real);
+    = init_complex_type ("complex*8", builtin_f_type->builtin_real);
   builtin_f_type->builtin_complex_s16
-    = arch_complex_type (gdbarch, "complex*16",
-			 builtin_f_type->builtin_real_s8);
-  builtin_f_type->builtin_complex_s32
-    = arch_complex_type (gdbarch, "complex*32",
-			 builtin_f_type->builtin_real_s16);
+    = init_complex_type ("complex*16", builtin_f_type->builtin_real_s8);
+
+  if (builtin_f_type->builtin_real_s16->code () == TYPE_CODE_ERROR)
+    builtin_f_type->builtin_complex_s32
+      = arch_type (gdbarch, TYPE_CODE_ERROR, 256, "complex*32");
+  else
+    builtin_f_type->builtin_complex_s32
+      = init_complex_type ("complex*32", builtin_f_type->builtin_real_s16);
 
   return builtin_f_type;
 }
@@ -760,8 +802,9 @@ builtin_f_type (struct gdbarch *gdbarch)
   return (const struct builtin_f_type *) gdbarch_data (gdbarch, f_type_data);
 }
 
+void _initialize_f_language ();
 void
-_initialize_f_language (void)
+_initialize_f_language ()
 {
   f_type_data = gdbarch_data_register_post_init (build_fortran_types);
 }
@@ -798,7 +841,7 @@ fortran_argument_convert (struct value *value, bool is_artificial)
 struct type *
 fortran_preserve_arg_pointer (struct value *arg, struct type *type)
 {
-  if (TYPE_CODE (value_type (arg)) == TYPE_CODE_PTR)
+  if (value_type (arg)->code () == TYPE_CODE_PTR)
     return value_type (arg);
   return type;
 }

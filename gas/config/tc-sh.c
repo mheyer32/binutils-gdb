@@ -1,5 +1,5 @@
 /* tc-sh.c -- Assemble code for the Renesas / SuperH SH
-   Copyright (C) 1993-2019 Free Software Foundation, Inc.
+   Copyright (C) 1993-2020 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -2091,7 +2091,8 @@ build_Mytes (sh_opcode_info *opcode, sh_operand_info *operand)
 	    case IMM0_8BY2:
 	      insert (output + low_byte, BFD_RELOC_SH_IMM8BY2, 0, operand);
 	      break;
-	    case IMM0_8:
+	    case IMM0_8U:
+	    case IMM0_8S:
 	      insert (output + low_byte, BFD_RELOC_SH_IMM8, 0, operand);
 	      break;
 	    case IMM1_8BY4:
@@ -3080,7 +3081,7 @@ md_convert_frag (bfd *headers ATTRIBUTE_UNUSED, segT seg, fragS *fragP)
 	 differently from ones without delay slots.  */
       {
 	unsigned char *buffer =
-	  (unsigned char *) (fragP->fr_fix + fragP->fr_literal);
+	  (unsigned char *) (fragP->fr_fix + &fragP->fr_literal[0]);
 	int highbyte = target_big_endian ? 0 : 1;
 	int lowbyte = target_big_endian ? 1 : 0;
 	int delay = fragP->fr_subtype == C (COND_JUMP_DELAY, COND12);
@@ -3162,8 +3163,8 @@ md_section_align (segT seg ATTRIBUTE_UNUSED, valueT size)
 #ifdef OBJ_ELF
   return size;
 #else /* ! OBJ_ELF */
-  return ((size + (1 << bfd_get_section_alignment (stdoutput, seg)) - 1)
-	  & -(1 << bfd_get_section_alignment (stdoutput, seg)));
+  return ((size + (1 << bfd_section_alignment (seg)) - 1)
+	  & -(1 << bfd_section_alignment (seg)));
 #endif /* ! OBJ_ELF */
 }
 

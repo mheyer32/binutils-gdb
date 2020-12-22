@@ -1,6 +1,6 @@
 /* Intel 386 target-dependent stuff.
 
-   Copyright (C) 1988-2019 Free Software Foundation, Inc.
+   Copyright (C) 1988-2020 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,7 +22,7 @@
 #include "arch-utils.h"
 #include "command.h"
 #include "dummy-frame.h"
-#include "dwarf2-frame.h"
+#include "dwarf2/frame.h"
 #include "frame.h"
 #include "frame-base.h"
 #include "frame-unwind.h"
@@ -46,7 +46,7 @@
 #include "remote.h"
 #include "i386-tdep.h"
 #include "i387-tdep.h"
-#include "common/x86-xstate.h"
+#include "gdbsupport/x86-xstate.h"
 #include "x86-tdep.h"
 
 #include "record.h"
@@ -798,13 +798,14 @@ i386_insn_is_jump (struct gdbarch *gdbarch, CORE_ADDR addr)
 
 /* Some kernels may run one past a syscall insn, so we have to cope.  */
 
-struct displaced_step_closure *
+displaced_step_closure_up
 i386_displaced_step_copy_insn (struct gdbarch *gdbarch,
 			       CORE_ADDR from, CORE_ADDR to,
 			       struct regcache *regs)
 {
   size_t len = gdbarch_max_insn_length (gdbarch);
-  i386_displaced_step_closure *closure = new i386_displaced_step_closure (len);
+  std::unique_ptr<i386_displaced_step_closure> closure
+    (new i386_displaced_step_closure (len));
   gdb_byte *buf = closure->buf.data ();
 
   read_memory (from, buf, len);
@@ -830,7 +831,8 @@ i386_displaced_step_copy_insn (struct gdbarch *gdbarch,
       displaced_step_dump_bytes (gdb_stdlog, buf, len);
     }
 
-  return closure;
+  /* This is a work around for a problem with g++ 4.8.  */
+  return displaced_step_closure_up (closure.release ());
 }
 
 /* Fix up the state of registers and memory after having single-stepped
@@ -1505,7 +1507,7 @@ struct i386_insn i386_frame_setup_skip_insns[] =
   /* Check for `mov imm32, r32'.  Note that there is an alternative
      encoding for `mov m32, %eax'.
 
-     ??? Should we handle SIB adressing here?
+     ??? Should we handle SIB addressing here?
      ??? Should we handle 16-bit operand-sizes here?  */
 
   /* `movl m32, %eax' */
@@ -1622,7 +1624,7 @@ i386_analyze_frame_setup (struct gdbarch *gdbarch,
       /* Check for some special instructions that might be migrated by
 	 GCC into the prologue and skip them.  At this point in the
 	 prologue, code should only touch the scratch registers %eax,
-	 %ecx and %edx, so while the number of posibilities is sheer,
+	 %ecx and %edx, so while the number of possibilities is sheer,
 	 it is limited.
 
 	 Make sure we only skip these instructions if we later see the
@@ -1948,8 +1950,8 @@ i386_skip_main_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 	  call_dest = call_dest & 0xffffffffU;
  	  s = lookup_minimal_symbol_by_pc (call_dest);
  	  if (s.minsym != NULL
- 	      && MSYMBOL_LINKAGE_NAME (s.minsym) != NULL
- 	      && strcmp (MSYMBOL_LINKAGE_NAME (s.minsym), "__main") == 0)
+ 	      && s.minsym->linkage_name () != NULL
+ 	      && strcmp (s.minsym->linkage_name (), "__main") == 0)
  	    pc += 5;
  	}
     }
@@ -2631,19 +2633,19 @@ static int
 i386_16_byte_align_p (struct type *type)
 {
   type = check_typedef (type);
-  if ((TYPE_CODE (type) == TYPE_CODE_DECFLOAT
-       || (TYPE_CODE (type) == TYPE_CODE_ARRAY && TYPE_VECTOR (type)))
+  if ((type->code () == TYPE_CODE_DECFLOAT
+       || (type->code () == TYPE_CODE_ARRAY && TYPE_VECTOR (type)))
       && TYPE_LENGTH (type) == 16)
     return 1;
-  if (TYPE_CODE (type) == TYPE_CODE_ARRAY)
+  if (type->code () == TYPE_CODE_ARRAY)
     return i386_16_byte_align_p (TYPE_TARGET_TYPE (type));
-  if (TYPE_CODE (type) == TYPE_CODE_STRUCT
-      || TYPE_CODE (type) == TYPE_CODE_UNION)
+  if (type->code () == TYPE_CODE_STRUCT
+      || type->code () == TYPE_CODE_UNION)
     {
       int i;
-      for (i = 0; i < TYPE_NFIELDS (type); i++)
+      for (i = 0; i < type->num_fields (); i++)
 	{
-	  if (i386_16_byte_align_p (TYPE_FIELD_TYPE (type, i)))
+	  if (i386_16_byte_align_p (type->field (i).type ()))
 	    return 1;
 	}
     }
@@ -2666,12 +2668,15 @@ i386_push_dummy_code (struct gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
   return sp - 16;
 }
 
-static CORE_ADDR
-i386_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
-		      struct regcache *regcache, CORE_ADDR bp_addr, int nargs,
-		      struct value **args, CORE_ADDR sp,
-		      function_call_return_method return_method,
-		      CORE_ADDR struct_addr)
+/* The "push_dummy_call" gdbarch method, optionally with the thiscall
+   calling convention.  */
+
+CORE_ADDR
+i386_thiscall_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
+			       struct regcache *regcache, CORE_ADDR bp_addr,
+			       int nargs, struct value **args, CORE_ADDR sp,
+			       function_call_return_method return_method,
+			       CORE_ADDR struct_addr, bool thiscall)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   gdb_byte buf[4];
@@ -2707,7 +2712,7 @@ i386_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	    args_space += 4;
 	}
 
-      for (i = 0; i < nargs; i++)
+      for (i = thiscall ? 1 : 0; i < nargs; i++)
 	{
 	  int len = TYPE_LENGTH (value_enclosing_type (args[i]));
 
@@ -2759,6 +2764,10 @@ i386_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   /* ...and fake a frame pointer.  */
   regcache->cooked_write (I386_EBP_REGNUM, buf);
 
+  /* The 'this' pointer needs to be in ECX.  */
+  if (thiscall)
+    regcache->cooked_write (I386_ECX_REGNUM, value_contents_all (args[0]));
+
   /* MarkK wrote: This "+ 8" is all over the place:
      (i386_frame_this_id, i386_sigtramp_frame_this_id,
      i386_dummy_id).  It's there, since all frame unwinders for
@@ -2769,6 +2778,20 @@ i386_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
      the i386, when %ebp is used as a frame pointer, the offset
      between the contents %ebp and the CFA as defined by GCC.  */
   return sp + 8;
+}
+
+/* Implement the "push_dummy_call" gdbarch method.  */
+
+static CORE_ADDR
+i386_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
+		      struct regcache *regcache, CORE_ADDR bp_addr, int nargs,
+		      struct value **args, CORE_ADDR sp,
+		      function_call_return_method return_method,
+		      CORE_ADDR struct_addr)
+{
+  return i386_thiscall_push_dummy_call (gdbarch, function, regcache, bp_addr,
+					nargs, args, sp, return_method,
+					struct_addr, false);
 }
 
 /* These registers are used for returning integers (and on some
@@ -2788,7 +2811,7 @@ i386_extract_return_value (struct gdbarch *gdbarch, struct type *type,
   int len = TYPE_LENGTH (type);
   gdb_byte buf[I386_MAX_REGISTER_SIZE];
 
-  if (TYPE_CODE (type) == TYPE_CODE_FLT)
+  if (type->code () == TYPE_CODE_FLT)
     {
       if (tdep->st0_regnum < 0)
 	{
@@ -2838,7 +2861,7 @@ i386_store_return_value (struct gdbarch *gdbarch, struct type *type,
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int len = TYPE_LENGTH (type);
 
-  if (TYPE_CODE (type) == TYPE_CODE_FLT)
+  if (type->code () == TYPE_CODE_FLT)
     {
       ULONGEST fstat;
       gdb_byte buf[I386_MAX_REGISTER_SIZE];
@@ -2915,7 +2938,7 @@ static int
 i386_reg_struct_return_p (struct gdbarch *gdbarch, struct type *type)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  enum type_code code = TYPE_CODE (type);
+  enum type_code code = type->code ();
   int len = TYPE_LENGTH (type);
 
   gdb_assert (code == TYPE_CODE_STRUCT
@@ -2929,10 +2952,10 @@ i386_reg_struct_return_p (struct gdbarch *gdbarch, struct type *type)
 
   /* Structures consisting of a single `float', `double' or 'long
      double' member are returned in %st(0).  */
-  if (code == TYPE_CODE_STRUCT && TYPE_NFIELDS (type) == 1)
+  if (code == TYPE_CODE_STRUCT && type->num_fields () == 1)
     {
-      type = check_typedef (TYPE_FIELD_TYPE (type, 0));
-      if (TYPE_CODE (type) == TYPE_CODE_FLT)
+      type = check_typedef (type->field (0).type ());
+      if (type->code () == TYPE_CODE_FLT)
 	return (len == 4 || len == 8 || len == 12);
     }
 
@@ -2950,13 +2973,13 @@ i386_return_value (struct gdbarch *gdbarch, struct value *function,
 		   struct type *type, struct regcache *regcache,
 		   gdb_byte *readbuf, const gdb_byte *writebuf)
 {
-  enum type_code code = TYPE_CODE (type);
+  enum type_code code = type->code ();
 
   if (((code == TYPE_CODE_STRUCT
 	|| code == TYPE_CODE_UNION
 	|| code == TYPE_CODE_ARRAY)
        && !i386_reg_struct_return_p (gdbarch, type))
-      /* Complex double and long double uses the struct return covention.  */
+      /* Complex double and long double uses the struct return convention.  */
       || (code == TYPE_CODE_COMPLEX && TYPE_LENGTH (type) == 16)
       || (code == TYPE_CODE_COMPLEX && TYPE_LENGTH (type) == 24)
       /* 128-bit decimal float uses the struct return convention.  */
@@ -2997,9 +3020,9 @@ i386_return_value (struct gdbarch *gdbarch, struct value *function,
      the structure.  Since that should work for all structures that
      have only one member, we don't bother to check the member's type
      here.  */
-  if (code == TYPE_CODE_STRUCT && TYPE_NFIELDS (type) == 1)
+  if (code == TYPE_CODE_STRUCT && type->num_fields () == 1)
     {
-      type = check_typedef (TYPE_FIELD_TYPE (type, 0));
+      type = check_typedef (type->field (0).type ());
       return i386_return_value (gdbarch, function, type, regcache,
 				readbuf, writebuf);
     }
@@ -3057,7 +3080,7 @@ i386_bnd_type (struct gdbarch *gdbarch)
       append_composite_type_field (t, "lbound", bt->builtin_data_ptr);
       append_composite_type_field (t, "ubound", bt->builtin_data_ptr);
 
-      TYPE_NAME (t) = "builtin_type_bound128";
+      t->set_name ("builtin_type_bound128");
       tdep->i386_bnd_type = t;
     }
 
@@ -3110,7 +3133,7 @@ i386_zmm_type (struct gdbarch *gdbarch)
 				   init_vector_type (bt->builtin_int128, 4));
 
       TYPE_VECTOR (t) = 1;
-      TYPE_NAME (t) = "builtin_type_vec512i";
+      t->set_name ("builtin_type_vec512i");
       tdep->i386_zmm_type = t;
     }
 
@@ -3163,7 +3186,7 @@ i386_ymm_type (struct gdbarch *gdbarch)
 				   init_vector_type (bt->builtin_int128, 2));
 
       TYPE_VECTOR (t) = 1;
-      TYPE_NAME (t) = "builtin_type_vec256i";
+      t->set_name ("builtin_type_vec256i");
       tdep->i386_ymm_type = t;
     }
 
@@ -3205,7 +3228,7 @@ i386_mmx_type (struct gdbarch *gdbarch)
 				   init_vector_type (bt->builtin_int8, 8));
 
       TYPE_VECTOR (t) = 1;
-      TYPE_NAME (t) = "builtin_type_vec64i";
+      t->set_name ("builtin_type_vec64i");
       tdep->i386_mmx_type = t;
     }
 
@@ -3933,7 +3956,7 @@ i386_pe_skip_trampoline_code (struct frame_info *frame,
 	read_memory_unsigned_integer (pc + 2, 4, byte_order);
       struct minimal_symbol *indsym =
 	indirect ? lookup_minimal_symbol_by_pc (indirect).minsym : 0;
-      const char *symname = indsym ? MSYMBOL_LINKAGE_NAME (indsym) : 0;
+      const char *symname = indsym ? indsym->linkage_name () : 0;
 
       if (symname)
 	{
@@ -4389,27 +4412,24 @@ i386_stap_parse_special_token (struct gdbarch *gdbarch,
 /* Implementation of 'gdbarch_stap_adjust_register', as defined in
    gdbarch.h.  */
 
-static void
+static std::string
 i386_stap_adjust_register (struct gdbarch *gdbarch, struct stap_parse_info *p,
-			   std::string &regname, int regnum)
+			   const std::string &regname, int regnum)
 {
   static const std::unordered_set<std::string> reg_assoc
     = { "ax", "bx", "cx", "dx",
 	"si", "di", "bp", "sp" };
 
-  if (register_size (gdbarch, regnum) >= TYPE_LENGTH (p->arg_type))
-    {
-      /* If we're dealing with a register whose size is greater or
-	 equal than the size specified by the "[-]N@" prefix, then we
-	 don't need to do anything.  */
-      return;
-    }
+  /* If we are dealing with a register whose size is less than the size
+     specified by the "[-]N@" prefix, and it is one of the registers that
+     we know has an extended variant available, then use the extended
+     version of the register instead.  */
+  if (register_size (gdbarch, regnum) < TYPE_LENGTH (p->arg_type)
+      && reg_assoc.find (regname) != reg_assoc.end ())
+    return "e" + regname;
 
-  if (reg_assoc.find (regname) != reg_assoc.end ())
-    {
-      /* Use the extended version of the register.  */
-      regname = "e" + regname;
-    }
+  /* Otherwise, just use the requested register.  */
+  return regname;
 }
 
 
@@ -8180,7 +8200,7 @@ i386_fast_tracepoint_valid_at (struct gdbarch *gdbarch, CORE_ADDR addr,
    length LEN in bits.  If non-NULL, NAME is the name of its type.
    If no suitable type is found, return NULL.  */
 
-const struct floatformat **
+static const struct floatformat **
 i386_floatformat_for_type (struct gdbarch *gdbarch,
 			   const char *name, int len)
 {
@@ -8378,13 +8398,13 @@ i386_type_align (struct gdbarch *gdbarch, struct type *type)
 
   if (gdbarch_ptr_bit (gdbarch) == 32)
     {
-      if ((TYPE_CODE (type) == TYPE_CODE_INT
-	   || TYPE_CODE (type) == TYPE_CODE_FLT)
+      if ((type->code () == TYPE_CODE_INT
+	   || type->code () == TYPE_CODE_FLT)
 	  && TYPE_LENGTH (type) > 4)
 	return 4;
 
       /* Handle x86's funny long double.  */
-      if (TYPE_CODE (type) == TYPE_CODE_FLT
+      if (type->code () == TYPE_CODE_FLT
 	  && gdbarch_long_double_bit (gdbarch) == TYPE_LENGTH (type) * 8)
 	return 4;
     }
@@ -8914,7 +8934,7 @@ i386_mpx_print_bounds (const CORE_ADDR bt_entry[4])
 
       size = (size > -1 ? size + 1 : size);
       uiout->text (", size = ");
-      uiout->field_fmt ("size", "%s", plongest (size));
+      uiout->field_string ("size", plongest (size));
 
       uiout->text (", metadata = ");
       uiout->field_core_addr ("metadata", gdbarch, bt_entry[3]);
@@ -9019,24 +9039,9 @@ i386_mpx_set_bounds (const char *args, int from_tty)
 
 static struct cmd_list_element *mpx_set_cmdlist, *mpx_show_cmdlist;
 
-/* Helper function for the CLI commands.  */
-
-static void
-set_mpx_cmd (const char *args, int from_tty)
-{
-  help_list (mpx_set_cmdlist, "set mpx ", all_commands, gdb_stdout);
-}
-
-/* Helper function for the CLI commands.  */
-
-static void
-show_mpx_cmd (const char *args, int from_tty)
-{
-  cmd_show_list (mpx_show_cmdlist, from_tty, "");
-}
-
+void _initialize_i386_tdep ();
 void
-_initialize_i386_tdep (void)
+_initialize_i386_tdep ()
 {
   register_gdbarch_init (bfd_arch_i386, i386_gdbarch_init);
 
@@ -9064,17 +9069,17 @@ is \"default\"."),
 
   /* Add "mpx" prefix for the set commands.  */
 
-  add_prefix_cmd ("mpx", class_support, set_mpx_cmd, _("\
+  add_basic_prefix_cmd ("mpx", class_support, _("\
 Set Intel Memory Protection Extensions specific variables."),
-		  &mpx_set_cmdlist, "set mpx ",
-		  0 /* allow-unknown */, &setlist);
+			&mpx_set_cmdlist, "set mpx ",
+			0 /* allow-unknown */, &setlist);
 
   /* Add "mpx" prefix for the show commands.  */
 
-  add_prefix_cmd ("mpx", class_support, show_mpx_cmd, _("\
+  add_show_prefix_cmd ("mpx", class_support, _("\
 Show Intel Memory Protection Extensions specific variables."),
-		  &mpx_show_cmdlist, "show mpx ",
-		  0 /* allow-unknown */, &showlist);
+		       &mpx_show_cmdlist, "show mpx ",
+		       0 /* allow-unknown */, &showlist);
 
   /* Add "bound" command for the show mpx commands list.  */
 
@@ -9098,28 +9103,4 @@ Show Intel Memory Protection Extensions specific variables."),
 
   /* Tell remote stub that we support XML target description.  */
   register_remote_support_xml ("i386");
-
-#if GDB_SELF_TEST
-  struct
-  {
-    const char *xml;
-    uint64_t mask;
-  } xml_masks[] = {
-    { "i386/i386.xml", X86_XSTATE_SSE_MASK },
-    { "i386/i386-mmx.xml", X86_XSTATE_X87_MASK },
-    { "i386/i386-avx.xml", X86_XSTATE_AVX_MASK },
-    { "i386/i386-mpx.xml", X86_XSTATE_MPX_MASK },
-    { "i386/i386-avx-mpx.xml", X86_XSTATE_AVX_MPX_MASK },
-    { "i386/i386-avx-avx512.xml", X86_XSTATE_AVX_AVX512_MASK },
-    { "i386/i386-avx-mpx-avx512-pku.xml",
-      X86_XSTATE_AVX_MPX_AVX512_PKU_MASK },
-  };
-
-  for (auto &a : xml_masks)
-    {
-      auto tdesc = i386_target_description (a.mask, false);
-
-      selftests::record_xml_tdesc (a.xml, tdesc);
-    }
-#endif /* GDB_SELF_TEST */
 }

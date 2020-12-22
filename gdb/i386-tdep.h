@@ -1,6 +1,6 @@
 /* Target-dependent code for the i386.
 
-   Copyright (C) 2001-2019 Free Software Foundation, Inc.
+   Copyright (C) 2001-2020 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,6 +20,7 @@
 #ifndef I386_TDEP_H
 #define I386_TDEP_H
 
+#include "gdbarch.h"
 #include "infrun.h"
 
 struct frame_info;
@@ -259,7 +260,7 @@ struct gdbarch_tdep
 
 /* Floating-point registers.  */
 
-/* All FPU control regusters (except for FIOFF and FOOFF) are 16-bit
+/* All FPU control registers (except for FIOFF and FOOFF) are 16-bit
    (at most) in the FPU, but are zero-extended to 32 bits in GDB's
    register cache.  */
 
@@ -398,6 +399,19 @@ extern CORE_ADDR i386_pe_skip_trampoline_code (struct frame_info *frame,
 extern CORE_ADDR i386_skip_main_prologue (struct gdbarch *gdbarch,
 					  CORE_ADDR pc);
 
+/* The "push_dummy_call" gdbarch method, optionally with the thiscall
+   calling convention.  */
+extern CORE_ADDR i386_thiscall_push_dummy_call (struct gdbarch *gdbarch,
+						struct value *function,
+						struct regcache *regcache,
+						CORE_ADDR bp_addr,
+						int nargs, struct value **args,
+						CORE_ADDR sp,
+						function_call_return_method
+						return_method,
+						CORE_ADDR struct_addr,
+						bool thiscall);
+
 /* Return whether the THIS_FRAME corresponds to a sigtramp routine.  */
 extern int i386_sigtramp_p (struct frame_info *this_frame);
 
@@ -427,7 +441,7 @@ extern void
 
 typedef buf_displaced_step_closure i386_displaced_step_closure;
 
-extern struct displaced_step_closure *i386_displaced_step_copy_insn
+extern displaced_step_closure_up i386_displaced_step_copy_insn
   (struct gdbarch *gdbarch, CORE_ADDR from, CORE_ADDR to,
    struct regcache *regs);
 extern void i386_displaced_step_fixup (struct gdbarch *gdbarch,

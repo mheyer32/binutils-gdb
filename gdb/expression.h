@@ -1,6 +1,6 @@
 /* Definitions for expressions stored in reversed prefix form, for GDB.
 
-   Copyright (C) 1986-2019 Free Software Foundation, Inc.
+   Copyright (C) 1986-2020 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,6 +19,8 @@
 
 #if !defined (EXPRESSION_H)
 #define EXPRESSION_H 1
+
+#include "gdbtypes.h"
 
 /* While parsing expressions we need to track the innermost lexical block
    that we encounter.  In some situations we need to track the innermost

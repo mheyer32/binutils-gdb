@@ -1,5 +1,5 @@
 /* ADI Blackfin BFD support for 32-bit ELF.
-   Copyright (C) 2005-2019 Free Software Foundation, Inc.
+   Copyright (C) 2005-2020 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -25,6 +25,7 @@
 #include "elf/bfin.h"
 #include "dwarf2.h"
 #include "hashtab.h"
+#include "elf32-bfin.h"
 
 /* FUNCTION : bfin_pltpc_reloc
    ABSTRACT : TODO : figure out how to handle pltpc relocs.  */
@@ -1133,14 +1134,14 @@ bfd_boolean elf32_bfin_code_in_l1 = 0;
 /* Set by ld emulation if --data-in-l1.  */
 bfd_boolean elf32_bfin_data_in_l1 = 0;
 
-static void
-elf32_bfin_final_write_processing (bfd *abfd,
-				   bfd_boolean linker ATTRIBUTE_UNUSED)
+static bfd_boolean
+elf32_bfin_final_write_processing (bfd *abfd)
 {
   if (elf32_bfin_code_in_l1)
     elf_elfheader (abfd)->e_flags |= EF_BFIN_CODE_IN_L1;
   if (elf32_bfin_data_in_l1)
     elf_elfheader (abfd)->e_flags |= EF_BFIN_DATA_IN_L1;
+  return _bfd_elf_final_write_processing (abfd);
 }
 
 /* Return TRUE if the name is a local label.
@@ -1601,7 +1602,7 @@ bfin_relocate_section (bfd * output_bfd,
 	      if (name == NULL)
 		return FALSE;
 	      if (*name == '\0')
-		name = bfd_section_name (input_bfd, sec);
+		name = bfd_section_name (sec);
 	    }
 
 	  if (r == bfd_reloc_overflow)
@@ -1727,7 +1728,7 @@ static struct bfd_link_hash_table *
 bfinfdpic_elf_link_hash_table_create (bfd *abfd)
 {
   struct bfinfdpic_elf_link_hash_table *ret;
-  bfd_size_type amt = sizeof (struct bfinfdpic_elf_link_hash_table);
+  size_t amt = sizeof (struct bfinfdpic_elf_link_hash_table);
 
   ret = bfd_zmalloc (amt);
   if (ret == NULL)
@@ -2551,6 +2552,7 @@ bfinfdpic_relocate_section (bfd * output_bfd,
       h      = NULL;
       sym    = NULL;
       sec    = NULL;
+      picrel = NULL;
 
       if (r_symndx < symtab_hdr->sh_info)
 	{
@@ -2560,7 +2562,7 @@ bfinfdpic_relocate_section (bfd * output_bfd,
 
 	  name = bfd_elf_string_from_elf_section
 	    (input_bfd, symtab_hdr->sh_link, sym->st_name);
-	  name = (name == NULL) ? bfd_section_name (input_bfd, sec) : name;
+	  name = name == NULL ? bfd_section_name (sec) : name;
 	}
       else
 	{
@@ -2613,6 +2615,9 @@ bfinfdpic_relocate_section (bfd * output_bfd,
 	case R_BFIN_FUNCDESC_GOTOFFLO:
 	case R_BFIN_FUNCDESC:
 	case R_BFIN_FUNCDESC_VALUE:
+	  if ((input_section->flags & SEC_ALLOC) == 0)
+	    break;
+
 	  if (h != NULL)
 	    picrel = bfinfdpic_relocs_info_for_global (bfinfdpic_relocs_info
 						       (info), input_bfd, h,
@@ -2778,8 +2783,7 @@ bfinfdpic_relocate_section (bfd * output_bfd,
 		    bfd_vma offset;
 
 		    addend += bfinfdpic_got_section (info)->output_section->vma;
-		    if ((bfd_get_section_flags (output_bfd,
-						input_section->output_section)
+		    if ((bfd_section_flags (input_section->output_section)
 			 & (SEC_ALLOC | SEC_LOAD)) == (SEC_ALLOC | SEC_LOAD))
 		      {
 			if (_bfinfdpic_osec_readonly_p (output_bfd,
@@ -2807,8 +2811,7 @@ bfinfdpic_relocate_section (bfd * output_bfd,
 						  picrel);
 		      }
 		  }
-		else if ((bfd_get_section_flags (output_bfd,
-						 input_section->output_section)
+		else if ((bfd_section_flags (input_section->output_section)
 			  & (SEC_ALLOC | SEC_LOAD)) == (SEC_ALLOC | SEC_LOAD))
 		  {
 		    bfd_vma offset;
@@ -2901,8 +2904,7 @@ bfinfdpic_relocate_section (bfd * output_bfd,
 		if (osec)
 		  addend += osec->output_section->vma;
 		if (IS_FDPIC (input_bfd)
-		    && (bfd_get_section_flags (output_bfd,
-					       input_section->output_section)
+		    && (bfd_section_flags (input_section->output_section)
 			& (SEC_ALLOC | SEC_LOAD)) == (SEC_ALLOC | SEC_LOAD))
 		  {
 		    if (_bfinfdpic_osec_readonly_p (output_bfd,
@@ -2939,8 +2941,7 @@ bfinfdpic_relocate_section (bfd * output_bfd,
 	      }
 	    else
 	      {
-		if ((bfd_get_section_flags (output_bfd,
-					    input_section->output_section)
+		if ((bfd_section_flags (input_section->output_section)
 		     & (SEC_ALLOC | SEC_LOAD)) == (SEC_ALLOC | SEC_LOAD))
 		  {
 		    if (_bfinfdpic_osec_readonly_p (output_bfd,
@@ -3018,11 +3019,11 @@ bfinfdpic_relocate_section (bfd * output_bfd,
 	     input file basename is crt0.o only once.  */
 	  if (silence_segment_error == 1)
 	    silence_segment_error =
-	      (strlen (input_bfd->filename) == 6
-	       && filename_cmp (input_bfd->filename, "crt0.o") == 0)
-	      || (strlen (input_bfd->filename) > 6
-		  && filename_cmp (input_bfd->filename
-				   + strlen (input_bfd->filename) - 7,
+	      (strlen (bfd_get_filename (input_bfd)) == 6
+	       && filename_cmp (bfd_get_filename (input_bfd), "crt0.o") == 0)
+	      || (strlen (bfd_get_filename (input_bfd)) > 6
+		  && filename_cmp (bfd_get_filename (input_bfd)
+				   + strlen (bfd_get_filename (input_bfd)) - 7,
 			     "/crt0.o") == 0)
 	      ? -1 : 0;
 #endif
@@ -3201,7 +3202,7 @@ _bfin_create_got_section (bfd *abfd, struct bfd_link_info *info)
   s = bfd_make_section_anyway_with_flags (abfd, ".got", flags);
   elf_hash_table (info)->sgot = s;
   if (s == NULL
-      || !bfd_set_section_alignment (abfd, s, ptralign))
+      || !bfd_set_section_alignment (s, ptralign))
     return FALSE;
 
   if (bed->want_got_sym)
@@ -3238,7 +3239,7 @@ _bfin_create_got_section (bfd *abfd, struct bfd_link_info *info)
       s = bfd_make_section_anyway_with_flags (abfd, ".rel.got",
 					      (flags | SEC_READONLY));
       if (s == NULL
-	  || ! bfd_set_section_alignment (abfd, s, 2))
+	  || !bfd_set_section_alignment (s, 2))
 	return FALSE;
 
       bfinfdpic_gotrel_section (info) = s;
@@ -3247,7 +3248,7 @@ _bfin_create_got_section (bfd *abfd, struct bfd_link_info *info)
       s = bfd_make_section_anyway_with_flags (abfd, ".rofixup",
 					      (flags | SEC_READONLY));
       if (s == NULL
-	  || ! bfd_set_section_alignment (abfd, s, 2))
+	  || !bfd_set_section_alignment (s, 2))
 	return FALSE;
 
       bfinfdpic_gotfixup_section (info) = s;
@@ -3261,7 +3262,7 @@ _bfin_create_got_section (bfd *abfd, struct bfd_link_info *info)
 
   s = bfd_make_section_anyway_with_flags (abfd, ".plt", pltflags);
   if (s == NULL
-      || ! bfd_set_section_alignment (abfd, s, bed->plt_alignment))
+      || !bfd_set_section_alignment (s, bed->plt_alignment))
     return FALSE;
   /* Blackfin-specific: remember it.  */
   bfinfdpic_plt_section (info) = s;
@@ -3289,7 +3290,7 @@ _bfin_create_got_section (bfd *abfd, struct bfd_link_info *info)
   s = bfd_make_section_anyway_with_flags (abfd, ".rel.plt",
 					  flags | SEC_READONLY);
   if (s == NULL
-      || ! bfd_set_section_alignment (abfd, s, bed->s->log_file_align))
+      || !bfd_set_section_alignment (s, bed->s->log_file_align))
     return FALSE;
   /* Blackfin-specific: remember it.  */
   bfinfdpic_pltrel_section (info) = s;
@@ -3355,7 +3356,7 @@ elf32_bfinfdpic_create_dynamic_sections (bfd *abfd, struct bfd_link_info *info)
 						  ".rela.bss",
 						  flags | SEC_READONLY);
 	  if (s == NULL
-	      || ! bfd_set_section_alignment (abfd, s, bed->s->log_file_align))
+	      || !bfd_set_section_alignment (s, bed->s->log_file_align))
 	    return FALSE;
 	}
     }
@@ -4066,26 +4067,6 @@ elf32_bfinfdpic_size_dynamic_sections (bfd *output_bfd,
   if (!_bfinfdpic_size_got_plt (output_bfd, &gpinfo))
       return FALSE;
 
-  if (elf_hash_table (info)->dynamic_sections_created)
-    {
-      if (bfinfdpic_got_section (info)->size)
-	if (!_bfd_elf_add_dynamic_entry (info, DT_PLTGOT, 0))
-	  return FALSE;
-
-      if (bfinfdpic_pltrel_section (info)->size)
-	if (!_bfd_elf_add_dynamic_entry (info, DT_PLTRELSZ, 0)
-	    || !_bfd_elf_add_dynamic_entry (info, DT_PLTREL, DT_REL)
-	    || !_bfd_elf_add_dynamic_entry (info, DT_JMPREL, 0))
-	  return FALSE;
-
-      if (bfinfdpic_gotrel_section (info)->size)
-	if (!_bfd_elf_add_dynamic_entry (info, DT_REL, 0)
-	    || !_bfd_elf_add_dynamic_entry (info, DT_RELSZ, 0)
-	    || !_bfd_elf_add_dynamic_entry (info, DT_RELENT,
-					    sizeof (Elf32_External_Rel)))
-	  return FALSE;
-    }
-
   s = bfd_get_linker_section (dynobj, ".dynbss");
   if (s && s->size == 0)
     s->flags |= SEC_EXCLUDE;
@@ -4094,7 +4075,7 @@ elf32_bfinfdpic_size_dynamic_sections (bfd *output_bfd,
   if (s && s->size == 0)
     s->flags |= SEC_EXCLUDE;
 
-  return TRUE;
+  return _bfd_elf_add_dynamic_tags (output_bfd, info, TRUE);
 }
 
 static bfd_boolean
@@ -4616,7 +4597,7 @@ bfinfdpic_check_relocs (bfd *abfd, struct bfd_link_info *info,
 
 	case R_BFIN_FUNCDESC_VALUE:
 	  picrel->relocsfdv++;
-	  if (bfd_get_section_flags (abfd, sec) & SEC_ALLOC)
+	  if (bfd_section_flags (sec) & SEC_ALLOC)
 	    picrel->relocs32--;
 	  /* Fall through.  */
 
@@ -4625,7 +4606,7 @@ bfinfdpic_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	    break;
 
 	  picrel->sym++;
-	  if (bfd_get_section_flags (abfd, sec) & SEC_ALLOC)
+	  if (bfd_section_flags (sec) & SEC_ALLOC)
 	    picrel->relocs32++;
 	  break;
 
@@ -4758,6 +4739,10 @@ elf32_bfin_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
   flagword old_flags, new_flags;
   bfd_boolean error = FALSE;
 
+  /* FIXME: What should be checked when linking shared libraries?  */
+  if ((ibfd->flags & DYNAMIC) != 0)
+    return TRUE;
+
   new_flags = elf_elfheader (ibfd)->e_flags;
   old_flags = elf_elfheader (obfd)->e_flags;
 
@@ -4845,7 +4830,7 @@ static struct bfd_link_hash_table *
 bfin_link_hash_table_create (bfd * abfd)
 {
   struct bfin_link_hash_table *ret;
-  bfd_size_type amt = sizeof (struct bfin_link_hash_table);
+  size_t amt = sizeof (struct bfin_link_hash_table);
 
   ret = bfd_zmalloc (amt);
   if (ret == NULL)
@@ -5064,9 +5049,9 @@ bfin_adjust_dynamic_symbol (struct bfd_link_info *info,
 
   /* Apply the required alignment.  */
   s->size = BFD_ALIGN (s->size, (bfd_size_type) (1 << power_of_two));
-  if (power_of_two > bfd_get_section_alignment (dynobj, s))
+  if (power_of_two > bfd_section_alignment (s))
     {
-      if (!bfd_set_section_alignment (dynobj, s, power_of_two))
+      if (!bfd_set_section_alignment (s, power_of_two))
 	return FALSE;
     }
 
@@ -5200,7 +5185,7 @@ bfin_size_dynamic_sections (bfd * output_bfd ATTRIBUTE_UNUSED,
 
       /* It's OK to base decisions on the section name, because none
 	 of the dynobj section names depend upon the input files.  */
-      name = bfd_get_section_name (dynobj, s);
+      name = bfd_section_name (s);
 
       strip = FALSE;
 
@@ -5394,18 +5379,16 @@ bfd_bfin_elf32_create_embedded_relocs (bfd *abfd,
 	strncpy ((char *) p + 4, targetsec->output_section->name, 8);
     }
 
-  if (isymbuf != NULL && symtab_hdr->contents != (unsigned char *) isymbuf)
+  if (symtab_hdr->contents != (unsigned char *) isymbuf)
     free (isymbuf);
-  if (internal_relocs != NULL
-      && elf_section_data (datasec)->relocs != internal_relocs)
+  if (elf_section_data (datasec)->relocs != internal_relocs)
     free (internal_relocs);
   return TRUE;
 
-error_return:
-  if (isymbuf != NULL && symtab_hdr->contents != (unsigned char *) isymbuf)
+ error_return:
+  if (symtab_hdr->contents != (unsigned char *) isymbuf)
     free (isymbuf);
-  if (internal_relocs != NULL
-      && elf_section_data (datasec)->relocs != internal_relocs)
+  if (elf_section_data (datasec)->relocs != internal_relocs)
     free (internal_relocs);
   return FALSE;
 }

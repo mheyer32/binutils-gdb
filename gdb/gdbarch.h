@@ -3,7 +3,7 @@
 
 /* Dynamic architecture support for GDB, the GNU debugger.
 
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright (C) 1998-2020 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,17 +20,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-/* This file was created with the aid of ``gdbarch.sh''.
-
-   The Bourne shell script ``gdbarch.sh'' creates the files
-   ``new-gdbarch.c'' and ``new-gdbarch.h and then compares them
-   against the existing ``gdbarch.[hc]''.  Any differences found
-   being reported.
-
-   If editing this file, please also run gdbarch.sh and merge any
-   changes into that script. Conversely, when making sweeping changes
-   to this file, modifying gdbarch.sh and using its output may prove
-   easier.  */
+/* This file was created with the aid of ``gdbarch.sh''.  */
 
 #ifndef GDBARCH_H
 #define GDBARCH_H
@@ -39,6 +29,8 @@
 #include "frame.h"
 #include "dis-asm.h"
 #include "gdb_obstack.h"
+#include "infrun.h"
+#include "osabi.h"
 
 struct floatformat;
 struct ui_file;
@@ -55,7 +47,6 @@ struct obstack;
 struct bp_target_info;
 struct target_desc;
 struct symbol;
-struct displaced_step_closure;
 struct syscall;
 struct agent_expr;
 struct axs_value;
@@ -145,12 +136,6 @@ extern const struct target_desc * gdbarch_target_desc (struct gdbarch *gdbarch);
 
 
 /* The following are initialized by the target dependent code.  */
-
-/* The bit byte-order has to do just with numbering of bits in debugging symbols
-   and such.  Conceptually, it's quite separate from byte/word byte order. */
-
-extern int gdbarch_bits_big_endian (struct gdbarch *gdbarch);
-extern void set_gdbarch_bits_big_endian (struct gdbarch *gdbarch, int bits_big_endian);
 
 /* Number of bits in a short or unsigned short for the target machine. */
 
@@ -1022,9 +1007,7 @@ extern void set_gdbarch_max_insn_length (struct gdbarch *gdbarch, ULONGEST max_i
    not the copy at TO.  The caller should update it to point at TO later.
   
    Return a pointer to data of the architecture's choice to be passed
-   to gdbarch_displaced_step_fixup.  Or, return NULL to indicate that
-   the instruction's effects have been completely simulated, with the
-   resulting state written back to REGS.
+   to gdbarch_displaced_step_fixup.
   
    For a general explanation of displaced stepping and how GDB uses it,
    see the comments in infrun.c.
@@ -1042,8 +1025,8 @@ extern void set_gdbarch_max_insn_length (struct gdbarch *gdbarch, ULONGEST max_i
 
 extern int gdbarch_displaced_step_copy_insn_p (struct gdbarch *gdbarch);
 
-typedef struct displaced_step_closure * (gdbarch_displaced_step_copy_insn_ftype) (struct gdbarch *gdbarch, CORE_ADDR from, CORE_ADDR to, struct regcache *regs);
-extern struct displaced_step_closure * gdbarch_displaced_step_copy_insn (struct gdbarch *gdbarch, CORE_ADDR from, CORE_ADDR to, struct regcache *regs);
+typedef displaced_step_closure_up (gdbarch_displaced_step_copy_insn_ftype) (struct gdbarch *gdbarch, CORE_ADDR from, CORE_ADDR to, struct regcache *regs);
+extern displaced_step_closure_up gdbarch_displaced_step_copy_insn (struct gdbarch *gdbarch, CORE_ADDR from, CORE_ADDR to, struct regcache *regs);
 extern void set_gdbarch_displaced_step_copy_insn (struct gdbarch *gdbarch, gdbarch_displaced_step_copy_insn_ftype *displaced_step_copy_insn);
 
 /* Return true if GDB should use hardware single-stepping to execute
@@ -1126,14 +1109,6 @@ extern int gdbarch_core_read_description_p (struct gdbarch *gdbarch);
 typedef const struct target_desc * (gdbarch_core_read_description_ftype) (struct gdbarch *gdbarch, struct target_ops *target, bfd *abfd);
 extern const struct target_desc * gdbarch_core_read_description (struct gdbarch *gdbarch, struct target_ops *target, bfd *abfd);
 extern void set_gdbarch_core_read_description (struct gdbarch *gdbarch, gdbarch_core_read_description_ftype *core_read_description);
-
-/* Handle special encoding of static variables in stabs debug info. */
-
-extern int gdbarch_static_transform_name_p (struct gdbarch *gdbarch);
-
-typedef const char * (gdbarch_static_transform_name_ftype) (const char *name);
-extern const char * gdbarch_static_transform_name (struct gdbarch *gdbarch, const char *name);
-extern void set_gdbarch_static_transform_name (struct gdbarch *gdbarch, gdbarch_static_transform_name_ftype *static_transform_name);
 
 /* Set if the address in N_SO or N_FUN stabs may be zero. */
 
@@ -1376,8 +1351,8 @@ extern void set_gdbarch_stap_parse_special_token (struct gdbarch *gdbarch, gdbar
 
 extern int gdbarch_stap_adjust_register_p (struct gdbarch *gdbarch);
 
-typedef void (gdbarch_stap_adjust_register_ftype) (struct gdbarch *gdbarch, struct stap_parse_info *p, std::string &regname, int regnum);
-extern void gdbarch_stap_adjust_register (struct gdbarch *gdbarch, struct stap_parse_info *p, std::string &regname, int regnum);
+typedef std::string (gdbarch_stap_adjust_register_ftype) (struct gdbarch *gdbarch, struct stap_parse_info *p, const std::string &regname, int regnum);
+extern std::string gdbarch_stap_adjust_register (struct gdbarch *gdbarch, struct stap_parse_info *p, const std::string &regname, int regnum);
 extern void set_gdbarch_stap_adjust_register (struct gdbarch *gdbarch, gdbarch_stap_adjust_register_ftype *stap_adjust_register);
 
 /* DTrace related functions.
@@ -1551,6 +1526,13 @@ typedef int (gdbarch_insn_is_jump_ftype) (struct gdbarch *gdbarch, CORE_ADDR add
 extern int gdbarch_insn_is_jump (struct gdbarch *gdbarch, CORE_ADDR addr);
 extern void set_gdbarch_insn_is_jump (struct gdbarch *gdbarch, gdbarch_insn_is_jump_ftype *insn_is_jump);
 
+/* Return true if there's a program/permanent breakpoint planted in
+   memory at ADDRESS, return false otherwise. */
+
+typedef bool (gdbarch_program_breakpoint_here_p_ftype) (struct gdbarch *gdbarch, CORE_ADDR address);
+extern bool gdbarch_program_breakpoint_here_p (struct gdbarch *gdbarch, CORE_ADDR address);
+extern void set_gdbarch_program_breakpoint_here_p (struct gdbarch *gdbarch, gdbarch_program_breakpoint_here_p_ftype *program_breakpoint_here_p);
+
 /* Read one auxv entry from *READPTR, not reading locations >= ENDPTR.
    Return 0 if *READPTR is already at the end of the buffer.
    Return -1 if there is insufficient buffer for a whole entry.
@@ -1596,10 +1578,10 @@ extern void set_gdbarch_infcall_munmap (struct gdbarch *gdbarch, gdbarch_infcall
 /* Return string (caller has to use xfree for it) with options for GCC
    to produce code for this target, typically "-m64", "-m32" or "-m31".
    These options are put before CU's DW_AT_producer compilation options so that
-   they can override it.  Method may also return NULL. */
+   they can override it. */
 
-typedef char * (gdbarch_gcc_target_options_ftype) (struct gdbarch *gdbarch);
-extern char * gdbarch_gcc_target_options (struct gdbarch *gdbarch);
+typedef std::string (gdbarch_gcc_target_options_ftype) (struct gdbarch *gdbarch);
+extern std::string gdbarch_gcc_target_options (struct gdbarch *gdbarch);
 extern void set_gdbarch_gcc_target_options (struct gdbarch *gdbarch, gdbarch_gcc_target_options_ftype *gcc_target_options);
 
 /* Return a regular expression that matches names used by this
@@ -1639,6 +1621,12 @@ extern void set_gdbarch_valid_disassembler_options (struct gdbarch *gdbarch, con
 typedef ULONGEST (gdbarch_type_align_ftype) (struct gdbarch *gdbarch, struct type *type);
 extern ULONGEST gdbarch_type_align (struct gdbarch *gdbarch, struct type *type);
 extern void set_gdbarch_type_align (struct gdbarch *gdbarch, gdbarch_type_align_ftype *type_align);
+
+/* Return a string containing any flags for the given PC in the given FRAME. */
+
+typedef std::string (gdbarch_get_pc_address_flags_ftype) (frame_info *frame, CORE_ADDR pc);
+extern std::string gdbarch_get_pc_address_flags (struct gdbarch *gdbarch, frame_info *frame, CORE_ADDR pc);
+extern void set_gdbarch_get_pc_address_flags (struct gdbarch *gdbarch, gdbarch_get_pc_address_flags_ftype *get_pc_address_flags);
 
 extern struct gdbarch_tdep *gdbarch_tdep (struct gdbarch *gdbarch);
 
