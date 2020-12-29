@@ -904,7 +904,7 @@ struct type
   /* Get the name of this type.  */
   const char *name () const
   {
-    return this->main_type->name;
+    return this->main_type->name ? this->main_type->name : "__??";
   }
 
   /* Set the name of this type.  */
