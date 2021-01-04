@@ -853,6 +853,15 @@ gdb_readline_no_editing_callback (gdb_client_data client_data)
 
 thread_local void (*thread_local_segv_handler) (int);
 
+#ifdef __CYGWIN__ 
+void set_segv_handler(void (*hdl)(int));
+void set_segv_handler(void (*hdl)(int))
+{
+  thread_local_segv_handler = hdl;
+}
+#endif
+
+
 static void handle_sigsegv (int sig);
 
 /* Install the SIGSEGV handler.  */
@@ -881,6 +890,10 @@ handle_sigsegv (int sig)
 {
   install_handle_sigsegv ();
 
+#ifdef __CYGWIN__
+  set_segv_handler(handle_sigsegv);
+#endif
+  
   if (thread_local_segv_handler == nullptr)
     abort ();			/* ARI: abort */
   thread_local_segv_handler (sig);

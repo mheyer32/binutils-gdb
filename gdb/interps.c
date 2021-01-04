@@ -42,7 +42,8 @@
 
 #ifdef __CYGWIN__
 #include <setjmp.h>
-extern jmp_buf pseudo;
+//extern 
+jmp_buf pseudo;
 #endif
 
 /* Each UI has its own independent set of interpreters.  */
