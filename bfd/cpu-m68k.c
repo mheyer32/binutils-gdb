@@ -122,6 +122,7 @@ static const unsigned m68k_arch_features[] =
   m68030|m68881|m68851,
   m68040|m68881|m68851,
   m68060|m68881|m68851,
+  m68080|m68881,
   cpu32|m68881,
   fido_a|m68881,
   mcfisa_a,
