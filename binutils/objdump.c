@@ -2947,7 +2947,7 @@ disassemble_bytes (struct disassemble_info * inf,
 
 	  if (insns)
 	    {
-	      int insn_size;
+	      int insn_size = insn_width;
 
 	      sfile.pos = 0;
 	      inf->fprintf_func = (fprintf_ftype) objdump_sprintf;
@@ -3045,7 +3045,7 @@ disassemble_bytes (struct disassemble_info * inf,
 	      inf->fprintf_func = (fprintf_ftype) fprintf;
 	      inf->stream = stdout;
 	      if (insn_width == 0 && inf->bytes_per_line != 0)
-		octets_per_line = inf->bytes_per_line;
+		insn_size = octets_per_line = inf->bytes_per_line;
 	      if (insn_size < (int) opb)
 		{
 		  if (sfile.pos)
