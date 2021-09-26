@@ -257,7 +257,7 @@ static bfd *amiga_openr_next_archived_file PARAMS ((bfd *, bfd *));
 static PTR amiga_read_ar_hdr PARAMS ((bfd *));
 static int amiga_generic_stat_arch_elt PARAMS ((bfd *, struct stat *));
 
-#define DEBUG_AMIGA 1
+/* #define DEBUG_AMIGA 1 */
 #if DEBUG_AMIGA
 #include <stdarg.h>
 static void
@@ -782,7 +782,8 @@ parse_archive_units (
 	    {
 	len = n & 0xffffff;
 	type = (n>>24) & 0xff;
-	      switch (type & ~0x40)
+	if (type < 200) type &= ~0x40;
+	      switch (type)
 		{
 	case EXT_SYMB:
 	case EXT_DEF:
@@ -1462,7 +1463,8 @@ amiga_handle_rest (
 	      abfd->flags |= HAS_SYMS;
 	      abfd->symcount++;
 
-	      switch (type & ~0x40)
+		if (type < 200) type &= ~0x40;
+	      switch (type)
 		{
 		case EXT_SYMB: /* Symbol hunks are relative to hunk start... */
 		case EXT_DEF: /* def relative to hunk */
@@ -2876,10 +2878,13 @@ amiga_slurp_symbol_table (
 	  asp->type = type;
 	  asp->index = asp - amiga_data->symbols;
 
-	  if (type & 0x40)
-	    asp->symbol.flags = BSF_WEAK;
+	  if (type < 200 && (type & 0x40))
+	    {
+	      asp->symbol.flags = BSF_WEAK;
+	      type &= ~0x40;
+	    }
 
-	  switch (type & ~0x40)
+	  switch (type)
 	    {
 	  case EXT_ABSCOMMON: /* Common reference/definition */
 	  case EXT_RELCOMMON:
@@ -3266,7 +3271,8 @@ amiga_slurp_relocs (
       if (bfd_seek (abfd, n<<2, SEEK_CUR))
 	return FALSE;
 
-      switch (type & ~0x40)
+	if (type < 200) type &= ~0x40;
+      switch (type)
 	{
 	case EXT_SYMB:
 	case EXT_DEF:

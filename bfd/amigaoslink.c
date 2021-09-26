@@ -74,7 +74,7 @@ extern PTR alloca PARAMS ((size_t));
 
 #define bfd_msg (*_bfd_error_handler)
 
-#define DEBUG_AMIGA 1
+/*#define DEBUG_AMIGA 1*/
 #if DEBUG_AMIGA
 #include <stdarg.h>
 static void
@@ -1221,7 +1221,7 @@ amiga_final_link (
 							input_section,
 							relocs,
 							symbols);
-//		  free (relocs);
+		  free (relocs);
 		  if (reloc_count < 0)
 		    {
 		      DPRINT(10,("Relsize<0.II..in bfd %s, sec %s\n",
