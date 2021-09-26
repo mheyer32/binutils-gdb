@@ -45,7 +45,7 @@ static void obj_amiga_line (int);
 static void obj_amiga_weak (int);
 static void obj_amiga_section (int);
 static char * obj_amiga_section_name (void);
-static void s_gnu_section(char const * secname);
+static void s_custom_section(char const * secname);
 
 const pseudo_typeS obj_pseudo_table[] =
 {
@@ -101,7 +101,7 @@ void s_data_amiga (int which)
 }
 
 
-static void s_gnu_section(char const * secname)
+static void s_custom_section(char const * secname)
 {
   segT seg = subseg_new(secname, 0);
 
@@ -109,9 +109,13 @@ static void s_gnu_section(char const * secname)
     {
       int flags;
       if (strstr(secname, "lto"))
-	flags = SEC_READONLY | SEC_DEBUGGING;
+	flags = SEC_DEBUGGING;
+      else if (strncmp(secname, ".gnu.", 5) == 0 || strncmp(secname, ".text", 5) == 0 || strncmp(secname, ".rodata", 7) == 0)
+	flags = SEC_ALLOC | SEC_LOAD | SEC_RELOC | SEC_CODE;
+      else if (strncmp(secname, ".bss", 4) == 0)
+	flags = SEC_ALLOC;
       else
-	flags = SEC_READONLY | SEC_CODE;
+	flags = SEC_ALLOC | SEC_LOAD | SEC_RELOC | SEC_DATA;
       bfd_set_section_flags (seg, flags);
       seg_info (seg)->hadone = 1;
       seg->name = xstrdup(secname);
@@ -280,13 +284,16 @@ static void obj_amiga_section(int push) {
 	ignore_rest_of_line ();
 	--input_line_pointer;
 
-	if (0 == strncmp(".gnu.", name, 5))
-	  s_gnu_section(name);
+// support many segments
+	if (0 == strcmp(".rodata", name) || 0 == strcmp(".text", name) || 0 == strcmp(".text.startup", name)
+//	    || (0 == strncmp(".text.", name, 6) && strstr(name, "_GLOBAL_"))
+	    )
+	  s_text(push);
+	else if (0 == strcmp(".data", name) || 0 == strcmp(".bss", name))
+	  s_data(push);
 	else
-	if (0 == strcmp(".rodata", name) || 0 == strcmp(".text", name))
-		s_text(push);
-	else
-		s_data(push);
+	  s_custom_section(name);
+
 }
 
 static void

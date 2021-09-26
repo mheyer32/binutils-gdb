@@ -257,7 +257,7 @@ static bfd *amiga_openr_next_archived_file PARAMS ((bfd *, bfd *));
 static PTR amiga_read_ar_hdr PARAMS ((bfd *));
 static int amiga_generic_stat_arch_elt PARAMS ((bfd *, struct stat *));
 
-/* #define DEBUG_AMIGA 1 */
+#define DEBUG_AMIGA 1
 #if DEBUG_AMIGA
 #include <stdarg.h>
 static void
@@ -782,7 +782,7 @@ parse_archive_units (
 	    {
 	len = n & 0xffffff;
 	type = (n>>24) & 0xff;
-	      switch (type)
+	      switch (type & ~0x40)
 		{
 	case EXT_SYMB:
 	case EXT_DEF:
@@ -1462,7 +1462,7 @@ amiga_handle_rest (
 	      abfd->flags |= HAS_SYMS;
 	      abfd->symcount++;
 
-	      switch (type)
+	      switch (type & ~0x40)
 		{
 		case EXT_SYMB: /* Symbol hunks are relative to hunk start... */
 		case EXT_DEF: /* def relative to hunk */
@@ -2690,7 +2690,7 @@ static bfd_boolean amiga_write_symbols (
 		return FALSE;
 	    }
 
-	  if (!write_name (abfd, sym_p->name, EXT_ABS << 24))
+	  if (!write_name (abfd, sym_p->name, (EXT_ABS | ((sym_p->flags & BSF_WEAK) ? 0x40 : 0))<< 24))
 	    return FALSE;
 	  n[0]=sym_p->value;
 	  if (!write_longs (n, 1, abfd))
@@ -2704,7 +2704,7 @@ static bfd_boolean amiga_write_symbols (
 	 debugging or a local symbol, don't write it */
       if (sym_p->flags & (BSF_WARNING|BSF_CONSTRUCTOR|BSF_DEBUGGING|BSF_LOCAL))
 	continue;
-      if ((sym_p->flags & BSF_GLOBAL) == 0)
+      if ((sym_p->flags & (BSF_GLOBAL | BSF_WEAK)) == 0)
 	continue;
 
       /* Now, if osection==section, write it out */
@@ -2718,7 +2718,7 @@ static bfd_boolean amiga_write_symbols (
 		return FALSE;
 	    }
 
-	  type = symbol_header == HUNK_EXT ? EXT_DEF << 24 : 0;
+	  type = symbol_header == HUNK_EXT ? (EXT_DEF | ((sym_p->flags & BSF_WEAK) ? 0x40 : 0))<< 24 : 0;
 	  if (!write_name (abfd, sym_p->name, type))
 	    return FALSE;
 	  n[0] = sym_p->value + sym_p->section->output_offset;
@@ -2736,7 +2736,7 @@ static bfd_boolean amiga_write_symbols (
 		    return FALSE;
 		}
 
-	      if (!write_name (abfd, sym_p->name, EXT_ABSCOMMON << 24))
+	      if (!write_name (abfd, sym_p->name, (EXT_ABSCOMMON | ((sym_p->flags & BSF_WEAK) ? 0x40 : 0)) << 24))
 		return FALSE;
 	      n[0]=sym_p->value;
 	      n[1]=0;
@@ -2876,7 +2876,10 @@ amiga_slurp_symbol_table (
 	  asp->type = type;
 	  asp->index = asp - amiga_data->symbols;
 
-	  switch (type)
+	  if (type & 0x40)
+	    asp->symbol.flags = BSF_WEAK;
+
+	  switch (type & ~0x40)
 	    {
 	  case EXT_ABSCOMMON: /* Common reference/definition */
 	  case EXT_RELCOMMON:
@@ -3263,7 +3266,7 @@ amiga_slurp_relocs (
       if (bfd_seek (abfd, n<<2, SEEK_CUR))
 	return FALSE;
 
-      switch (type)
+      switch (type & ~0x40)
 	{
 	case EXT_SYMB:
 	case EXT_DEF:
