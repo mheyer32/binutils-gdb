@@ -13,6 +13,7 @@ SECTIONS
   .text :
   {
     ${RELOCATING+__stext = .;}
+    *(.text)
     *(.text.main)
     *(.text*)
     *(.rodata*)
