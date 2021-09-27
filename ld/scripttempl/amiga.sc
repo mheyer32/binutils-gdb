@@ -13,7 +13,9 @@ SECTIONS
   .text :
   {
     ${RELOCATING+__stext = .;}
-    *(.text)
+    *(.text.main)
+    *(.text*)
+    *(.rodata*)
     *(.gnu.linkonce.t.*)
     *(.gnu.linkonce.r.*)
     ${RELOCATING+___datadata_relocs = .;}
