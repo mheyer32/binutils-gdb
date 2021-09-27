@@ -1403,6 +1403,14 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
 		      - (S_GET_VALUE (fixp->fx_addsy)
 			 + S_GET_SEGMENT (fixp->fx_addsy)->vma);
     }
+  else   if (OUTPUT_FLAVOR == bfd_target_amiga_flavour
+      && fixp->fx_addsy
+      && S_IS_WEAK (fixp->fx_addsy)
+      && ! bfd_is_und_section (S_GET_SEGMENT (fixp->fx_addsy)))
+    {
+      // similar fix for amigavec
+      reloc->addend = fixp->fx_addnumber - S_GET_VALUE (fixp->fx_addsy);
+    }
   else if (fixp->fx_pcrel)
     reloc->addend = fixp->fx_addnumber;
   else
