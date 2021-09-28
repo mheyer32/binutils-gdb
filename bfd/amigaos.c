@@ -3897,6 +3897,9 @@ amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
   bfd * root = info->input_bfds;
   struct bfd_section * sec;
 
+  if (!info->gc_sections)
+    return TRUE;
+
   // mark root as KEEP
   for (sec = root->sections; sec; sec = sec->next)
     sec->flags |= SEC_KEEP;
@@ -3985,7 +3988,7 @@ amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
 		if (sec->flags & (SEC_EXCLUDE | SEC_KEEP))
 		  continue;
 
-		if (0 == strcmp(sec->name, "COMMON"))
+		if (0 == strcmp(sec->name, "COMMON") || 0 == strncmp(sec->name, ".stab", 5))
 		  continue;
 
 		if (asect->gc_count == 0)
