@@ -183,7 +183,7 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
 	{
 	  asection *s = lol->u.indirect.section;
 	  if (s->owner->xvec->flavour != bfd_target_amiga_flavour)
-	    return;
+	    continue;
 
 //	  printf("%s:%p:%d:%d=%d -> %s:%d:%d\n", s->name, s, (int)s->output_offset, (int)s->rawsize, (int)(s->output_offset + s->rawsize),
 //		 s->output_section->name, (int)s->output_section->output_offset, (int)s->output_section->rawsize);
