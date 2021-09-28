@@ -148,8 +148,11 @@ static unsigned r_datadata_count;
 static unsigned r_datadata_max;
 static int datadata_addend;
 
-static void insert_long_jumps(bfd *abfd, bfd *input_bfd, asection *input_section, struct bfd_link_order *link_order, bfd_byte *data)
+static void
+insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bfd_link_order *link_order,
+		   bfd_byte **datap)
 {
+  bfd_byte *data = *datap;
   /**
    * Check here for to large pcrel relocs which are to large.
    * hack the current input_section:
@@ -161,311 +164,326 @@ static void insert_long_jumps(bfd *abfd, bfd *input_bfd, asection *input_section
    *
    * Since the output offsets may change, a dry run is needed to precompute the new section sizes and offsets.
    *
+   * All section with an output_offset into the output .text section are handled
+   * s->compressed_size : track the original size
+   * s->raw_size        : how large the section should be
+   * s->size            : current size
+   *
+   * same for input_section
+   *
    */
-  if (0 == strcmp(input_section->name, ".text"))
+  static asection *target;
+  // on first invocation there is no content yet in the output_section
+  if (0 == strcmp (input_section->output_section->name, ".text") && !input_section->output_section->contents)
     {
-      // dry run? on first invocation there is no content yet in the output_section
-      if (!input_section->output_section->contents)
+      target = input_section->output_section;
+      // record the current sizes;
+      struct bfd_link_order *lol = link_order;
+      for (; lol; lol = lol->next)
 	{
-	  // record the current sizes;
-	  struct bfd_link_order * lo1 = link_order;
-	  for (; lo1; lo1 = lo1->next)
-	    {
-	      asection * s = lo1->u.indirect.section;
-	      if (s->owner->xvec->flavour != bfd_target_amiga_flavour)
-		continue;
+	  asection *s = lol->u.indirect.section;
+	  if (s->owner->xvec->flavour != bfd_target_amiga_flavour)
+	    return;
 
-	      if (strcmp(s->name, ".text"))
-		continue;
+//	  printf("%s:%p:%d:%d=%d -> %s:%d:%d\n", s->name, s, (int)s->output_offset, (int)s->rawsize, (int)(s->output_offset + s->rawsize),
+//		 s->output_section->name, (int)s->output_section->output_offset, (int)s->output_section->rawsize);
 
-	      s->compressed_size = s->rawsize;
-	    }
+	  if (s->output_section != target)
+	    continue;
 
-	  /**
-	   * determine new section sizes, loop until output_section no longer changes.
-	   */
-	  for(;;)
-	    {
-	      unsigned totalsize = input_section->output_section->rawsize;
-	      rel_jumps_count = 0;
-
-	      lo1 = link_order;
-	      for (; lo1; lo1 = lo1->next)
-		{
-		  asection * s = lo1->u.indirect.section;
-		  if (s->owner->xvec->flavour != bfd_target_amiga_flavour)
-		    continue;
-
-		  if (strcmp(s->name, ".text"))
-		    continue;
-
-		  if (s->reloc_count <= 0)
-		    continue;
-
-		  DPRINT(10, ("%s: %d relocs\n", s->owner->filename, s->reloc_count));
-
-		  // reset rawsize
-		  unsigned cursize = s->rawsize;
-		  s->rawsize = s->compressed_size;
-
-
-		  amiga_reloc_type *src;
-		  for (src = (amiga_reloc_type *) s->relocation; src; src = src->next)
-		    {
-		      signed from;
-		      signed to;
-		      signed dist;
-
-		      // track all accesses to ___datadata_relocs
-		      if (src->relent.howto->type == H_ABS32 && 0 == strcmp("___datadata_relocs", src->symbol->name))
-			{
-			  unsigned ri = 0;
-			  for (; ri < r_datadata_count; ++ri)
-			    if (r_datadata[ri] == src)
-			      break;
-			  if (ri == r_datadata_count)
-			    {
-			      if (r_datadata_count == r_datadata_max)
-				{
-				  r_datadata_max += r_datadata_max + 2;
-				  r_datadata = (amiga_reloc_type **)realloc(r_datadata, r_datadata_max * sizeof(amiga_reloc_type *));
-				}
-			      r_datadata[r_datadata_count++] = src;
-			    }
-			  continue;
-			}
-
-		      if (src->relent.howto->type != H_PC16 || strcmp(src->symbol->section->name, ".text"))
-			continue;
-
-		      // check if relative jump is in 16 bit range
-		      to = src->symbol->section->output_offset + src->symbol->value;
-		      from = s->output_offset + src->relent.address;
-		      dist = to - from;
-
-		      if (-32766 <= dist && dist <= 32766)
-			continue;
-
-		      DPRINT(10, ("%s %d, ", src->symbol->name, dist));
-
-		      // check last generated jumps
-		      if (rel_jumps)
-			{
-			  unsigned i = 0;
-			  for (; i < rel_jumps_count; ++i)
-			    {
-			      if (rel_jumps[i].symbol == src->symbol)
-				{
-				  to = rel_jumps[i].offset;
-				  dist = to - from;
-				  break;
-				}
-			    }
-			  // use an existing jump entry
-			  if (-32766 <= dist && dist <= 32766)
-			    {
-			      DPRINT(10, ("reuse %d, ", dist));
-			      continue;
-			    }
-			}
-
-		      // 2.
-		      // update rel_jumps
-		      unsigned slot = 0;
-		      for (;slot < rel_jumps_count; ++ slot)
-			{
-			  if (rel_jumps[slot].offset - from < -32766)
-			    break;
-			}
-		      if (slot == rel_jumps_max)
-			{
-			  rel_jumps_max += 16;
-			  rel_jumps = (struct rel_chain *)realloc(rel_jumps, sizeof(struct rel_chain) * rel_jumps_max);
-			}
-		      rel_jumps[slot].symbol = src->symbol;
-		      rel_jumps[slot].offset = s->rawsize + s->output_offset;
-		      if (slot == rel_jumps_count)
-			++rel_jumps_count;
-
-		      s->rawsize += 6;
-		    }
-
-		  DPRINT(10, ("\n"));
-
-		  // update sizes and offsets
-		  unsigned delta = s->rawsize - cursize;
-		  if (delta == 0)
-		    continue;
-
-		  datadata_addend += delta;
-
-		  struct bfd_link_order * lo;
-
-		  // 5. also patch data's link statements with bfd_section_reloc_link_order, needed for CTs
-		  asection * xs = s->output_section;
-		  for(;xs;xs = xs->next)
-		    {
-		      for (lo = xs->map_head.link_order; lo; lo = lo->next)
-			{
-			  if (lo->type == bfd_section_reloc_link_order && lo->u.reloc.p->u.section == s->output_section
-			      && lo->u.reloc.p->addend >= s->size + s->output_offset)
-			    lo->u.reloc.p->addend += delta;
-			}
-		   }
-
-		  s->output_section->rawsize += delta;
-		  s->size = s->rawsize;
-		  lo1->size += delta;
-
-		  // 4. update output_offsets
-		  for (lo = lo1->next; lo; lo = lo->next)
-		    {
-		      asection * ss = lo->u.indirect.section;
-		      if (0 == strcmp(ss->name, ".text"))
-			{
-			  ss->output_offset += delta;
-			  lo->offset += delta;
-			}
-		    }
-		}
-
-	      // stop if there was no size increase
-	      if (input_section->output_section->rawsize == totalsize)
-		break;
-	    }
-
-	  input_section->output_section->size = input_section->output_section->rawsize;
-
-	  // reset count
-	  rel_jumps_count = 0;
-
-	  /* adjust memory for first section. */
-	  if (input_section->compressed_size < input_section->rawsize)
-	    {
-	      PTR odata = data;
-	      data = bfd_alloc(abfd, input_section->rawsize);
-	      memcpy(data, odata, input_section->compressed_size);
-	    }
-
-	  /**
-	   * Now all sections have its final offset and size plus the old size in compressed_size.
-	   */
-	  if (datadata_addend)
-	    {
-		// patch all datadata_reloc refs
-		unsigned ri = 0;
-		for (; ri < r_datadata_count; ++ri)
-		  {
-		    amiga_reloc_type * rsrc = r_datadata[ri];
-		    asymbol * sym = rsrc->symbol;
-		    sym->value += (datadata_addend + 3) & ~3;
-		    struct bfd_link_hash_entry * blh = (struct bfd_link_hash_entry*)sym->udata.p;
-		    blh->u.def.value += (datadata_addend + 3) & ~3;
-		  }
-
-		// patch __etext
-		unsigned oi = 0;
-		for (; oi < abfd->symcount; ++oi)
-		  {
-		    asymbol * sym = abfd->outsymbols[oi];
-		    if (strcmp("__etext", sym->name))
-		      continue;
-
-		    sym->value += datadata_addend;
-		    break;
-		  }
-	    }
+	  s->compressed_size = s->rawsize;
 	}
 
       /**
-       * Create the jump tables.
+       * determine new section sizes, loop until output_section no longer changes.
        */
-      if (input_section->owner->xvec->flavour == bfd_target_amiga_flavour && input_section->reloc_count > 0)
+      for (;;)
 	{
-	  amiga_reloc_type *src;
-	  for (src = (amiga_reloc_type *) input_section->relocation; src; src = src->next)
+	  unsigned totalsize = input_section->output_section->rawsize;
+	  rel_jumps_count = 0;
+
+	  lol = link_order;
+	  for (; lol; lol = lol->next)
 	    {
-	      signed from;
-	      signed to;
-	      signed dist;
-	      if (src->relent.howto->type != H_PC16 || strcmp(src->symbol->section->name, ".text"))
+	      asection *s = lol->u.indirect.section;
+	      if (s->owner->xvec->flavour != bfd_target_amiga_flavour)
 		continue;
 
-	      // check if relative jump is in 16 bit range
-	      to = src->symbol->section->output_offset + src->symbol->value;
-	      from = input_section->output_offset + src->relent.address;
-	      dist = to - from;
-
-	      if (-32766 <= dist && dist <= 32766)
+	      if (s->output_section != target)
 		continue;
 
-	      // check last generated jumps
-	      if (rel_jumps)
+	      if (s->reloc_count <= 0)
+		continue;
+
+	      DPRINT(10, ("%s: %d relocs\n", s->owner->filename, s->reloc_count));
+
+	      // reset rawsize to initial size
+	      unsigned cursize = s->rawsize;
+	      s->rawsize = s->compressed_size;
+
+	      amiga_reloc_type *src;
+	      for (src = (amiga_reloc_type*) s->relocation; src; src = src->next)
 		{
-		  unsigned i = 0;
-		  for (; i < rel_jumps_count; ++i)
+		  signed from;
+		  signed to;
+		  signed dist;
+
+		  // track all accesses to ___datadata_relocs
+		  if (src->relent.howto->type == H_ABS32 && 0 == strcmp ("___datadata_relocs", src->symbol->name))
 		    {
-		      if (rel_jumps[i].symbol == src->symbol)
-			{
-			  to = rel_jumps[i].offset;
-			  dist = to - from;
+		      unsigned ri = 0;
+		      for (; ri < r_datadata_count; ++ri)
+			if (r_datadata[ri] == src)
 			  break;
+		      if (ri == r_datadata_count)
+			{
+			  if (r_datadata_count == r_datadata_max)
+			    {
+			      r_datadata_max += r_datadata_max + 2;
+			      r_datadata = (amiga_reloc_type**) realloc (r_datadata,
+									 r_datadata_max * sizeof(amiga_reloc_type*));
+			    }
+			  r_datadata[r_datadata_count++] = src;
 			}
-		    }
-		  // use an existing jump entry
-		  if (-32766 <= dist && dist <= 32766)
-		    {
-		      // 3.
-		      signed relpos = src->relent.address;
-		      signed offset = rel_jumps[i].offset - input_section->output_offset - relpos;
-		      data[relpos] = offset >> 8;
-		      data[relpos + 1] = offset;
-
-		      src->relent.address = 0x80000000;
-
-		      DPRINT(10, ("reuse %s %d\n", src->symbol->name, dist));
-
 		      continue;
 		    }
+
+		  if (src->relent.howto->type != H_PC16 || src->symbol->section->output_section != target)
+		    continue;
+
+		  // check if relative jump is in 16 bit range
+		  to = src->symbol->section->output_offset + src->symbol->value;
+		  from = s->output_offset + src->relent.address;
+		  dist = to - from;
+
+//		  fprintf(stderr, "0 sym %s: %d, tsec %p %s: %d, sec %p %s %d, rel %d\n",
+//			 src->symbol->name, src->symbol->value, src->symbol->section, src->symbol->section->name, src->symbol->section->output_offset,
+//			 s, s->name, s->output_offset, src->relent.address);
+
+		  if (-32766 <= dist && dist <= 32766)
+		    continue;
+
+		  DPRINT(10, ("%s %d, ", src->symbol->name, dist));
+
+		  // check last generated jumps
+		  if (rel_jumps)
+		    {
+		      unsigned i = 0;
+		      for (; i < rel_jumps_count; ++i)
+			{
+			  if (rel_jumps[i].symbol == src->symbol)
+			    {
+			      to = rel_jumps[i].offset;
+			      dist = to - from;
+			      break;
+			    }
+			}
+		      // use an existing jump entry
+		      if (-32766 <= dist && dist <= 32766)
+			{
+			  DPRINT(10, ("reuse %d, ", dist));
+			  continue;
+			}
+		    }
+
+		  // 2. calculate size for updated rel_jumps
+		  unsigned slot = 0;
+		  for (; slot < rel_jumps_count; ++slot)
+		    {
+		      if (rel_jumps[slot].offset - from < -32766)
+			break;
+		    }
+		  if (slot == rel_jumps_max)
+		    {
+		      rel_jumps_max += 16;
+		      rel_jumps = (struct rel_chain*) realloc (rel_jumps, sizeof(struct rel_chain) * rel_jumps_max);
+		    }
+		  rel_jumps[slot].symbol = src->symbol;
+		  rel_jumps[slot].offset = s->rawsize + s->output_offset;
+		  if (slot == rel_jumps_count)
+		    ++rel_jumps_count;
+
+		  s->rawsize += 6;
 		}
 
-	      printf("INFO: using long jump from %s to %s:%s\n", input_section->owner->filename,
-			  src->symbol->section->owner->filename, src->symbol->name);
-	      fflush(stdout);
+	      DPRINT(10, ("\n"));
 
-	      // 1. append a long jump
-	      signed endpos = input_section->compressed_size;
-	      input_section->compressed_size += 6;
-	      data[endpos] = 0x4e;
-	      data[endpos + 1] = 0xf9;
-	      data[endpos + 2] = 0;
-	      data[endpos + 3] = 0;
-	      data[endpos + 4] = 0;
-	      data[endpos + 5] = 0;
+	      // update sizes and offsets
+	      unsigned delta = s->rawsize - cursize;
+	      if (delta == 0)
+		continue;
 
-	      // update rel_jumps
-	      unsigned slot = 0;
-	      for (;slot < rel_jumps_count; ++ slot)
+	      // move it by that delta
+	      datadata_addend += delta;
+
+	      struct bfd_link_order *lo;
+
+	      // 5. also patch data's link statements with bfd_section_reloc_link_order, needed for CTs
+	      // can be done multiple times since only the delta to the last state is applied
+	      asection *xs = target;
+	      for (; xs; xs = xs->next)
 		{
-		  if (rel_jumps[slot].offset - from < -32766)
-		    break;
+		  for (lo = xs->map_head.link_order; lo; lo = lo->next)
+		    {
+		      if (lo->type == bfd_section_reloc_link_order && lo->u.reloc.p->u.section == target
+			  && lo->u.reloc.p->addend >= s->size + s->output_offset)
+			lo->u.reloc.p->addend += delta;
+		    }
 		}
-	      rel_jumps[slot].symbol = src->symbol;
-	      rel_jumps[slot].offset = endpos + input_section->output_offset;
-	      if (slot == rel_jumps_count)
-		++rel_jumps_count;
 
-	      // 2. apply relocation
-	      signed relpos = src->relent.address;
-	      signed offset = endpos - relpos;
-	      data[relpos] = offset >> 8;
-	      data[relpos + 1] = offset;
+	      s->size = s->rawsize;
+	      target->rawsize += delta; // update output section's size
+	      lol->size += delta;
 
-	      // 3. convert to ABS32 reloc
-	      src->relent.howto = &howto_table[0];
-	      src->relent.addend = 0;
-	      src->relent.address = endpos + 2;
+	      // 4. update output_offsets
+	      for (lo = lol->next; lo; lo = lo->next)
+		{
+		  asection *ss = lo->u.indirect.section;
+		  if (ss->output_section == target)
+		    {
+		      ss->output_offset += delta;
+		      lo->offset += delta;
+		    }
+		}
 	    }
+
+	  // stop if there was no size increase
+	  if (target->rawsize == totalsize)
+	    break;
+	}
+
+      input_section->output_section->size = target->rawsize;
+
+      // reset count
+      rel_jumps_count = 0;
+
+      /* increase memory for the section. */
+      if (input_section->compressed_size < input_section->rawsize)
+	{
+	  PTR odata = data;
+	  data = bfd_alloc (abfd, input_section->rawsize);
+	  memcpy (data, odata, input_section->compressed_size);
+	  *datap = data;
+	}
+
+      /**
+       * Now all sections have its final offset and size plus the old size in compressed_size.
+       */
+      if (datadata_addend)
+	{
+	  // patch all datadata_reloc refs
+	  unsigned ri = 0;
+	  for (; ri < r_datadata_count; ++ri)
+	    {
+	      amiga_reloc_type *rsrc = r_datadata[ri];
+	      asymbol *sym = rsrc->symbol;
+	      sym->value += (datadata_addend + 3) & ~3;
+	      struct bfd_link_hash_entry *blh = (struct bfd_link_hash_entry*) sym->udata.p;
+	      blh->u.def.value += (datadata_addend + 3) & ~3;
+	    }
+
+	  // patch __etext
+	  unsigned oi = 0;
+	  for (; oi < abfd->symcount; ++oi)
+	    {
+	      asymbol *sym = abfd->outsymbols[oi];
+	      if (strcmp ("__etext", sym->name))
+		continue;
+
+	      sym->value += datadata_addend;
+	      break;
+	    }
+	}
+    }
+
+  /**
+   * Create the jump tables.
+   */
+  if (input_section->owner->xvec->flavour == bfd_target_amiga_flavour && input_section->reloc_count > 0)
+    {
+      amiga_reloc_type *src;
+      for (src = (amiga_reloc_type*) input_section->relocation; src; src = src->next)
+	{
+	  signed from;
+	  signed to;
+	  signed dist;
+	  if (src->relent.howto->type != H_PC16 || src->symbol->section->output_section != target)
+	    continue;
+
+	  // check if relative jump is in 16 bit range
+	  to = src->symbol->section->output_offset + src->symbol->value;
+	  from = input_section->output_offset + src->relent.address;
+	  dist = to - from;
+
+	  if (-32766 <= dist && dist <= 32766)
+	    continue;
+
+	  // check last generated jumps
+	  if (rel_jumps)
+	    {
+	      unsigned i = 0;
+	      for (; i < rel_jumps_count; ++i)
+		{
+		  if (rel_jumps[i].symbol == src->symbol)
+		    {
+		      to = rel_jumps[i].offset;
+		      dist = to - from;
+		      break;
+		    }
+		}
+	      // use an existing jump entry
+	      if (-32766 <= dist && dist <= 32766)
+		{
+		  // 3.
+		  signed relpos = src->relent.address;
+		  signed offset = rel_jumps[i].offset - input_section->output_offset - relpos;
+		  data[relpos] = offset >> 8;
+		  data[relpos + 1] = offset;
+
+		  src->relent.address = 0x80000000;
+
+		  DPRINT(10, ("reuse %s %d\n", src->symbol->name, dist));
+
+		  continue;
+		}
+	    }
+
+	  printf ("INFO: using long jump from %s to %s:%s\n", input_section->owner->filename,
+		  src->symbol->section->owner->filename, src->symbol->name);
+	  fflush (stdout);
+
+	  // 1. append a long jump
+	  signed endpos = input_section->compressed_size;
+	  input_section->compressed_size += 6;
+	  data[endpos] = 0x4e;
+	  data[endpos + 1] = 0xf9;
+	  data[endpos + 2] = 0;
+	  data[endpos + 3] = 0;
+	  data[endpos + 4] = 0;
+	  data[endpos + 5] = 0;
+
+	  // update rel_jumps
+	  unsigned slot = 0;
+	  for (; slot < rel_jumps_count; ++slot)
+	    {
+	      if (rel_jumps[slot].offset - from < -32766)
+		break;
+	    }
+	  rel_jumps[slot].symbol = src->symbol;
+	  rel_jumps[slot].offset = endpos + input_section->output_offset;
+	  if (slot == rel_jumps_count)
+	    ++rel_jumps_count;
+
+	  // 2. apply relocation
+	  signed relpos = src->relent.address;
+	  signed offset = endpos - relpos;
+	  data[relpos] = offset >> 8;
+	  data[relpos + 1] = offset;
+
+	  // 3. convert to ABS32 reloc
+	  src->relent.howto = &howto_table[0];
+	  src->relent.addend = 0;
+	  src->relent.address = endpos + 2;
 	}
     }
 
@@ -548,7 +566,7 @@ get_relocated_section_contents (
 				 input_section->rawsize))
     goto error_return;
 
-  insert_long_jumps(abfd, input_bfd, input_section, link_order, data);
+  insert_long_jumps(abfd, input_bfd, input_section, link_order, &data);
 
   /* We're not relaxing the section, so just copy the size info.  */
   input_section->size = input_section->rawsize;

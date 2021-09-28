@@ -116,12 +116,17 @@ typedef struct amiga_symbol {
   unsigned long index,refnum;
 } amiga_symbol_type;
 
+typedef struct aname_list {
+  struct aname_list * next;
+  char const * name;
+} aname_list_type;
+
 /* We take the address of the first element of an asymbol to ensure that the
    macro is only ever applied to an asymbol.  */
 #define amiga_symbol(asymbol) ((amiga_symbol_type *)(&(asymbol)->the_bfd))
 
 typedef struct raw_reloc {
-  unsigned long num,pos;
+  unsigned long num,pos,hunk;
   struct raw_reloc *next;
 } raw_reloc_type;
 
@@ -130,9 +135,12 @@ typedef struct amiga_per_section {
   int attribute; /* Memory type required by this section */
   unsigned long disk_size; /* Section size on disk, _raw_size may be larger than this */
   amiga_symbol_type *amiga_symbols; /* the symbols for this section */
+  unsigned int amiga_symbol_count;
   unsigned long hunk_ext_pos; /* offset of hunk_ext in the bfd file */
   unsigned long hunk_symbol_pos; /* offset of hunk_symbol in the bfd file */
   raw_reloc_type *relocs;
+  aname_list_type * sym_names;
+  unsigned int gc_count;
 } amiga_per_section_type;
 
 #define amiga_per_section(x) ((amiga_per_section_type *)((x)->used_by_bfd))
