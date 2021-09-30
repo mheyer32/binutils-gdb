@@ -312,9 +312,9 @@ ldctor_build_sets (void)
       reloc_size = bfd_get_reloc_size (howto);
       switch (reloc_size)
 	{
-	case 1: size = xBYTE; break;
-	case 2: size = xSHORT; break;
-	case 4: size = xLONG; break;
+	case 1: size = BYTE; break;
+	case 2: size = SHORT; break;
+	case 4: size = LONG; break;
 	case 8:
 	  if (howto->complain_on_overflow == complain_overflow_signed)
 	    size = SQUAD;
@@ -324,7 +324,7 @@ ldctor_build_sets (void)
 	default:
 	  einfo (_("%X%P: unsupported size %d for set %s\n"),
 		 bfd_get_reloc_size (howto), p->h->root.string);
-	  size = xLONG;
+	  size = LONG;
 	  break;
 	}
 

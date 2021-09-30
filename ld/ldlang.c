@@ -4824,15 +4824,15 @@ print_data_statement (lang_data_statement_type *data)
     {
     default:
       abort ();
-    case xBYTE:
+    case BYTE:
       size = BYTE_SIZE;
       name = "BYTE";
       break;
-    case xSHORT:
+    case SHORT:
       size = SHORT_SIZE;
       name = "SHORT";
       break;
-    case xLONG:
+    case LONG:
       size = LONG_SIZE;
       name = "LONG";
       break;
@@ -5969,13 +5969,13 @@ lang_size_sections_1
 	      case SQUAD:
 		size = QUAD_SIZE;
 		break;
-	      case xLONG:
+	      case LONG:
 		size = LONG_SIZE;
 		break;
-	      case xSHORT:
+	      case SHORT:
 		size = SHORT_SIZE;
 		break;
-	      case xBYTE:
+	      case BYTE:
 		size = BYTE_SIZE;
 		break;
 	      }
@@ -6465,13 +6465,13 @@ lang_do_assignments_1 (lang_statement_union_type *s,
 	      case SQUAD:
 		size = QUAD_SIZE;
 		break;
-	      case xLONG:
+	      case LONG:
 		size = LONG_SIZE;
 		break;
-	      case xSHORT:
+	      case SHORT:
 		size = SHORT_SIZE;
 		break;
-	      case xBYTE:
+	      case BYTE:
 		size = BYTE_SIZE;
 		break;
 	      }
