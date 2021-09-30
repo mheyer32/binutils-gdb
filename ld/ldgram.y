@@ -125,7 +125,7 @@ static int error_index;
 %right UNARY
 %token END
 %left <token> '('
-%token <token> ALIGN_K BLOCK BIND QUAD SQUAD xLONG xSHORT xBYTE
+%token <token> ALIGN_K BLOCK BIND QUAD SQUAD LONG SHORT BYTE
 %token SECTIONS PHDRS INSERT_K AFTER BEFORE
 %token DATA_SEGMENT_ALIGN DATA_SEGMENT_RELRO_END DATA_SEGMENT_END
 %token SORT_BY_NAME SORT_BY_ALIGNMENT SORT_NONE
@@ -716,11 +716,11 @@ length:
 			{ $$ = $1; }
 	|	SQUAD
 			{ $$ = $1; }
-	|	xLONG
+	|	LONG
 			{ $$ = $1; }
-	|	xSHORT
+	|	SHORT
 			{ $$ = $1; }
-	|	xBYTE
+	|	BYTE
 			{ $$ = $1; }
 	;
 

@@ -4826,15 +4826,15 @@ print_data_statement (lang_data_statement_type *data)
       abort ();
     case xBYTE:
       size = BYTE_SIZE;
-      name = "xBYTE";
+      name = "BYTE";
       break;
     case xSHORT:
       size = SHORT_SIZE;
-      name = "xSHORT";
+      name = "SHORT";
       break;
     case xLONG:
       size = LONG_SIZE;
-      name = "xLONG";
+      name = "LONG";
       break;
     case QUAD:
       size = QUAD_SIZE;
