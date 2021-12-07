@@ -837,6 +837,7 @@ amiga_perform_reloc (
 	  if (0 == strcmp(sec->name, ".stab") || 0 == strcmp(sec->name, ".stabstr"))
 	    {
 	      relocation=sym->value + target_section->output_offset;
+//		  printf("stab: %s %s %d+%d=%d\n", sym->section->name, sym->name, sym->value, target_section->output_offset, relocation);
 	    }
 	  else
 	    {

@@ -1226,12 +1226,12 @@ perform_an_assembly_pass (int argc, char ** argv)
   bss_section = subseg_new (BSS_SECTION_NAME, 0);
 
 #ifdef OBJ_AMIGAHUNK
-  data_chip_section = subseg_new (".data_chip", 0);
-  data_fast_section = subseg_new (".data_fast", 0);
-  data_far_section = subseg_new (".data_far", 0);
-  bss_chip_section = subseg_new (".bss_chip", 0);
-  bss_fast_section = subseg_new (".bss_fast", 0);
-  bss_far_section = subseg_new (".bss_far", 0);
+  data_chip_section = subseg_new (".datachip", 0);
+  data_fast_section = subseg_new (".datafast", 0);
+  data_far_section = subseg_new (".datafar", 0);
+  bss_chip_section = subseg_new (".bsschip", 0);
+  bss_fast_section = subseg_new (".bssfast", 0);
+  bss_far_section = subseg_new (".bssfar", 0);
 #endif
 
   /* @@ FIXME -- we're setting the RELOC flag so that sections are assumed

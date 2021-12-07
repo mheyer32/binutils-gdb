@@ -2807,9 +2807,9 @@ amiga_new_section_hook (
 {
   newsect->used_by_bfd = (PTR) bfd_zalloc (abfd, sizeof(amiga_per_section_type));
   newsect->alignment_power = 2;
-  if (!strcmp (newsect->name, ".data_chip") || !strcmp (newsect->name, ".bss_chip"))
+  if (!strcmp (newsect->name, ".datachip") || !strcmp (newsect->name, ".bsschip"))
     amiga_per_section(newsect)->attribute |= MEMF_CHIP;
-  if (!strcmp (newsect->name, ".data_fast") || !strcmp (newsect->name, ".bss_fast"))
+  if (!strcmp (newsect->name, ".datafast") || !strcmp (newsect->name, ".bssfast"))
     amiga_per_section(newsect)->attribute |= MEMF_FAST;
   return TRUE;
 }

@@ -43,13 +43,13 @@ SECTIONS
     ${RELOCATING+__end = .;}
   }
   ${RELOCATING+___bss_size = SIZEOF(.bss);}
-  .data_chip :
+  .datachip :
   {
-    *(.data_chip)
+    *(.datachip)
   }
-  .bss_chip :
+  .bsschip :
   {
-    *(.bss_chip)
+    *(.bsschip)
   }
 }
 EOF
