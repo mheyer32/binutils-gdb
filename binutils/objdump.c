@@ -3439,6 +3439,7 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 
   /* Decide which set of relocs to use.  Load them if necessary.  */
   paux = (struct objdump_disasm_info *) pinfo->application_data;
+  paux->sec = section;
   if (paux->dynrelbuf)// && dump_dynamic_reloc_info)
     {
       rel_pp = paux->dynrelbuf;
@@ -4032,6 +4033,7 @@ disassemble_data (bfd *abfd)
 
   disasm_info.application_data = (void *) &aux;
   aux.abfd = abfd;
+  aux.sec = NULL;
   aux.require_sec = FALSE;
   aux.dynrelbuf = NULL;
   aux.dynrelcount = 0;
