@@ -112,6 +112,7 @@ static void fix_common_block (struct symbol *, CORE_ADDR);
 static int read_type_number (const char **, int *);
 
 static struct type *read_type (const char **, struct objfile *);
+static struct type *read_type2 (const char **, struct objfile *, char const * tname);
 
 static struct type *read_range_type (const char **, int[2],
 				     int, struct objfile *);
@@ -1202,7 +1203,7 @@ define_symbol (CORE_ADDR valu, const char *string, int desc, int type,
       synonym = (sym->language () == language_ada && p[-2] != 'T');
 
       /* Typedef */
-      SYMBOL_TYPE (sym) = read_type (&p, objfile);
+      SYMBOL_TYPE (sym) = read_type2 (&p, objfile, sym->linkage_name());
 
       /* For a nameless type, we don't want a create a symbol, thus we
          did not use `sym'.  Return without further processing.  */
@@ -1316,7 +1317,7 @@ define_symbol (CORE_ADDR valu, const char *string, int desc, int type,
       SYMBOL_ACLASS_INDEX (sym) = LOC_TYPEDEF;
       SYMBOL_VALUE (sym) = valu;
       SYMBOL_DOMAIN (sym) = STRUCT_DOMAIN;
-      if (SYMBOL_TYPE (sym)->name () == 0)
+//      if (SYMBOL_TYPE (sym)->name () == 0)
 	SYMBOL_TYPE (sym)->set_name
 	  (obconcat (&objfile->objfile_obstack, sym->linkage_name (),
 		     (char *) NULL));
@@ -1472,6 +1473,11 @@ error_type (const char **pp, struct objfile *objfile)
 
 static struct type *
 read_type (const char **pp, struct objfile *objfile)
+{
+  return read_type2(pp, objfile, nullptr);
+}
+static struct type *
+read_type2 (const char **pp, struct objfile *objfile, char const * tname)
 {
   struct type *type = 0;
   struct type *type1;
@@ -1730,14 +1736,18 @@ again:
          reference, or whatever, *in-place*.  */
 
     case '*':			/* Pointer to another type */
-      type1 = read_type (pp, objfile);
+      type1 = read_type2 (pp, objfile, tname);
       type = make_pointer_type (type1, dbx_lookup_type (typenums, objfile));
+      type->set_name
+	  (obconcat (&objfile->objfile_obstack, type1->name(), " *", (char *) NULL));
       break;
 
     case '&':			/* Reference to another type */
-      type1 = read_type (pp, objfile);
+      type1 = read_type2 (pp, objfile, tname);
       type = make_reference_type (type1, dbx_lookup_type (typenums, objfile),
                                   TYPE_CODE_REF);
+      type->set_name
+	  (obconcat (&objfile->objfile_obstack, type1->name(), " &", (char *) NULL));
       break;
 
     case 'f':			/* Function returning another type */
@@ -1930,6 +1940,7 @@ again:
 
     case 'r':			/* Range type */
       type = read_range_type (pp, typenums, type_size, objfile);
+      type->set_name(tname);
       if (typenums[0] != -1)
 	*dbx_lookup_type (typenums, objfile) = type;
       break;
