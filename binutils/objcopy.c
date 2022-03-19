@@ -5959,7 +5959,7 @@ copy_main (int argc, char *argv[])
     free (keep_specific_buffer);
 
   if (localize_specific_buffer)
-    free (globalize_specific_buffer);
+    free (localize_specific_buffer);
 
   if (globalize_specific_buffer)
     free (globalize_specific_buffer);

@@ -3283,8 +3283,9 @@ struct ppc_link_hash_table
 /* Get the ppc64 ELF linker hash table from a link_info structure.  */
 
 #define ppc_hash_table(p) \
-  (elf_hash_table_id ((struct elf_link_hash_table *) ((p)->hash)) \
-  == PPC64_ELF_DATA ? ((struct ppc_link_hash_table *) ((p)->hash)) : NULL)
+  ((is_elf_hash_table ((p)->hash)					\
+    && elf_hash_table_id (elf_hash_table (p)) == PPC64_ELF_DATA)	\
+   ? (struct ppc_link_hash_table *) (p)->hash : NULL)
 
 #define ppc_stub_hash_lookup(table, string, create, copy) \
   ((struct ppc_stub_hash_entry *) \
@@ -13503,10 +13504,10 @@ ppc64_elf_size_stubs (struct bfd_link_info *info)
 			 fact a call needing a TOC adjustment.  */
 		      if ((code_sec != NULL
 			   && code_sec->output_section != NULL
-			   && (htab->sec_info[code_sec->id].toc_off
-			       != htab->sec_info[section->id].toc_off)
 			   && (code_sec->has_toc_reloc
-			       || code_sec->makes_toc_func_call))
+			       || code_sec->makes_toc_func_call)
+			   && (htab->sec_info[code_sec->id].toc_off
+			       != htab->sec_info[section->id].toc_off))
 			  || (((hash ? hash->elf.other : sym->st_other)
 			       & STO_PPC64_LOCAL_MASK)
 			      == 1 << STO_PPC64_LOCAL_BIT))
@@ -16086,14 +16087,16 @@ ppc64_elf_relocate_section (bfd *output_bfd,
 	      && SYMBOL_REFERENCES_LOCAL (info, &h->elf))
 	    {
 	      insn = bfd_get_32 (input_bfd, contents + (rel->r_offset & ~3));
-	      if ((insn & (0x3fu << 26 | 0x3)) == 58u << 26 /* ld */)
+	      if (r_type == R_PPC64_GOT16_LO_DS
+		  && (insn & (0x3fu << 26 | 0x3)) == 58u << 26 /* ld */)
 		{
 		  insn += (14u << 26) - (58u << 26);
 		  bfd_put_32 (input_bfd, insn, contents + (rel->r_offset & ~3));
 		  r_type = R_PPC64_TOC16_LO;
 		  rel->r_info = ELF64_R_INFO (r_symndx, r_type);
 		}
-	      else if ((insn & (0x3fu << 26)) == 15u << 26 /* addis */)
+	      else if (r_type == R_PPC64_GOT16_HA
+		       && (insn & (0x3fu << 26)) == 15u << 26 /* addis */)
 		{
 		  r_type = R_PPC64_TOC16_HA;
 		  rel->r_info = ELF64_R_INFO (r_symndx, r_type);

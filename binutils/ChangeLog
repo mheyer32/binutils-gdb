@@ -1,3 +1,41 @@
+2021-01-30  Nick Clifton  <nickc@redhat.com>
+
+	This is the 2.35.2 release.
+
+	* configure: Regenerate.
+	* po/binutils.pot: Regenerate.
+
+2021-01-26  Frederic Cambus  <fred@statdns.com>
+
+	* objcopy.c (copy_main): Fix a double free happening when both
+	--localize-symbols and --globalize-symbols options are invoked
+	together.
+
+2021-01-01  Alan Modra  <amodra@gmail.com>
+
+	Apply from master
+	2020-12-31  Alan Modra  <amodra@gmail.com>
+	PR 27128
+	* nm.c (print_symname): Append version string to symbol name
+	before printing the lot under control of "form".  Append version
+	to demangled names too.
+
+	2020-08-22  H.J. Lu  <hongjiu.lu@intel.com>
+	PR ld/26382
+	* nm.c (print_symname): Display only one '@' for undefined
+	versioned symbols.
+	* doc/binutils.texi: Update nm version information.
+
+	2020-08-10  H.J. Lu  <hongjiu.lu@intel.com>
+	PR binutils/26302
+	* nm.c (with_symbol_versions): Removed.
+	(long_option_values): Add OPTION_WITH_SYMBOL_VERSIONS.
+	(long_options): Update --with-symbol-versions entry.
+	(print_symbol): Remove the with_symbol_versions check.
+	(main): Add OPTION_WITH_SYMBOL_VERSIONS for backward
+	compatibility.
+	* doc/binutils.texi: Remove --with-symbol-versions.
+
 2020-11-22  Alan Modra  <amodra@gmail.com>
 
 	PR 26929
