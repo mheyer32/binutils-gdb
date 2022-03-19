@@ -1,3 +1,43 @@
+2021-01-30  Nick Clifton  <nickc@redhat.com>
+
+	This is the 2.35.2 release.
+
+	* configure: Regenerate.
+	* po/gas.pot: Regenerate.
+
+2021-01-28  Alan Modra  <amodra@gmail.com>
+
+	Apply from master
+	2021-01-08  Peter Bergner  <bergner@linux.ibm.com>
+	* testsuite/gas/ppc/rop-checks.d,
+	* testsuite/gas/ppc/rop-checks.l,
+	* testsuite/gas/ppc/rop-checks.s,
+	* testsuite/gas/ppc/rop.d,
+	* testsuite/gas/ppc/rop.s: New tests.
+	* testsuite/gas/ppc/ppc.exp: Run them.
+
+	2020-09-09  Alan Modra  <amodra@gmail.com>
+	* config/tc-ppc.c (md_assemble): Emit prefix insn by parts when
+	valueT is smaller than 64 bits.
+
+2021-01-25  Alan Modra  <amodra@gmail.com>
+
+	PR 27218
+	* dwarf2dbg.c (dwarf2_gen_line_info): Correct setting of dwarf_level.
+	(dwarf2_directive_filename, dwarf2_directive_loc): Likewise, and
+	error for negative file numbers.
+
+2021-01-25  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR gas/27195
+	* dwarf2dbg.c (dwarf2_gen_line_info): Set dwarf_level to 5 if
+	needed.
+	(dwarf2_directive_filename): Likewise.
+	(dwarf2_directive_loc): Likewise.
+	* testsuite/gas/elf/dwarf-5-file0.d: Pass --gdwarf-3.
+	* testsuite/gas/lns/lns-diag-1.l: Remove the
+	"Error: file number less than one" errors.
+
 2020-11-15  Mark Wielaard  <mark@klomp.org>
 
 	Backport from the mainline:

@@ -1,3 +1,54 @@
+2021-01-30  Nick Clifton  <nickc@redhat.com>
+
+	This is the 2.35.2 release.
+
+	* configure: Regenerate.
+	* po/ld.pot: Regenerate.
+
+2021-01-30  Alan Modra  <amodra@gmail.com>
+
+	Apply from master
+	2021-01-28  Alan Modra  <amodra@gmail.com>
+	PR 27259
+	* ldelf.c (ldelf_before_place_orphans): Use linker_mark to
+	prevent endless looping of linked-to sections.
+
+	2020-07-29  Alan Modra  <amodra@gmail.com>
+	* ldelf.c (ldelf_before_place_orphans): Set SEC_EXCLUDE for
+	discarded sections.
+
+2021-01-01  Alan Modra  <amodra@gmail.com>
+
+	Apply from master
+	2020-12-31  H.J. Lu  <hongjiu.lu@intel.com>
+		    Alan Modra  <amodra@gmail.com>
+	PR 27128
+	* testsuite/ld-elf/pr27128.s: New file.
+	* testsuite/ld-elf/pr27128.t: Likewise.
+	* testsuite/ld-elf/pr27128a.d: Likewise.
+	* testsuite/ld-elf/pr27128b.d: Likewise.
+	* testsuite/ld-elf/pr27128c.d: Likewise.
+	* testsuite/ld-elf/pr27128d.d: Likewise.
+	* testsuite/ld-elf/pr27128e.d: Likewise.
+
+	2020-08-24  Alan Modra  <amodra@gmail.com>
+	* testsuite/ld-sparc/tlssunbin32.rd: Update for new readelf output.
+	* testsuite/ld-sparc/tlssunbin64.rd: Likewise.
+
+	2020-08-22  H.J. Lu  <hongjiu.lu@intel.com>
+	PR ld/26382
+	* testsuite/ld-elf/pr26302.nd: Updated.
+	* testsuite/ld-elf/pr26302.rd: New file.
+	* testsuite/ld-elf/shared.exp: Add a test for readelf -sW.
+
+	2020-08-10  H.J. Lu  <hongjiu.lu@intel.com>
+	PR binutils/26302
+	* testsuite/ld-elf/pr26302.nd: New file.
+	* testsuite/ld-elf/pr26302.ver: Likewise.
+	* testsuite/ld-elf/pr26302a.c: Likewise.
+	* testsuite/ld-elf/pr26302b.c: Likewise.
+	* testsuite/ld-elf/shared.exp: Run binutils/26302 tests.
+
 2020-12-04  H.J. Lu  <hongjiu.lu@intel.com>
 
 	PR ld/27016

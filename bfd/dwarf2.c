@@ -1182,7 +1182,7 @@ read_attribute_value (struct attribute *  attr,
     case DW_FORM_ref_addr:
       /* DW_FORM_ref_addr is an address in DWARF2, and an offset in
 	 DWARF3.  */
-      if (unit->version == 3 || unit->version == 4)
+      if (unit->version >= 3)
 	{
 	  if (unit->offset_size == 4)
 	    attr->u.val = read_4_bytes (unit->abfd, info_ptr, info_ptr_end);
@@ -3252,9 +3252,11 @@ read_rnglists (struct comp_unit *unit, struct arange *arange,
 	  low_pc = base_address;
 	  low_pc += _bfd_safe_read_leb128 (abfd, rngs_ptr, &bytes_read,
 					   FALSE, rngs_end);
+	  rngs_ptr += bytes_read;
 	  high_pc = base_address;
 	  high_pc += _bfd_safe_read_leb128 (abfd, rngs_ptr, &bytes_read,
 					    FALSE, rngs_end);
+	  rngs_ptr += bytes_read;
 	  break;
 
 	case DW_RLE_start_end:
@@ -3273,9 +3275,6 @@ read_rnglists (struct comp_unit *unit, struct arange *arange,
 	default:
 	  return FALSE;
 	}
-
-      if ((low_pc == 0 && high_pc == 0) || low_pc == high_pc)
-	return FALSE;
 
       if (!arange_add (unit, arange, low_pc, high_pc))
 	return FALSE;
