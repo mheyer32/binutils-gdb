@@ -40,10 +40,18 @@
 #include "m68k-tdep.h"
 
 
-#define P_LINKL_FP	0x480e
+#if (DEFAULT_BFD_VEC == amiga_vec)
+#define P_LINKW_FP	0x4e55
+#define P_LINKL_FP	0x480d
+#define P_PEA_FP	0x4855
+#define P_MOVEAL_SP_FP	0x2a4f
+#else
 #define P_LINKW_FP	0x4e56
+#define P_LINKL_FP	0x480e
 #define P_PEA_FP	0x4856
 #define P_MOVEAL_SP_FP	0x2c4f
+#endif
+
 #define P_ADDAW_SP	0xdefc
 #define P_ADDAL_SP	0xdffc
 #define P_SUBQW_SP	0x514f

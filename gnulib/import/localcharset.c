@@ -825,7 +825,9 @@ static const struct table_entry locale_table[] =
    name.  */
 
 #ifdef STATIC
+#ifndef AMIGA
 STATIC
+#endif
 #endif
 const char *
 locale_charset (void)

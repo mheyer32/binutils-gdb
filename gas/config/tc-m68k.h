@@ -24,7 +24,13 @@ struct fix;
 
 #define TARGET_BYTES_BIG_ENDIAN 1
 
+#ifdef OBJ_AMIGAHUNK
+#undef TARGET_FORMAT
+#define TARGET_FORMAT "amiga"
+#else
 #define TARGET_FORMAT "elf32-m68k"
+#endif
+
 #define TARGET_ARCH bfd_arch_m68k
 
 #define tc_comment_chars m68k_comment_chars
@@ -40,8 +46,13 @@ extern const char *m68k_comment_chars;
 #define REGISTER_PREFIX '%'
 #endif
 
+#ifdef OBJ_AMIGAHUNK
+#undef REGISTER_PREFIX_OPTIONAL 
+#define REGISTER_PREFIX_OPTIONAL 1
+#else
 #ifndef REGISTER_PREFIX_OPTIONAL
 #define REGISTER_PREFIX_OPTIONAL 0
+#endif
 #endif
 
 extern void m68k_mri_mode_change (int);
@@ -75,6 +86,7 @@ while (0)
 #define RELAX_RELOC_PC16  BFD_RELOC_16_PCREL
 #define RELAX_RELOC_PC32  BFD_RELOC_32_PCREL
 
+#ifdef OBJ_ELF
 #define tc_fix_adjustable(X) tc_m68k_fix_adjustable(X)
 extern int tc_m68k_fix_adjustable (struct fix *);
 
@@ -89,6 +101,7 @@ extern int tc_m68k_fix_adjustable (struct fix *);
 
 #define elf_tc_final_processing m68k_elf_final_processing
 extern void m68k_elf_final_processing (void);
+#endif
 
 #define DIFF_EXPR_OK
 
@@ -97,8 +110,14 @@ extern int m68k_parse_long_option (char *);
 
 #define md_operand(x)
 
+#define TARGET_WORD_SIZE 32
+#define TARGET_ARCH bfd_arch_m68k
+
 extern struct relax_type md_relax_table[];
 #define TC_GENERIC_RELAX_TABLE md_relax_table
+
+#define TC_FIX_TYPE char
+#define TC_INIT_FIX_DATA(p)
 
 /* We can't do a byte jump to the next instruction, so in that case
    force word mode by faking AIM.  */

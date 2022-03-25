@@ -19,4 +19,9 @@
 
 /* Linked with ar.o to flag that this program is 'ar' (not 'ranlib').  */
 
-int is_ranlib = 0;
+extern int armain(int argc, char ** argv, int);
+
+int main(int argc, char ** argv)
+{
+	return armain(argc, argv, 0);
+}

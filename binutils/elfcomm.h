@@ -35,7 +35,7 @@ extern void (*byte_put) (unsigned char *, elf_vma, unsigned int);
 extern void byte_put_little_endian (unsigned char *, elf_vma, unsigned int);
 extern void byte_put_big_endian (unsigned char *, elf_vma, unsigned int);
 
-extern elf_vma (*byte_get) (const unsigned char *, unsigned int);
+extern BINUTILSDECL elf_vma (*byte_get) (const unsigned char *, unsigned int);
 extern elf_vma byte_get_signed (const unsigned char *, unsigned int);
 extern elf_vma byte_get_little_endian (const unsigned char *, unsigned int);
 extern elf_vma byte_get_big_endian (const unsigned char *, unsigned int);

@@ -714,10 +714,12 @@ ranlib_main (int argc, char **argv)
   xexit (status);
 }
 
-int main (int, char **);
+int is_ranlib;
+
+int armain (int, char **,int);
 
 int
-main (int argc, char **argv)
+armain (int argc, char **argv, int isran)
 {
   int arg_index;
   char **files;
@@ -725,6 +727,8 @@ main (int argc, char **argv)
   char *inarch_filename;
   int i;
 
+  is_ranlib = isran;
+  
 #ifdef HAVE_LC_MESSAGES
   setlocale (LC_MESSAGES, "");
 #endif

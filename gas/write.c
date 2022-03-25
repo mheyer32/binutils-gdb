@@ -141,6 +141,7 @@ fix_new_internal (fragS *frag,		/* Which frag?  */
 		  offsetT offset,	/* X_add_number.  */
 		  int pcrel,		/* TRUE if PC-relative relocation.  */
 		  RELOC_ENUM r_type	/* Relocation type.  */,
+		  int baserel ATTRIBUTE_UNUSED,
 		  int at_beginning)	/* Add to the start of the list?  */
 {
   fixS *fixP;
@@ -179,6 +180,7 @@ fix_new_internal (fragS *frag,		/* Which frag?  */
 #endif
 
 #ifdef TC_FIX_TYPE
+  fixP->tc_fix_data = baserel;
   TC_INIT_FIX_DATA (fixP);
 #endif
 
@@ -223,10 +225,11 @@ fix_new (fragS *frag,			/* Which frag?  */
 	 symbolS *add_symbol,		/* X_add_symbol.  */
 	 offsetT offset,		/* X_add_number.  */
 	 int pcrel,			/* TRUE if PC-relative relocation.  */
-	 RELOC_ENUM r_type		/* Relocation type.  */)
+	 RELOC_ENUM r_type,		/* Relocation type.  */
+	 int baserel)
 {
   return fix_new_internal (frag, where, size, add_symbol,
-			   (symbolS *) NULL, offset, pcrel, r_type, false);
+			   (symbolS *) NULL, offset, pcrel, r_type, baserel, false);
 }
 
 /* Create a fixup for an expression.  Currently we only support fixups
@@ -239,7 +242,8 @@ fix_new_exp (fragS *frag,		/* Which frag?  */
 	     unsigned long size,	/* 1, 2, or 4 usually.  */
 	     expressionS *exp,		/* Expression.  */
 	     int pcrel,			/* TRUE if PC-relative relocation.  */
-	     RELOC_ENUM r_type		/* Relocation type.  */)
+	     RELOC_ENUM r_type,		/* Relocation type.  */
+	     int baserel)
 {
   symbolS *add = NULL;
   symbolS *sub = NULL;
@@ -265,7 +269,7 @@ fix_new_exp (fragS *frag,		/* Which frag?  */
 	exp->X_add_symbol = stmp;
 	exp->X_add_number = 0;
 
-	return fix_new_exp (frag, where, size, exp, pcrel, r_type);
+	return fix_new_exp (frag, where, size, exp, pcrel, r_type, baserel);
       }
 
     case O_symbol_rva:
@@ -295,7 +299,7 @@ fix_new_exp (fragS *frag,		/* Which frag?  */
     }
 
   return fix_new_internal (frag, where, size, add, sub, off, pcrel,
-			   r_type, false);
+			   r_type, baserel, false);
 }
 
 /* Create a fixup at the beginning of FRAG.  The arguments are the same
@@ -306,7 +310,7 @@ fix_at_start (fragS *frag, unsigned long size, symbolS *add_symbol,
 	      offsetT offset, int pcrel, RELOC_ENUM r_type)
 {
   return fix_new_internal (frag, 0, size, add_symbol,
-			   (symbolS *) NULL, offset, pcrel, r_type, true);
+			   (symbolS *) NULL, offset, pcrel, r_type, 0, true);
 }
 
 /* Generic function to determine whether a fixup requires a relocation.  */
@@ -578,6 +582,12 @@ size_seg (bfd *abfd ATTRIBUTE_UNUSED, asection *sec, void *xxx ATTRIBUTE_UNUSED)
 
   if (size > 0 && ! seginfo->bss)
     flags |= SEC_HAS_CONTENTS;
+
+#ifdef OBJ_AMIGAHUNK
+  if (size == 0 && 0 == strcmp( sec->name, ".text"))
+      flags |= SEC_HAS_CONTENTS | SEC_CODE;
+//  fprintf(stderr, "%s: %d\n", sec->name, size);
+#endif
 
   flags &= ~SEC_RELOC;
   x = bfd_set_section_flags (sec, flags);
@@ -967,7 +977,8 @@ fixup_segment (fixS *fixP, segT this_segment)
       add_number = fixP->fx_offset;
 
       if (fixP->fx_addsy != NULL)
-	add_symbol_segment = S_GET_SEGMENT (fixP->fx_addsy);
+//	add_symbol_segment = S_GET_SEGMENT (fixP->fx_addsy);
+	add_symbol_segment = S_IS_WEAK (fixP->fx_addsy) ? undefined_section : S_GET_SEGMENT (fixP->fx_addsy);
 
       if (fixP->fx_subsy != NULL)
 	{
@@ -1529,7 +1540,8 @@ compress_debug (bfd *abfd, asection *sec, void *xxx ATTRIBUTE_UNUSED)
       int out_size;
 
       gas_assert (f->fr_type == rs_fill);
-      if (f->fr_fix)
+      if (f->fr_fix
+	  || f->fr_var)
 	{
 	  out_size = compress_frag (strm, f->fr_literal, f->fr_fix,
 				    &last_newf, ob);
@@ -1652,7 +1664,11 @@ write_contents (bfd *abfd ATTRIBUTE_UNUSED,
       offsetT count;
 
       gas_assert (f->fr_type == rs_fill || f->fr_type == rs_fill_nop);
-      if (f->fr_fix)
+      if (f->fr_fix
+#ifdef OBJ_AMIGAHUNK
+	  || f->fr_var
+#endif
+	  )
 	{
 	  x = bfd_set_section_contents (stdoutput, sec,
 					f->fr_literal, (file_ptr) offset,
@@ -2244,11 +2260,11 @@ write_object_file (void)
 #ifdef TC_CONS_FIX_NEW
 	  TC_CONS_FIX_NEW (lie->frag,
 			   lie->word_goes_here - lie->frag->fr_literal,
-			   2, &exp, TC_PARSE_CONS_RETURN_NONE);
+			   2, &exp, TC_PARSE_CONS_RETURN_NONE, 0);
 #else
 	  fix_new_exp (lie->frag,
 		       lie->word_goes_here - lie->frag->fr_literal,
-		       2, &exp, 0, BFD_RELOC_16);
+		       2, &exp, 0, BFD_RELOC_16, 0);
 #endif
 	  *prevP = lie->next_broken_word;
 	}

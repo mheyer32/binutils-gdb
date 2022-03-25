@@ -18,8 +18,13 @@ that @var{tz} be NULL.  Returns 0 on success, -1 on failure.
 
 */ 
 
+#ifdef __NEWLIB_H__
+int
+gettimeofday (struct timeval *tp, struct timezone * tz)
+#else
 int
 gettimeofday (struct timeval *tp, void *tz)
+#endif
 {
   if (tz)
     abort ();

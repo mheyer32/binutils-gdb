@@ -32,6 +32,11 @@
 #endif
 
 #include "config.h"
+
+#ifndef LIBIBERTYDECL
+#define LIBIBERTYDECL
+#endif
+
 #include <stdlib.h>
 #include <string.h>
 #include "ansidecl.h"

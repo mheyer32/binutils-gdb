@@ -95,7 +95,7 @@ byte_put_big_endian (unsigned char * field, elf_vma value, unsigned int size)
     }
 }
 
-elf_vma (*byte_get) (const unsigned char *, unsigned int);
+BINUTILSDECL elf_vma (*byte_get) (const unsigned char *, unsigned int);
 
 elf_vma
 byte_get_little_endian (const unsigned char *field, unsigned int size)

@@ -20,6 +20,13 @@
 #ifndef _BIN_SYSDEP_H
 #define _BIN_SYSDEP_H
 
+#ifndef BINUTILSDECL
+#define BINUTILSDECL
+#endif
+#ifndef BFDDECL
+#define BFDDECL
+#endif
+
 #include "config.h"
 #include <stdio.h>
 #ifdef HAVE_SYS_TYPES_H

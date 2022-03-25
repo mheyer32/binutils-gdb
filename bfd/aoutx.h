@@ -1551,7 +1551,8 @@ translate_from_native_sym_flags (bfd *abfd, aout_symbol_type *cache_ptr)
 
 /* Set the fields of SYM_POINTER according to CACHE_PTR.  */
 
-static bool
+//static
+bool
 translate_to_native_sym_flags (bfd *abfd,
 			       asymbol *cache_ptr,
 			       struct external_nlist *sym_pointer)
@@ -2827,7 +2828,7 @@ NAME (aout, find_nearest_line) (bfd *abfd,
   else
     funclen = strlen (bfd_asymbol_name (func));
 
-  free (adata (abfd).line_buf);
+//    free (adata (abfd).line_buf);	// NOOOOOO! dis is used elsewhere!! e.g. objdump print_files
 
   if (filelen + funclen == 0)
     adata (abfd).line_buf = buf = NULL;

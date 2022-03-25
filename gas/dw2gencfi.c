@@ -24,6 +24,9 @@
 #include "subsegs.h"
 #include "dwarf2dbg.h"
 
+int
+ffs(register int valu);
+
 #ifdef TARGET_USE_CFIPOP
 
 /* By default, use difference expressions if DIFF_EXPR_OK is defined.  */
@@ -200,7 +203,7 @@ emit_expr_encoded (expressionS *exp, int encoding, bool emit_encoding)
       gas_assert (size == (unsigned) howto->bitsize / 8);
       md_number_to_chars (p, 0, size);
       fix_new (frag_now, p - frag_now->fr_literal, size, exp->X_add_symbol,
-	       exp->X_add_number, howto->pc_relative, code);
+	       exp->X_add_number, howto->pc_relative, code, 0);
     }
   else if ((encoding & 0x70) == DW_EH_PE_pcrel)
     {
@@ -1993,7 +1996,7 @@ output_fde (struct fde_entry *fde, struct cie_entry *cie,
 	  gas_assert (addr_size == (unsigned) howto->bitsize / 8);
 	  md_number_to_chars (p, 0, addr_size);
 	  fix_new (frag_now, p - frag_now->fr_literal, addr_size,
-		   fde->start_address, 0, howto->pc_relative, code);
+		   fde->start_address, 0, howto->pc_relative, code,  0);
 	}
       else
 	{

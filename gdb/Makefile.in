@@ -252,6 +252,10 @@ include $(GNULIB_PARENT_DIR)/gnulib/Makefile.gnulib.inc
 LIBBACKTRACE_INC=@LIBBACKTRACE_INC@
 LIBBACKTRACE_LIB=@LIBBACKTRACE_LIB@
 
+GNULIB_BUILDDIR = ../gnulib
+LIBGNU = $(GNULIB_BUILDDIR)/import/libgnu.a
+INCGNU = -I$(srcdir)/../gnulib/import -I$(GNULIB_BUILDDIR)/import
+
 SUPPORT = ../gdbsupport
 LIBSUPPORT = $(SUPPORT)/libgdbsupport.a
 INCSUPPORT = -I$(srcdir)/.. -I..
@@ -989,6 +993,7 @@ COMMON_SFILES = \
 	agent.c \
 	alloc.c \
 	annotate.c \
+	amigaread.c \
 	arch-utils.c \
 	async-event.c \
 	auto-load.c \
@@ -1903,6 +1908,17 @@ gdb$(EXEEXT): gdb.o $(LIBGDB_OBS) $(CDEPS) $(TDEPLIBS)
 ifneq ($(CODESIGN_CERT),)
 	$(ECHO_SIGN) $(CODESIGN) -s $(CODESIGN_CERT) gdb$(EXEEXT)
 endif
+
+# Convenience rule to handle recursion.
+$(LIBGNU) $(GNULIB_H): all-lib
+all-lib: $(GNULIB_BUILDDIR)/Makefile
+	@$(MAKE) $(FLAGS_TO_PASS) DO=all DODIRS=$(GNULIB_BUILDDIR) subdir_do
+.PHONY: all-lib
+
+# Convenience rule to handle recursion.
+.PHONY: all-data-directory
+all-data-directory: data-directory/Makefile
+	@$(MAKE) $(FLAGS_TO_PASS) DO=all DODIRS=data-directory subdir_do
 
 # This is useful when debugging GDB, because some Unix's don't let you run GDB
 # on itself without copying the executable.  So "make gdb1" will make

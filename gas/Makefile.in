@@ -766,6 +766,7 @@ TARGET_EXTRA_FILES = \
 
 # OBJ files in config
 OBJ_FORMAT_CFILES = \
+	config/obj-amigahunk.c \
 	config/obj-aout.c \
 	config/obj-coff.c \
 	config/obj-ecoff.c \
@@ -777,6 +778,7 @@ OBJ_FORMAT_CFILES = \
 	config/obj-som.c
 
 OBJ_FORMAT_HFILES = \
+	config/obj-amigahunk.h \
 	config/obj-aout.h \
 	config/obj-coff.h \
 	config/obj-ecoff.h \
@@ -1309,6 +1311,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/literal.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/macro.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/messages.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/obj-amigahunk.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/output-file.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/read.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/remap.Po@am__quote@

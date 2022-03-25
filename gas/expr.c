@@ -23,10 +23,12 @@
    (It also gives smaller files to re-compile.)
    Here, "operand"s are of expressions, not instructions.  */
 
-#define min(a, b)       ((a) < (b) ? (a) : (b))
-
 #include "as.h"
 #include "safe-ctype.h"
+
+#ifndef min
+#define min(a, b)       ((a) < (b) ? (a) : (b))
+#endif
 
 #include <limits.h>
 #ifndef CHAR_BIT
@@ -2115,7 +2117,7 @@ resolve_expression (expressionS *expressionP)
   symbolS *op_symbol = expressionP->X_op_symbol;
   operatorT op = expressionP->X_op;
   valueT left, right;
-  segT seg_left, seg_right;
+  segT seg_left = 0, seg_right;
   fragS *frag_left, *frag_right;
   offsetT frag_off;
 

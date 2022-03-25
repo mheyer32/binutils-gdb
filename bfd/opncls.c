@@ -131,7 +131,9 @@ _bfd_delete_bfd (bfd *abfd)
   else
     free ((char *) bfd_get_filename (abfd));
 
-  free (abfd->arelt_data);
+// CHECK
+//    free ((char *) abfd->filename);
+//  free (abfd->arelt_data);
   free (abfd);
 }
 

@@ -224,6 +224,10 @@ getprogname (void)
       free (buf.ps_pathptr);
     }
   return p;
+# elif defined(AMIGA)
+  char buffer[256];
+  GetProgramName(buffer, 256);
+  return strdup(buffer);
 # elif defined __sgi                                        /* IRIX */
   char filename[50];
   int fd;

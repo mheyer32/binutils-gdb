@@ -158,6 +158,8 @@ ALL_EMULATION_SOURCES = \
 	eaixrs6.c \
 	ealpha.c \
 	ealphavms.c \
+	eamiga.c \
+	eamiga_bss.c \
 	earcelf.c \
 	earclinux.c \
 	earclinux_nps.c \
@@ -472,9 +474,9 @@ ALL_64_EMULATIONS = $(ALL_64_EMULATION_SOURCES:.c=.@OBJEXT@)
 
 ALL_EMUL_EXTRA_OFILES = \
 	deffilep.@OBJEXT@ \
-	pe-dll.@OBJEXT@ \
-	ldelf.@OBJEXT@ \
-	ldelfgen.@OBJEXT@
+	pe-dll.@OBJEXT@ 
+#	ldelf.@OBJEXT@ \
+#	ldelfgen.@OBJEXT@
 
 ALL_64_EMUL_EXTRA_OFILES = \
 	pep-dll.@OBJEXT@

@@ -965,6 +965,12 @@ size_forward1 (const void *P_x, const void *P_y)
   if (bfd_is_und_section (ys))
     abort ();
 
+#ifdef TARGET_AMIGA
+  xf = strcmp(xs->name, ys->name);
+  if (xf)
+    return xf;
+#endif
+
   if (valueof (x) != valueof (y))
     return valueof (x) < valueof (y) ? -1 : 1;
 
@@ -1073,6 +1079,8 @@ sort_symbols_by_size (bfd *abfd, bool is_dynamic, void *minisyms,
       asection *sec;
       bfd_vma sz;
       asymbol *temp;
+
+//      printf("%s -> %08x\n", sym->name, valueof (sym));
 
       if (from + size < fromend)
 	{

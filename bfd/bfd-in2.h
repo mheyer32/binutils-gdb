@@ -1451,30 +1451,31 @@ enum bfd_architecture
 #define bfd_mach_m68030                5
 #define bfd_mach_m68040                6
 #define bfd_mach_m68060                7
-#define bfd_mach_cpu32                 8
-#define bfd_mach_fido                  9
-#define bfd_mach_mcf_isa_a_nodiv       10
-#define bfd_mach_mcf_isa_a             11
-#define bfd_mach_mcf_isa_a_mac         12
-#define bfd_mach_mcf_isa_a_emac        13
-#define bfd_mach_mcf_isa_aplus         14
-#define bfd_mach_mcf_isa_aplus_mac     15
-#define bfd_mach_mcf_isa_aplus_emac    16
-#define bfd_mach_mcf_isa_b_nousp       17
-#define bfd_mach_mcf_isa_b_nousp_mac   18
-#define bfd_mach_mcf_isa_b_nousp_emac  19
-#define bfd_mach_mcf_isa_b             20
-#define bfd_mach_mcf_isa_b_mac         21
-#define bfd_mach_mcf_isa_b_emac        22
-#define bfd_mach_mcf_isa_b_float       23
-#define bfd_mach_mcf_isa_b_float_mac   24
-#define bfd_mach_mcf_isa_b_float_emac  25
-#define bfd_mach_mcf_isa_c             26
-#define bfd_mach_mcf_isa_c_mac         27
-#define bfd_mach_mcf_isa_c_emac        28
-#define bfd_mach_mcf_isa_c_nodiv       29
-#define bfd_mach_mcf_isa_c_nodiv_mac   30
-#define bfd_mach_mcf_isa_c_nodiv_emac  31
+#define bfd_mach_m68080                8
+#define bfd_mach_cpu32                 9
+#define bfd_mach_fido                  10
+#define bfd_mach_mcf_isa_a_nodiv       11
+#define bfd_mach_mcf_isa_a             12
+#define bfd_mach_mcf_isa_a_mac         13
+#define bfd_mach_mcf_isa_a_emac        14
+#define bfd_mach_mcf_isa_aplus         15
+#define bfd_mach_mcf_isa_aplus_mac     16
+#define bfd_mach_mcf_isa_aplus_emac    17
+#define bfd_mach_mcf_isa_b_nousp       18
+#define bfd_mach_mcf_isa_b_nousp_mac   19
+#define bfd_mach_mcf_isa_b_nousp_emac  20
+#define bfd_mach_mcf_isa_b             21
+#define bfd_mach_mcf_isa_b_mac         22
+#define bfd_mach_mcf_isa_b_emac        23
+#define bfd_mach_mcf_isa_b_float       24
+#define bfd_mach_mcf_isa_b_float_mac   25
+#define bfd_mach_mcf_isa_b_float_emac  26
+#define bfd_mach_mcf_isa_c             27
+#define bfd_mach_mcf_isa_c_mac         28
+#define bfd_mach_mcf_isa_c_emac        29
+#define bfd_mach_mcf_isa_c_nodiv       30
+#define bfd_mach_mcf_isa_c_nodiv_mac   31
+#define bfd_mach_mcf_isa_c_nodiv_emac  32
   bfd_arch_vax,       /* DEC Vax.  */
 
   bfd_arch_or1k,      /* OpenRISC 1000.  */
@@ -6451,6 +6452,13 @@ typedef struct bfd_symbol
   /* This section symbol should be included in the symbol table.  */
 #define BSF_SECTION_SYM_USED    (1 << 24)
 
+  /* this labels refers to code */
+#define BSF_CODE (1<<29)
+  /* this labels refers to data */
+#define BSF_DATA (1<<30)
+  /* this label was processed */
+#define BSF_VISITED (1<<31)
+
   flagword flags;
 
   /* A pointer to the section to which this symbol is
@@ -6837,6 +6845,8 @@ struct bfd
       struct bfd_pef_data_struct *pef_data;
       struct bfd_pef_xlib_data_struct *pef_xlib_data;
       struct bfd_sym_data_struct *sym_data;
+      struct amiga_data_struct *amiga_data;
+      struct amiga_ardata_struct *amiga_ar_data;
       void *any;
     }
   tdata;
@@ -7346,6 +7356,7 @@ enum bfd_flavour
 {
   /* N.B. Update bfd_flavour_name if you change this.  */
   bfd_target_unknown_flavour,
+  bfd_target_amiga_flavour,
   bfd_target_aout_flavour,
   bfd_target_coff_flavour,
   bfd_target_ecoff_flavour,

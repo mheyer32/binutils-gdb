@@ -75,6 +75,9 @@
 #include "elf/h8.h"
 #undef _ELF_H8_H
 
+int
+readelfmain (int argc, char ** argv);
+
 /* Undo the effects of #including reloc-macros.h.  */
 
 #undef START_RELOC_NUMBERS
@@ -210,7 +213,7 @@ static struct dump_data cmdline;
 
 static struct dump_list_entry * dump_sects_byname;
 
-char * program_name = "readelf";
+BINUTILSDECL char * program_name = "readelf";
 
 static bool show_name = false;
 static bool do_dynamic = false;
@@ -15024,7 +15027,7 @@ uncompress_section_contents (unsigned char **   buffer,
   strm.next_in = (Bytef *) compressed_buffer;
   strm.avail_out = uncompressed_size;
   uncompressed_buffer = (unsigned char *) xmalloc (uncompressed_size);
-
+#ifndef _MSC_VER
   rc = inflateInit (& strm);
   while (strm.avail_in > 0)
     {
@@ -15048,6 +15051,7 @@ uncompress_section_contents (unsigned char **   buffer,
 
  fail:
   free (uncompressed_buffer);
+#endif
   /* Indicate decompression failure.  */
   *buffer = NULL;
   return false;
@@ -22432,7 +22436,7 @@ db_task_printsym (unsigned int addr)
 #endif
 
 int
-main (int argc, char ** argv)
+readelfmain (int argc, char ** argv)
 {
   int err;
 

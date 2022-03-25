@@ -1160,7 +1160,11 @@ update_section_map (struct program_space *pspace,
   for (objfile *objfile : pspace->objfiles ())
     ALL_OBJFILE_OSECTIONS (objfile, s)
       if (insert_section_p (objfile->obfd, s->the_bfd_section))
-	map[i++] = s;
+	{
+	  map[i++] = s;
+  	  if (s->the_bfd_section->flags & SEC_ALLOC)
+	    s->the_bfd_section->vma = s->objfile->section_offsets[s->the_bfd_section->index];
+	}
 
   std::sort (map, map + alloc_size, sort_cmp);
   map_size = filter_debuginfo_sections(map, alloc_size);

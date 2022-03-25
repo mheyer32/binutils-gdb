@@ -252,6 +252,9 @@ static size_t get_non_macro_line_sb (sb *);
 static void generate_file_debug (void);
 static char *_find_end_of_line (char *, int, int, int);
 
+void ignore_rest_of_line (void);
+
+
 void
 read_begin (void)
 {
@@ -345,7 +348,7 @@ static struct htab *po_hash;
 
 static const pseudo_typeS potable[] = {
   {"abort", s_abort, 0},
-  {"align", s_align_ptwo, 0},
+  {"align", s_align_bytes, 0},
   {"altmacro", s_altmacro, 1},
   {"ascii", stringer, 8+0},
   {"asciz", stringer, 8+1},
@@ -415,7 +418,7 @@ static const pseudo_typeS potable[] = {
   {"appfile", s_app_file, 1},
   {"appline", s_app_line, 1},
   {"fail", s_fail, 0},
-  {"file", s_app_file, 0},
+  {"file", s_ignore, 0},
   {"fill", s_fill, 0},
   {"float", float_cons, 'f'},
   {"format", s_ignore, 0},
@@ -423,6 +426,7 @@ static const pseudo_typeS potable[] = {
   {"global", s_globl, 0},
   {"globl", s_globl, 0},
   {"hword", cons, 2},
+  {"ident", s_ignore, 0},
   {"if", s_if, (int) O_ne},
   {"ifb", s_ifb, 1},
   {"ifc", s_ifc, 0},
@@ -453,6 +457,7 @@ static const pseudo_typeS potable[] = {
   {"list", listing_list, 1},	/* Turn listing on.  */
   {"llen", listing_psize, 1},
   {"long", cons, 4},
+  {"loc", s_ignore, 0},
   {"lsym", s_lsym, 0},
   {"macro", s_macro, 0},
   {"mexit", s_mexit, 0},
@@ -488,6 +493,7 @@ static const pseudo_typeS potable[] = {
   {"short", cons, 2},
   {"single", float_cons, 'f'},
 /* size  */
+  {"size", s_ignore, 0},
   {"space", s_space, 0},
   {"skip", s_space, 0},
   {"sleb128", s_leb128, 1},
@@ -1596,7 +1602,10 @@ s_align (signed int arg, int bytes_p)
   if (align > align_limit)
     {
       align = align_limit;
+      // Do not warn for to large alignment on Amiga
+#ifndef OBJ_AMIGAHUNK
       as_warn (_("alignment too large: %u assumed"), align_limit);
+#endif
     }
 
   if (*input_line_pointer != ',')
@@ -1862,8 +1871,11 @@ s_comm_internal (int param,
       S_SET_EXTERNAL (symbolP);
       S_SET_SEGMENT (symbolP, bfd_com_section_ptr);
     }
-
+#ifdef OBJ_AMIGAHUNK
+  ignore_rest_of_line ();
+#else
   demand_empty_rest_of_line ();
+#endif
  out:
   if (flag_mri)
     mri_comment_end (stop, stopc);
@@ -3962,9 +3974,11 @@ demand_empty_rest_of_line (void)
     input_line_pointer++;
   else
     {
-      if (ISPRINT (*input_line_pointer))
+      if (ISPRINT (*input_line_pointer)) {
+	if (*input_line_pointer != '|')
 	as_bad (_("junk at end of line, first unrecognized character is `%c'"),
 		 *input_line_pointer);
+      }
       else
 	as_bad (_("junk at end of line, first unrecognized character valued 0x%x"),
 		 *input_line_pointer);
@@ -4021,6 +4035,12 @@ pseudo_set (symbolS *symbolP)
     (void) expression (&exp);
   else
     (void) deferred_expression (&exp);
+
+#if defined(OBJ_AMIGAHUNK)
+// needed to get .stabs working
+  if (exp.X_op == O_absent && symbol_get_bfdsym (symbolP)->section == undefined_section)
+    exp.X_op = O_constant;
+#endif
 
   if (exp.X_op == O_illegal)
     as_bad (_("illegal expression"));
@@ -4795,7 +4815,7 @@ emit_expr_fix (expressionS *exp, unsigned int nbytes, fragS *frag, char *p,
 	return;
       }
   fix_new_exp (frag, p - frag->fr_literal + offset, size,
-	       exp, 0, r);
+	       exp, 0, r, 0);
 #endif
 }
 

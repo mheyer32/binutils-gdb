@@ -103,7 +103,8 @@ static const bfd_arch_info_type arch_info_struct[] =
       false, &arch_info_struct[39]),
     N(bfd_mach_mcf_isa_b_float_emac, "m68k:548x",
       false, &arch_info_struct[40]),
-    N(bfd_mach_mcf_isa_b_float_emac, "m68k:cfv4e", false, 0),
+    N(bfd_mach_mcf_isa_b_float_emac, "m68k:cfv4e", false, &arch_info_struct[41]),
+    N(bfd_mach_m68080,  "m68k:68080", false, 0),    
   };
 
 const bfd_arch_info_type bfd_m68k_arch =
@@ -121,6 +122,7 @@ static const unsigned m68k_arch_features[] =
   m68030|m68881|m68851,
   m68040|m68881|m68851,
   m68060|m68881|m68851,
+  m68080|m68881,
   cpu32|m68881,
   fido_a|m68881,
   mcfisa_a,

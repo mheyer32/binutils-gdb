@@ -137,7 +137,7 @@ CFILES = \
 	coffdump.c coffgrok.c cxxfilt.c \
 	dwarf.c debug.c demanguse.c dlltool.c dllwrap.c \
 	elfcomm.c emul_aix.c emul_vanilla.c filemode.c \
-	is-ranlib.c is-strip.c maybe-ranlib.c maybe-strip.c \
+	is-ranlib.c is-readelf.c is-strip.c maybe-ranlib.c maybe-strip.c \
 	nm.c not-ranlib.c not-strip.c \
 	objcopy.c objdump.c prdbg.c \
 	od-elf32_avr.c od-macho.c od-xcoff.c \
@@ -255,7 +255,7 @@ objcopy_SOURCES = objcopy.c not-strip.c rename.c $(WRITE_DEBUG_SRCS) $(BULIBS)
 
 strings_SOURCES = strings.c $(BULIBS)
 
-readelf_SOURCES = readelf.c version.c unwind-ia64.c dwarf.c demanguse.c $(ELFLIBS)
+readelf_SOURCES = is-readelf.c readelf.c version.c unwind-ia64.c dwarf.c demanguse.c $(ELFLIBS)
 readelf_LDADD   = $(LIBCTF_NOBFD) $(LIBINTL) $(LIBIBERTY) $(ZLIB) $(DEBUGINFOD_LIBS)
 
 elfedit_SOURCES = elfedit.c version.c $(ELFLIBS)

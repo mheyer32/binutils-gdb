@@ -182,7 +182,7 @@ set_times (const char *destination, const struct stat *statbuf)
   tv[1].tv_sec = statbuf->st_mtime;
   tv[1].tv_usec = get_stat_mtime_ns (statbuf) / 1000;
   result = utimes (destination, tv);
-#elif defined HAVE_GOOD_UTIME_H
+#elif defined(HAVE_GOOD_UTIME_H) || defined(_MSC_VER)
   struct utimbuf tb;
 
   tb.actime = statbuf->st_atime;

@@ -243,8 +243,8 @@ sym_lookup (Sym_Table *sym_tab, bfd_vma address)
 	  else
 	    {
 	      DBG (LOOKUPDEBUG,
-		   printf ("[sym_lookup] %d probes (symtab->len=%u)\n",
-			   probes, sym_tab->len - 1));
+		   printf ("[sym_lookup] %d probes (symtab->len=%u) for addr %08x\n",
+			   probes, sym_tab->len - 1, (unsigned)address));
 	      return &sym[mid];
 	    }
 	}

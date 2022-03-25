@@ -770,7 +770,7 @@ static const asymbol global_syms[] =
 #define STD_SECTION(NAME, IDX, FLAGS) \
   BFD_FAKE_SECTION(_bfd_std_section[IDX], &global_syms[IDX], NAME, IDX, FLAGS)
 
-asection _bfd_std_section[] = {
+BFDDECL asection _bfd_std_section[] = {
   STD_SECTION (BFD_COM_SECTION_NAME, 0, SEC_IS_COMMON),
   STD_SECTION (BFD_UND_SECTION_NAME, 1, 0),
   STD_SECTION (BFD_ABS_SECTION_NAME, 2, 0),
@@ -838,6 +838,21 @@ bfd_section_init (bfd *abfd, asection *newsect)
   newsect->id = _bfd_section_id;
   newsect->index = abfd->section_count;
   newsect->owner = abfd;
+
+  /* Create a symbol whose only job is to point to this section.  This
+     is useful for things like relocs which are relative to the base
+     of a section.  */
+  newsect->symbol = bfd_make_empty_symbol (abfd);
+  if (newsect->symbol == NULL)
+    return NULL;
+
+  newsect->symbol->name = newsect->name;
+  newsect->symbol->value = 0;
+  newsect->symbol->section = newsect;
+  newsect->symbol->flags = BSF_SECTION_SYM;
+
+  newsect->symbol_ptr_ptr = &newsect->symbol;
+
 
   if (! BFD_SEND (abfd, _new_section_hook, (abfd, newsect)))
     return NULL;
@@ -1451,6 +1466,7 @@ bfd_set_section_size (asection *sec, bfd_size_type val)
     }
 
   sec->size = val;
+  sec->rawsize = val;  
   return true;
 }
 

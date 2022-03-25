@@ -20,4 +20,9 @@
 /* Linked with objcopy.o to flag that this program is 'strip' (not
    'objcopy').  */
 
-int is_strip = 1;
+extern int obmain(int argc, char ** argv, int);
+
+int main(int argc, char ** argv)
+{
+	return obmain(argc, argv, 1);
+}

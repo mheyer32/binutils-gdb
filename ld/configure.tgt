@@ -458,6 +458,8 @@ m68*-*-netbsd*)	targ_emul=m68kelfnbsd
 			;;
 m68*-*-haiku*)		targ_emul=m68kelf
 			;;
+m68*-*-amigaos*)	targ_emul=amiga ; targ_extra_emuls="amiga_bss"; targ_extra_ofiles=""
+			;;			
 m68*-*-*)		targ_emul=m68kelf
 			;;
 mcore-*-pe)		targ_emul=mcorepe ;

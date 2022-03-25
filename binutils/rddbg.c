@@ -63,7 +63,7 @@ read_debugging_info (bfd *abfd, asymbol **syms, long symcount,
 					      &found))
 	goto err_exit;
     }
-
+#ifndef _MSC_VER
   /* Try reading the COFF symbols if we didn't find any stabs in COFF
      sections.  */
   if (! found
@@ -74,7 +74,7 @@ read_debugging_info (bfd *abfd, asymbol **syms, long symcount,
 	goto err_exit;
       found = true;
     }
-
+#endif
   if (! found)
     {
       if (! no_messages)

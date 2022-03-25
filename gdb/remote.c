@@ -4222,6 +4222,9 @@ remote_target::~remote_target ()
 }
 
 /* Query the remote side for the text, data and bss offsets.  */
+#if (DEFAULT_BFD_VEC == amiga_vec)
+CORE_ADDR text_offset;
+#endif
 
 void
 remote_target::get_offsets ()
@@ -4368,8 +4371,14 @@ remote_target::get_offsets ()
 	 don't have time to do right now.  */
 
       offs[SECT_OFF_DATA (objf)] = data_addr;
-      offs[SECT_OFF_BSS (objf)] = data_addr;
+      /** SBF: ensure bss does not overwrite the text addr. */
+      if (SECT_OFF_BSS (objf) != SECT_OFF_TEXT (objf))
+        offs[SECT_OFF_BSS (objf)] = bss_addr ? bss_addr : data_addr;
     }
+
+#if (DEFAULT_BFD_VEC == amiga_vec)
+  text_offset = offs[SECT_OFF_TEXT (objf)];
+#endif
 
   objfile_relocate (objf, offs);
 }
