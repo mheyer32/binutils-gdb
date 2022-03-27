@@ -108,7 +108,7 @@ static void s_custom_section(char const * secname)
   if (!seg_info (seg)->hadone)
     {
       int flags;
-      if (strstr(secname, "lto"))
+      if (0 == strncmp(secname, ".gnu.lto", 8))
 	flags = SEC_DEBUGGING;
       else if (strncmp(secname, ".gnu.", 5) == 0 || strncmp(secname, ".text", 5) == 0 || strncmp(secname, ".rodata", 7) == 0)
 	flags = SEC_ALLOC | SEC_LOAD | SEC_RELOC | SEC_CODE;
