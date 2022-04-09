@@ -1511,13 +1511,18 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
       if (r->address <= offset)
 	{
 	  sym = *r->sym_ptr_ptr;
-	  if (sym)
+	  if (sym && sym->section != bfd_und_section_ptr)
 	    {
+	      arelent *** trelppp;
 	      // search the correct section
 	      sec = aux->sec;
 	      aux->sec = sym->section;
+	      trelppp = aux->relppp;
+
 	      asymbol * sym2 = find_symbol_for_address(vma, inf, NULL);
+
 	      aux->sec = sec;
+	      aux->relppp = trelppp;
 
 	      // update vma and section and move relppp
 	      if (sym2)
@@ -1605,6 +1610,7 @@ objdump_print_addr (bfd_vma vma,
   struct objdump_disasm_info *aux;
   asymbol *sym = NULL;
   bfd_boolean skip_find = FALSE;
+  asection *tmp;
 
   aux = (struct objdump_disasm_info *) inf->application_data;
 
@@ -1623,11 +1629,13 @@ objdump_print_addr (bfd_vma vma,
       return;
     }
 
+  tmp = inf->section;
   if (aux->reloc != NULL
       && aux->reloc->sym_ptr_ptr != NULL
       && * aux->reloc->sym_ptr_ptr != NULL)
     {
       sym = * aux->reloc->sym_ptr_ptr;
+      inf->section = sym->section;
 
       /* Adjust the vma to the reloc.  */
       vma += bfd_asymbol_value (sym);
@@ -1638,6 +1646,8 @@ objdump_print_addr (bfd_vma vma,
 
   if (!skip_find)
     sym = find_symbol_for_address (vma, inf, NULL);
+
+  inf->section = tmp;
 
   if (create_labels && sym && sym->section == aux->sec && (sym->value != vma || sym->value == 0))
     sym = NULL;
@@ -3147,7 +3157,7 @@ disassemble_bytes (struct disassemble_info * inf,
 				buf[i++] = ',';
 			      buf[i++] = '0';
 			      buf[i++] = 'x';
-			      sprintf(buf + i, "%08x", (data[j]<<8)  | data[j+1]);
+			      sprintf(buf + i, "%08x", (data[j]<<24) | (data[j+1]<<16) | (data[j+2]<<8)| data[j+3]);
 			      i += 8;
 			    }
 			}
@@ -3505,7 +3515,7 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
   printf (_("\nDisassembly of section %s:\n"), sanitize_string (section->name));
 
 #ifdef TARGET_AMIGA
-  if (create_labels &&  0 == strcmp(".text", section->name))
+  if (create_labels &&  0 == strncmp(".text", section->name, 5))
     {
   /**
    * Run over the data and create labels/symbols.
@@ -3567,14 +3577,17 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 	  if (asym->udata.i || (asym->flags & (BSF_DATA|BSF_VISITED)))
 	      continue;
 	  // only search inside code
-	  if (strcmp(asym->section->name, ".text"))
-	    continue;
+	  if (strncmp(asym->section->name, ".text", 5))
+	    {
+	      asym->flags |= (BSF_DATA|BSF_VISITED);
+	      continue;
+	    }
 
 	  // skip lto stuff
 	  if (asym->name && strstr(asym->name, "lto_pri"))
 	    continue;
 
-	  if ((asym->flags & BSF_CODE) == 0)
+//	  if ((asym->flags & BSF_CODE) == 0)
 	    {
 	      if (guess)
 		{
@@ -3582,6 +3595,7 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 		  unsigned short w = ((data[pos] & 0xff) << 8) | (data[pos + 1] & 0xff);
 		  switch (w)
 		  {
+		    case 0x23c8:
 		    case 0x2608:
 		    case 0x2f02:// move.l d2,-(sp)
 		    case 0x2f03:// move.l d3,-(sp)
@@ -3590,12 +3604,15 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 		    case 0x2f0e:// move.l a6,-(sp)
 		    case 0x2f2f:// move.l 4(sp),-(sp)
 		    case 0x45ec:
+		    case 0x45f9:
 		    case 0x48e7:// movem.l ...
 		    case 0x4e55:// link.w a5
+		    case 0x4e75:
 		    case 0x4eba:// jsr
 		    case 0x4fef:// lea x(sp),sp
 		    case 0x598f:// subq.l #4,a7
 		    case 0x70ff:
+		    case 0xc800:
 		      asym->flags |= BSF_CODE;
 		      guess = 0;
 		      break;
@@ -3688,7 +3705,11 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 			      entry += 2;
 			    }
 			}
-		    }
+		    } else
+		      {
+			if (data[pos + 2] == 0x4e && data[pos + 3] == 0x55)
+			  create_label(pos + 2, pinfo, LT_CODE);
+		      }
 		  pos += add;
 		  break;
 		}
@@ -3806,7 +3827,7 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 
       /* If we are only disassembling from a specific symbol,
 	 check to see if we should start or stop displaying.  */
-      if (sym && paux->symbol)
+      if (sym && (paux->symbol || create_labels))
 	{
 	  if (do_print)
 	    {
@@ -3942,8 +3963,8 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
       else
 	insns = FALSE;
 
-      if (strcmp(".text", pinfo->section->name))
-	insns = FALSE;
+      if (strncmp(".text", pinfo->section->name, 5))
+	insns = TRUE;
 
       if (sym && (sym->flags & BSF_DATA))
 	insns = FALSE;

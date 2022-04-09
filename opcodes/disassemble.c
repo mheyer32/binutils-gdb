@@ -713,7 +713,10 @@ disassemble_init_for_target (struct disassemble_info * info)
     case bfd_arch_nds32:
       disassemble_init_nds32 (info);
       break;
- #endif
+#endif
+    case bfd_arch_m68k:
+      info->disassembler_needs_relocs = TRUE;
+      break;
     default:
       break;
     }
