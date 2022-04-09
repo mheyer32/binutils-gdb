@@ -17,6 +17,12 @@ SECTIONS
     *(.text.main)
     *(.text*)
     *(.rodata*)
+    *(.list___INIT_LIST__)
+    *(.list___EXIT_LIST__)
+    *(.list___CTOR_LIST__)
+    *(.list___DTOR_LIST__)
+    *(.list___LIB_LIST__)    
+    ${CONSTRUCTING+CONSTRUCTORS}
     *(.gnu.linkonce.t.*)
     *(.gnu.linkonce.r.*)
     ${RELOCATING+___datadata_relocs = .;}
@@ -28,8 +34,8 @@ SECTIONS
   .data :
   {
     ${RELOCATING+__sdata = .;}
-    ${CONSTRUCTING+CONSTRUCTORS}
     *(.data)
+    *(.data*)
     *(.gnu.linkonce.d.*)
     ${RELOCATING+___a4_init = 0x7ffe;}
     ${RELOCATING+__edata = .;}
@@ -38,6 +44,7 @@ SECTIONS
   {
     ${RELOCATING+__bss_start = .;}
     *(.bss)
+    *(.bss*)
     *(COMMON)
     ${RELOCATING+__end = .;}
   }
