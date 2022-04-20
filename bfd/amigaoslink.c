@@ -181,6 +181,8 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
       struct bfd_link_order *lol = link_order;
       for (; lol; lol = lol->next)
 	{
+	  if (lol->type != bfd_indirect_link_order)
+	    continue;
 	  asection *s = lol->u.indirect.section;
 	  if (s->owner->xvec->flavour != bfd_target_amiga_flavour)
 	    continue;
@@ -205,6 +207,8 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
 	  lol = link_order;
 	  for (; lol; lol = lol->next)
 	    {
+	      if (lol->type != bfd_indirect_link_order)
+		continue;
 	      asection *s = lol->u.indirect.section;
 	      if (s->owner->xvec->flavour != bfd_target_amiga_flavour)
 		continue;
@@ -806,11 +810,9 @@ amiga_perform_reloc (
 
   sym=*(r->sym_ptr_ptr);
 
-// SBF: no idea what to fix here...?? /* FIXME: XXX */
-//   if (0 && sym->udata.p)
-//     sym = ((struct generic_link_hash_entry *) sym->udata.p)->sym;
-
   target_section=sym->section;
+  if ((target_section->flags & SEC_EXCLUDE) && target_section->kept_section)
+    target_section = target_section->kept_section;
 
   if (bfd_is_und_section(target_section)) /* Error */
     {
@@ -869,8 +871,22 @@ amiga_perform_reloc (
       else /* Same section */
 	{
 	  DPRINT(5,("PC relative\n"));
-	  relocation = sym->value + target_section->output_offset
-	    - sec->output_offset - r->address;
+
+	  /* SBF: relocation into .text and within an object file is resolved against the section */
+	  if (target_section->owner == sec->owner && 0 == strcmp(".text", target_section->name))
+	    relocation = target_section->output_offset - sec->output_offset;
+	  else
+	    {
+	      /* SBF: eliminate existing values. */
+	      int off = 0;
+	      if (r->howto->type == H_PC32)
+		off = bfd_getb_signed_32 (((bfd_byte *)data)+r->address);
+	      else if (r->howto->type == H_PC16)
+		off = bfd_getb_signed_16 (((bfd_byte *)data)+r->address);
+
+	      relocation = sym->value + target_section->output_offset
+		- sec->output_offset - r->address - off;
+	    }
 	}
       break;
 
