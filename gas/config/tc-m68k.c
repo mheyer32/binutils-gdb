@@ -8053,8 +8053,8 @@ md_pcrel_from_m68k (fixS *fixP, segT current_section)
   if (stdoutput->xvec == &amiga_vec && fixP->fx_addsy)
     {
       asymbol * sym = symbol_get_bfdsym (fixP->fx_addsy);
-      if (sym->section != current_section)
-	return - adjust;
+      if (sym->section != current_section && sym->flags == 0 && strcmp(current_section, ".text"))
+	  return - adjust;
     }
 
   return fixP->fx_where + fixP->fx_frag->fr_address - adjust;
