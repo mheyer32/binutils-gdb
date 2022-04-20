@@ -3311,12 +3311,15 @@ init_complex_type (const char *name, struct type *target_type)
     {
       if (name == nullptr)
 	{
+	  char const *mn = target_type->name ();
+	  if (!mn)
+	    mn = "?";
 	  char *new_name
 	    = (char *) TYPE_ALLOC (target_type,
-				   strlen (target_type->name ())
+				   strlen (mn)
 				   + strlen ("_Complex ") + 1);
 	  strcpy (new_name, "_Complex ");
-	  strcat (new_name, target_type->name ());
+	  strcat (new_name, mn);
 	  name = new_name;
 	}
 
