@@ -519,12 +519,12 @@ amiga_add_reloc (
     { /* relative to section */
     target_sec = amiga_get_section_by_hunk_number (abfd, target_hunk);
     if (target_sec)
-      reloc->symbol = target_sec->symbol;
+	  reloc->symbol = target_sec->symbol;
     else
       return FALSE;
   }
   else
-    reloc->symbol = &symbol->symbol;
+      reloc->symbol = &symbol->symbol;
 
   return TRUE;
 }
@@ -785,7 +785,7 @@ parse_archive_units (
 	    {
 	len = n & 0xffffff;
 	type = (n>>24) & 0xff;
-	if (type < 200) type &= ~0x40;
+	if (type < 200) type &= ~0x60;
 	      switch (type)
 		{
 	case EXT_SYMB:
@@ -1476,7 +1476,7 @@ amiga_handle_rest (
 	      abfd->flags |= HAS_SYMS;
 	      abfd->symcount++;
 
-		if (type < 200) type &= ~0x40;
+		if (type < 200) type &= ~0x60;
 	      switch (type)
 		{
 		case EXT_SYMB: /* Symbol hunks are relative to hunk start... */
@@ -2705,7 +2705,10 @@ static bfd_boolean amiga_write_symbols (
 		return FALSE;
 	    }
 
-	  if (!write_name (abfd, sym_p->name, (EXT_ABS | ((sym_p->flags & BSF_WEAK) ? 0x40 : 0))<< 24))
+	  if (!write_name (abfd, sym_p->name, (EXT_ABS
+	      | ((sym_p->flags & BSF_WEAK) ? 0x40 : 0)
+	      | ((sym_p->flags & BSF_LOCAL) ? 0x20 : 0)
+	      )<< 24))
 	    return FALSE;
 	  n[0]=sym_p->value;
 	  if (!write_longs (n, 1, abfd))
@@ -2716,10 +2719,14 @@ static bfd_boolean amiga_write_symbols (
 	continue; /* Not first hunk, already written */
 
       /* If it is a warning symbol, or a constructor symbol or a
-	 debugging or a local symbol, don't write it */
-      if (sym_p->flags & (BSF_WARNING|BSF_CONSTRUCTOR|BSF_DEBUGGING|BSF_LOCAL))
+	 debugging, don't write it */
+      if (sym_p->flags & (BSF_WARNING|BSF_CONSTRUCTOR|BSF_DEBUGGING))
 	continue;
-      if ((sym_p->flags & (BSF_GLOBAL | BSF_WEAK)) == 0)
+
+      if (0 == (sym_p->flags & (BSF_WEAK | BSF_GLOBAL)) && sym_p->name[0] != '.')
+	sym_p->flags |= BSF_LOCAL;
+
+      if ((sym_p->flags & BSF_LOCAL) && symbol_header == HUNK_SYMBOL)
 	continue;
 
       /* Now, if osection==section, write it out */
@@ -2733,7 +2740,10 @@ static bfd_boolean amiga_write_symbols (
 		return FALSE;
 	    }
 
-	  type = symbol_header == HUNK_EXT ? (EXT_DEF | ((sym_p->flags & BSF_WEAK) ? 0x40 : 0))<< 24 : 0;
+	  type = symbol_header == HUNK_EXT ? (EXT_DEF
+	      | ((sym_p->flags & BSF_WEAK) ? 0x40 : 0)
+	      | ((sym_p->flags & BSF_LOCAL) ? 0x20 : 0)
+	      )<< 24 : 0;
 	  if (!write_name (abfd, sym_p->name, type))
 	    return FALSE;
 	  n[0] = sym_p->value + sym_p->section->output_offset;
@@ -2751,7 +2761,10 @@ static bfd_boolean amiga_write_symbols (
 		    return FALSE;
 		}
 
-	      if (!write_name (abfd, sym_p->name, (EXT_ABSCOMMON | ((sym_p->flags & BSF_WEAK) ? 0x40 : 0)) << 24))
+	      if (!write_name (abfd, sym_p->name, (EXT_ABSCOMMON
+		  | ((sym_p->flags & BSF_WEAK) ? 0x40 : 0)
+		  | ((sym_p->flags & BSF_LOCAL) ? 0x20 : 0)
+		  ) << 24))
 		return FALSE;
 	      n[0]=sym_p->value;
 	      n[1]=0;
@@ -2894,8 +2907,13 @@ amiga_slurp_symbol_table (
 
 	  if (type < 200 && (type & 0x40))
 	    {
-	      asp->symbol.flags = BSF_WEAK;
+	      asp->symbol.flags = BSF_WEAK | BSF_GLOBAL;
 	      type &= ~0x40;
+	    }
+	  else if (type < 200 && (type & 0x20))
+	    {
+	      asp->symbol.flags = BSF_LOCAL;
+	      type &= ~0x20;
 	    }
 
 	  switch (type)
@@ -2938,6 +2956,21 @@ amiga_slurp_symbol_table (
 	    break;
 	  }
 	}
+      {
+	unsigned i = 0;
+	for (i = 0; i < asect->amiga_symbol_count; ++i)
+	  if (asect->amiga_symbols[i].symbol.value == 0)
+	  {
+	    section->symbol->name = asect->amiga_symbols[i].symbol.name;
+	    section->symbol->flags |= BSF_GLOBAL;
+	  }
+	if (i == asect->amiga_symbol_count)
+	  {
+	    char c[16];
+	    snprintf(c, 16, "%d", section->id);
+	    section->symbol->name = concat(section->name, "_@_", c, NULL);
+	  }
+      }
     }
 
   /* add the constructor symbols defined by stab. */
@@ -3291,7 +3324,7 @@ amiga_slurp_relocs (
 	return FALSE;
 
       if (type < 200)
-	type &= ~0x40;
+	type &= ~0x60;
 
       switch (type)
 	{
@@ -3859,14 +3892,7 @@ amiga_generic_stat_arch_elt (
   return 0;
 }
 
-
-struct ref_section_entry
-{
-  struct bfd_hash_entry root;
-  asection * section;
-};
-
-static struct bfd_hash_entry *
+struct bfd_hash_entry *
 ref_section_hash_newfunc (struct bfd_hash_entry *entry,
 			struct bfd_hash_table *table, const char *string)
 {
@@ -3894,6 +3920,8 @@ ref_section_hash_newfunc (struct bfd_hash_entry *entry,
 static bfd_boolean
 amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
 {
+#if 1
+  /* SBF: an attempt to get rid of sections having only one weak symbol. */
   bfd * root = info->input_bfds;
   struct bfd_section * sec;
 
@@ -3921,17 +3949,35 @@ amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
 	      {
 		unsigned int i;
 		amiga_per_section_type *asect=amiga_per_section(sec);
+		asect->gc_count = 0;
+
 		if (sec->flags & SEC_EXCLUDE)
 		  continue;
 
-		asect->gc_count = 0;
+		he = (struct ref_section_entry*)bfd_hash_lookup(&referenced, sec->symbol->name, TRUE, TRUE);
+		if (!he->section)
+		  {
+		    he->section = sec;
+		    fprintf(stderr, "section: %s : %s\n", sec->name, sec->symbol->name);
+		  }
+		else
+		  sec->kept_section = he->section;
+
 		for (i = 0; i < asect->amiga_symbol_count; ++i)
-		  if (asect->amiga_symbols[i].symbol.flags & BSF_GLOBAL)
+		  {
+		  if (asect->amiga_symbols[i].symbol.flags & (BSF_GLOBAL | BSF_WEAK))
 		    {
   //		    printf("def: %s\n", asect->amiga_symbols[i].symbol.name);
 		      he = (struct ref_section_entry*)bfd_hash_lookup(&referenced, asect->amiga_symbols[i].symbol.name, TRUE, TRUE);
-		      he->section = sec;
+		      if (!he->section)
+			{
+			  fprintf(stderr, "symbol: %s\n", asect->amiga_symbols[i].symbol.name);
+			  he->section = sec;
+			}
+		      else
+			sec->kept_section = he->section;
 		    }
+		  }
 	      }
 
 	  ibfd = ibfd->lru_next;
@@ -3939,7 +3985,7 @@ amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
 	    break;
 	}
 
-      // 2. remove all sections referenced from relocs / stabs
+      // 2. touch all sections referenced from relocs / stabs
       for (ibfd = root;;)
 	{
 	  if (ibfd->format == bfd_object)
@@ -3956,8 +4002,10 @@ amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
 
 		for (alt = asect->sym_names; alt; alt = alt->next)
 		  {
-		    he = (struct ref_section_entry*)bfd_hash_lookup(&referenced, alt->name, TRUE, TRUE);
-		    if (he && he->section && he->section != sec)
+		    he = (struct ref_section_entry*)bfd_hash_lookup(&referenced, alt->name, FALSE, FALSE);
+		    if (!he)
+		      fprintf(stderr, "UPS: lost: %s\n", alt->name);
+		    else
 		      {
   //		      printf("use: %s\n", alt->name);
 			amiga_per_section_type *bsect=amiga_per_section(he->section);
@@ -3969,6 +4017,10 @@ amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
 		  {
 		    for (ii = 0, s = ibfd->sections; ii < relo->hunk; ++ii)
 		      s = s->next;
+
+		    if (s->kept_section)
+		      s = s->kept_section;
+
 		    amiga_per_section_type *bsect=amiga_per_section(s);
 		    ++bsect->gc_count;
 		  }
@@ -3996,10 +4048,11 @@ amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
   //		  printf("DROPPING %s\n", sec->name);
 		    sec->flags |= SEC_EXCLUDE;
 		    ++dropped;
-		    if (info->print_gc_sections && sec->size != 0)
+		    if (1) // info->print_gc_sections && sec->size != 0)
 		      /* xgettext:c-format */
 		      _bfd_error_handler (_("removing unused section '%pA' in file '%pB'"),
 					  sec, ibfd);
+		    sec->output_section = NULL;
 		  }
 	      }
 	  ibfd = ibfd->lru_next;
@@ -4012,7 +4065,7 @@ amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
       if (!dropped)
 	break;
     }
-
+#endif
   return TRUE;
 }
 
