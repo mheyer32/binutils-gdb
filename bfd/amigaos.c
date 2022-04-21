@@ -2723,8 +2723,13 @@ static bfd_boolean amiga_write_symbols (
       if (sym_p->flags & (BSF_WARNING|BSF_CONSTRUCTOR|BSF_DEBUGGING))
 	continue;
 
-      if (0 == (sym_p->flags & (BSF_WEAK | BSF_GLOBAL)) && sym_p->name[0] != '.')
-	sym_p->flags |= BSF_LOCAL;
+      if (0 == (sym_p->flags & (BSF_WEAK | BSF_GLOBAL)))
+	{
+	  if (sym_p->name[0] == '.')
+	    continue;
+
+	  sym_p->flags |= BSF_LOCAL;
+	}
 
       if ((sym_p->flags & BSF_LOCAL) && symbol_header == HUNK_SYMBOL)
 	continue;
