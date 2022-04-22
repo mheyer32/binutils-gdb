@@ -118,7 +118,7 @@ static void s_custom_section(char const * secname)
 	flags = SEC_ALLOC | SEC_LOAD | SEC_RELOC | SEC_DATA;
       bfd_set_section_flags (seg, flags);
       seg_info (seg)->hadone = 1;
-      if (0 == strcmp(secname, ".text.main"))
+      if (0 == strcmp(secname, ".text.main") || 0 == strcmp(secname, ".text.unlikely"))
 	seg->name = xstrdup(".text");
       else
 	seg->name = xstrdup(secname);
