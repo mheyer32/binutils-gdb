@@ -11472,7 +11472,15 @@ else
   PICFLAG=
 fi
 
-
+case $host_os in
+    amigaos*)
+      case $host_cpu in
+      m68k)
+        PICFLAG=
+      ;;
+    esac
+  ;;
+esac
 
 ac_config_files="$ac_config_files Makefile"
 
