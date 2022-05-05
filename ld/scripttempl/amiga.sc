@@ -17,9 +17,12 @@ SECTIONS
     *(.text.main)
     *(.text*)
     *(.rodata*)
+    *(.data.rel.ro.*)
     *(.list___INIT_LIST__)
     *(.list___EXIT_LIST__)
     *(.list___CTOR_LIST__)
+    ${RELOCATING+__EH_FRAME_BEGINS__ = .;}
+    *(.list___EH_FRAME_BEGINS__)
     *(.list___DTOR_LIST__)
     *(.list___LIB_LIST__)
     *(.gnu.linkonce.t.*)
@@ -37,6 +40,8 @@ SECTIONS
     *(.data)
     *(.data*)
     *(.gnu.linkonce.d.*)
+    ${RELOCATING+__EH_FRAME_OBJECTS__ = .;}
+    *(.list___EH_FRAME_OBJECTS__)
     ${RELOCATING+___a4_init = 0x7ffe;}
     ${RELOCATING+__edata = .;}
   }
