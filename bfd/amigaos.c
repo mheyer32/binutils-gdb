@@ -3922,19 +3922,13 @@ ref_section_hash_newfunc (struct bfd_hash_entry *entry,
   return entry;
 }
 
-static bfd_boolean
-amiga_keep_all (struct bfd_hash_table *hash, struct bfd_section * sec)
-{
-  sec->flags |= SEC_KEEP;
-  return TRUE;
-}
-
 
 /**
- * Keep this section and touch all referenced sections.
+ * Keep this section and recurse into all referenced sections.
+ * Record referenced symbols.
  */
 static bfd_boolean
-amiga_keep_section (struct bfd_hash_table *hash, struct bfd_section * sec)
+amiga_keep_section (struct bfd_hash_table *ht, struct bfd_section * sec)
 {
   asymbol * sym;
   amiga_reloc_type *src;
@@ -3942,105 +3936,89 @@ amiga_keep_section (struct bfd_hash_table *hash, struct bfd_section * sec)
   if (sec->flags & SEC_KEEP)
     return TRUE;
 
-  fprintf(stderr, "keeping section %s of %s\n", sec->name, sec->owner->filename);
+//  fprintf(stderr, "keeping section %s of %s\n", sec->name, sec->owner->filename);
   sec->flags |= SEC_KEEP;
 
   amiga_slurp_relocs(sec->owner, sec, 0);
   // keep all referenced sections
   for (src = (amiga_reloc_type *)sec->relocation; src; src = src->next)
     {
+      struct bfd_section * symsec;
       sym = *src->relent.sym_ptr_ptr;
-      if (!bfd_is_com_section(sym->section) && !bfd_is_und_section(sym->section) && !bfd_is_abs_section(sym->section))
-	amiga_keep_section(hash, sym->section);
+      symsec = sym->section;
+      if (!bfd_is_com_section(symsec) && !bfd_is_und_section(symsec) && !bfd_is_abs_section(symsec))
+	amiga_keep_section(ht, symsec);
       else
 	{
-	  sym->section->flags |= SEC_KEEP;
-	  bfd_hash_lookup(hash, sym->name, TRUE, TRUE);
+	  symsec->flags |= SEC_KEEP;
+	  bfd_hash_lookup(ht, sym->name, TRUE, TRUE);
 	}
     }
 
   // add all lists
   for (sec = sec->owner->sections; sec; sec = sec->next)
       if (0 == strncmp(".list__", sec->name, 7))
-	amiga_keep_section(hash, sec);
+	amiga_keep_section(ht, sec);
 
   return TRUE;
 }
 
+/**
+ * keep this section if it resolves an unresolved symbol.
+ */
 static bfd_boolean
-amiga_collect (struct bfd_link_hash_entry *h, void *p)
+amiga_collect (struct bfd_hash_table *ht, asection * sec)
 {
-  struct bfd_hash_table * ht = (struct bfd_hash_table *)p;
-
-  if (h->type == bfd_link_hash_defined || h->type == bfd_link_hash_defweak || h->type == bfd_link_hash_common)
+  amiga_per_section_type *asect=amiga_per_section(sec);
+  unsigned j;
+  if (asect)
+    for (j = 0; j < asect->amiga_symbol_count; ++j)
     {
-      asection * sec = h->u.def.section;
-      amiga_per_section_type *asect=amiga_per_section(sec);
-      unsigned j;
-      if (asect)
-	for (j = 0; j < asect->amiga_symbol_count; ++j)
+      struct ref_section_entry *he;
+      asymbol * sym = &asect->amiga_symbols[j].symbol;
+      if (0 == (sym->flags & (BSF_GLOBAL | BSF_WEAK)))
+	continue;
+
+      if (bfd_is_und_section(sym->section) || bfd_is_abs_section(sym->section) || bfd_is_com_section(sym->section))
+	continue;
+
+      he = (struct ref_section_entry*)bfd_hash_lookup(ht, sym->name, FALSE, FALSE);
+      if (he && !he->section)
 	{
-	  struct ref_section_entry *he;
-	  asymbol * sym = &asect->amiga_symbols[j].symbol;
-	  if (0 == (sym->flags & (BSF_GLOBAL | BSF_WEAK)))
-	    continue;
-
-	  if (bfd_is_und_section(sym->section) || bfd_is_abs_section(sym->section) || bfd_is_com_section(sym->section))
-	    continue;
-
-	  he = (struct ref_section_entry*)bfd_hash_lookup(ht, sym->name, FALSE, FALSE);
-	  if (he && !he->section)
+	  he->section = sec;
+	  if (amiga_keep_section(ht, sec))
 	    {
-	      he->section = sec;
-	      if (amiga_keep_section(ht, sec))
-		{
-		  fprintf(stderr, "keeping section %s for symbol %s\n", sec->name, sym->name);
-		}
+//	      fprintf(stderr, "keeping section %s for symbol %s\n", sec->name, sym->name);
 	    }
 	}
-      return TRUE;
     }
-
   return TRUE;
 }
 
+/**
+ * Mark all not kept as SEC_EXCLUDE
+ */
 static bfd_boolean
-amiga_purge (struct bfd_link_hash_entry *h, void *p)
+amiga_purge (struct bfd_hash_table *ht, asection * sec, bfd_boolean print)
 {
-  struct bfd_hash_table * ht = (struct bfd_hash_table *)p;
+  if (!sec->owner)
+    sec->flags |= SEC_KEEP;
 
-  if (h->type == bfd_link_hash_defined || h->type == bfd_link_hash_defweak || h->type == bfd_link_hash_common)
-    {
-      asection * sec = h->u.def.section;
-      if (!sec->owner)
-	sec->flags |= SEC_KEEP;
+  if (sec->flags & SEC_KEEP)
+    return TRUE;
 
-      if ((sec->flags & SEC_KEEP))
-	return TRUE;
+  if (0 == strcmp(sec->name, "COMMON") 
+	  || 0 == strncmp(sec->name, ".stab", 5))
+    return TRUE;
 
-      if (0 == strcmp(sec->name, "COMMON")
-	  || 0 == strncmp(sec->name, ".stab", 5)
-	  || 0 == strncmp(sec->name, ".list__", 7))
-	return TRUE;
-
-      sec->flags |= SEC_EXCLUDE;
-      if (1)
-	/* xgettext:c-format */
-	_bfd_error_handler (_("removing unused section '%pA' in file '%pB'"),
-			    sec, sec->owner);
-      sec->output_section = NULL;
-      return TRUE;
-    }
+  sec->flags |= SEC_EXCLUDE;
+  if (print)
+    /* xgettext:c-format */
+    _bfd_error_handler (_("removing unused section '%pA' in file '%pB'"),
+			sec, sec->owner);
+  sec->output_section = NULL;
   return TRUE;
 }
-
-/* Traverse a linker hash table.  */
-#define bfd_link_hash_traverse(table, func, info)			\
-  (bfd_link_hash_traverse						\
-   (table,								\
-    (bfd_boolean (*) (struct bfd_link_hash_entry *, void *)) (func),	\
-    (info)))
-
 
 /* Keep all symbols undefined on the command-line. */
 static void
@@ -4062,208 +4040,38 @@ amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
 
   bfd_hash_table_init(&referenced, ref_section_hash_newfunc, 101);
 
-  // collect all sections
+  // mark all provided symbols as wanted.
   amiga_gc_keep (&referenced, info);
 
-  // keep all from startuo module
+  // keep all from first/startup module
   for (sec = info->input_bfds->sections; sec != NULL; sec = sec->next)
     amiga_keep_section(&referenced, sec);
 
-  /* keep all init sections of */
+  // keep all init sections starting with .list__
   for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
     for (sec = ibfd->sections; sec != NULL; sec = sec->next)
       if (0 == strncmp(".list__", sec->name, 7))
     	amiga_keep_section(&referenced, sec);
 
-  for(i = 0;;i = referenced.count)
-    {
-      bfd_link_hash_traverse (info->hash, amiga_collect, &referenced);
-      if (i == referenced.count)
-	break;
-    }
+  // loop until nothing new was added.
+  for(i = 0;i != referenced.count;i = referenced.count)
+    for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
+      for (sec = ibfd->sections; sec != NULL; sec = sec->next)
+	amiga_collect(&referenced, sec);
 
-  bfd_link_hash_traverse (info->hash, amiga_purge, &referenced);
+  // discard all not visited stuff
+  for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
+    for (sec = ibfd->sections; sec != NULL; sec = sec->next)
+      amiga_purge(&referenced, sec, info->print_gc_sections);
 
   // free all relocs - these are read again, with correct output sections.
   for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
-    {
-      if (bfd_get_flavour (ibfd) != bfd_target_amiga_flavour)
-	continue;
-      for (sec = ibfd->sections; sec != NULL; sec = sec->next)
-	{
-	  amiga_per_section_type *asect=amiga_per_section(sec);
-	  asect->reloc_tail = 0;
-	  sec->relocation = 0;
-	}
-    }
-
-  return TRUE;
-
-#if 0
-  bfd * root = info->input_bfds;
-
-
-  amiga_keep_section(&referenced, root->sections);
-
-  for(i = 0;;i = referenced.count)
-    {
-      bfd_link_hash_traverse (info->hash, amiga_collect, &referenced);
-      if (i == referenced.count)
-	break;
-    }
-
-  bfd_link_hash_traverse (info->hash, amiga_purge, &referenced);
-
-  return TRUE;
-#endif
-  /* find _main. */
-
-#if 0
-  /* SBF: an attempt to get rid of sections having only one weak symbol. */
-
-  if (!info->gc_sections)
-    return TRUE;
-
-  // mark root as KEEP
-  for (sec = root->sections; sec; sec = sec->next)
-    sec->flags |= SEC_KEEP;
-
-  for(;;)
-    {
-      int dropped = 0;
-      struct bfd_hash_table referenced;
-      bfd * ibfd;
-      struct ref_section_entry * he;
-
-      bfd_hash_table_init(&referenced, ref_section_hash_newfunc, 101);
-
-      // 1. collect all sections
-      for (ibfd = root;;)
-	{
-	  if (ibfd->format == bfd_object)
-	    for (sec = ibfd->sections; sec; sec = sec->next)
-	      {
-		unsigned int i;
-		amiga_per_section_type *asect=amiga_per_section(sec);
-		asect->gc_count = 0;
-
-		if (sec->flags & SEC_EXCLUDE)
-		  continue;
-
-		he = (struct ref_section_entry*)bfd_hash_lookup(&referenced, sec->symbol->name, TRUE, TRUE);
-		if (!he->section)
-		  {
-		    he->section = sec;
-//		    fprintf(stderr, "section: %s : %s\n", sec->name, sec->symbol->name);
-		  }
-		else
-		  sec->kept_section = he->section;
-
-		for (i = 0; i < asect->amiga_symbol_count; ++i)
-		  {
-		  if (asect->amiga_symbols[i].symbol.flags & (BSF_GLOBAL | BSF_WEAK))
-		    {
-  //		    printf("def: %s\n", asect->amiga_symbols[i].symbol.name);
-		      he = (struct ref_section_entry*)bfd_hash_lookup(&referenced, asect->amiga_symbols[i].symbol.name, TRUE, TRUE);
-		      if (!he->section)
-			{
-//			  fprintf(stderr, "symbol: %s\n", asect->amiga_symbols[i].symbol.name);
-			  he->section = sec;
-			}
-		      else
-			sec->kept_section = he->section;
-		    }
-		  }
-	      }
-
-	  ibfd = ibfd->lru_next;
-	  if (ibfd == root)
-	    break;
-	}
-
-      // 2. touch all sections referenced from relocs / stabs
-      for (ibfd = root;;)
-	{
-	  if (ibfd->format == bfd_object)
-	    for (sec = ibfd->sections; sec; sec = sec->next)
-	      {
-		amiga_per_section_type *asect=amiga_per_section(sec);
-		aname_list_type * alt;
-		raw_reloc_type * relo;
-		unsigned int ii;
-		struct bfd_section * s;
-
-		if (sec->flags & SEC_EXCLUDE)
-		  continue;
-
-		for (alt = asect->sym_names; alt; alt = alt->next)
-		  {
-		    he = (struct ref_section_entry*)bfd_hash_lookup(&referenced, alt->name, FALSE, FALSE);
-		    if (!he)
-		      {
-//		      fprintf(stderr, "UPS: lost: %s\n", alt->name);
-		      }
-		    else
-		      {
-  //		      printf("use: %s\n", alt->name);
-			amiga_per_section_type *bsect=amiga_per_section(he->section);
-			++bsect->gc_count;
-		      }
-		  }
-
-		for (relo = asect->relocs; relo; relo = relo->next)
-		  {
-		    for (ii = 0, s = ibfd->sections; ii < relo->hunk; ++ii)
-		      s = s->next;
-
-		    if (s->kept_section)
-		      s = s->kept_section;
-
-		    amiga_per_section_type *bsect=amiga_per_section(s);
-		    ++bsect->gc_count;
-		  }
-	      }
-	  ibfd = ibfd->lru_next;
-	  if (ibfd == root)
-	    break;
-	}
-
-      // 3. the remaining sections aren't referenced
-      for (ibfd = root;;)
-	{
-	  if (ibfd->format == bfd_object)
-	    for (sec = ibfd->sections; sec; sec = sec->next)
-	      {
-		amiga_per_section_type *asect=amiga_per_section(sec);
-		if (sec->flags & (SEC_EXCLUDE | SEC_KEEP))
-		  continue;
-
-		if (0 == strcmp(sec->name, "COMMON") || 0 == strncmp(sec->name, ".stab", 5))
-		  continue;
-
-		if (asect->gc_count == 0)
-		  {
-  //		  printf("DROPPING %s\n", sec->name);
-		    sec->flags |= SEC_EXCLUDE;
-		    ++dropped;
-		    if (1) // info->print_gc_sections && sec->size != 0)
-		      /* xgettext:c-format */
-		      _bfd_error_handler (_("removing unused section '%pA' in file '%pB'"),
-					  sec, ibfd);
-		    sec->output_section = NULL;
-		  }
-	      }
-	  ibfd = ibfd->lru_next;
-	  if (ibfd == root)
-	    break;
-	}
-
-      bfd_hash_table_free(&referenced);
-
-      if (!dropped)
-	break;
-    }
-#endif
+    for (sec = ibfd->sections; sec != NULL; sec = sec->next)
+      {
+	amiga_per_section_type *asect=amiga_per_section(sec);
+	asect->reloc_tail = 0;
+	sec->relocation = 0;
+      }
   return TRUE;
 }
 
