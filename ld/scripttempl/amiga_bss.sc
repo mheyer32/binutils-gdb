@@ -38,7 +38,7 @@ SECTIONS
   {
     ${RELOCATING+__sdata = .;}
     *(.data)
-    *(.data*)    
+    *(.data.*)    
     *(.gnu.linkonce.d.*)
     ${RELOCATING+__EH_FRAME_OBJECTS__ = .;}
     *(.list___EH_FRAME_OBJECTS__)
@@ -49,7 +49,7 @@ SECTIONS
   {
     ${RELOCATING+__bss_start = .;}
     *(.bss)
-    *(.bss*)
+    *(.bss.*)
     *(COMMON)
     ${RELOCATING+__end = .;}
   }
