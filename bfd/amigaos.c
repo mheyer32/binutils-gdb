@@ -525,7 +525,7 @@ amiga_add_reloc (
   }
   else
       reloc->symbol = &symbol->symbol;
-
+fprintf(stderr, "%s\n", reloc->symbol->name);
   return TRUE;
 }
 
@@ -2970,11 +2970,7 @@ amiga_slurp_symbol_table (
 	    section->symbol->flags |= BSF_GLOBAL;
 	  }
 	if (i == asect->amiga_symbol_count)
-	  {
-	    char c[16];
-	    snprintf(c, 16, "%d", section->id);
-	    section->symbol->name = concat(section->name, "_@_", c, NULL);
-	  }
+	  section->symbol->name = section->name;
       }
     }
 
