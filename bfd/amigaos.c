@@ -525,7 +525,7 @@ amiga_add_reloc (
   }
   else
       reloc->symbol = &symbol->symbol;
-fprintf(stderr, "%s\n", reloc->symbol->name);
+
   return TRUE;
 }
 
