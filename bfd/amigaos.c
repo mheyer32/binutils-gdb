@@ -4064,7 +4064,10 @@ amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
   for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
     for (sec = ibfd->sections; sec != NULL; sec = sec->next)
       {
-	amiga_per_section_type *asect=amiga_per_section(sec);
+	amiga_per_section_type *asect = amiga_per_section(sec);
+	if (!asect)
+	  continue;
+
 	asect->reloc_tail = 0;
 	sec->relocation = 0;
       }
