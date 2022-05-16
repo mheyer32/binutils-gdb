@@ -3948,6 +3948,7 @@ amiga_keep_section (struct bfd_hash_table *ht, struct bfd_section * sec)
 	{
 	  symsec->flags |= SEC_KEEP;
 	  bfd_hash_lookup(ht, sym->name, TRUE, TRUE);
+//	  fprintf(stderr, "object %s wants %s\n", sec->owner->filename, sym->name);
 	}
     }
 
@@ -4008,7 +4009,7 @@ amiga_purge (struct bfd_hash_table *ht, asection * sec, bfd_boolean print)
     return TRUE;
 
   sec->flags |= SEC_EXCLUDE;
-  if (print)
+  if (print && sec->rawsize)
     /* xgettext:c-format */
     _bfd_error_handler (_("removing unused section '%pA' in file '%pB'"),
 			sec, sec->owner);
@@ -4050,10 +4051,13 @@ amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
     	amiga_keep_section(&referenced, sec);
 
   // loop until nothing new was added.
-  for(i = 0;i != referenced.count;i = referenced.count)
-    for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
-      for (sec = ibfd->sections; sec != NULL; sec = sec->next)
-	amiga_collect(&referenced, sec);
+  for(i = 0;i != referenced.count;)
+    {
+      i = referenced.count;
+      for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
+	for (sec = ibfd->sections; sec != NULL; sec = sec->next)
+	  amiga_collect(&referenced, sec);
+    }
 
   // discard all not visited stuff
   for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
