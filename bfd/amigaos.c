@@ -3989,6 +3989,18 @@ amiga_collect (struct bfd_hash_table *ht, asection * sec)
 	    }
 	}
     }
+  else
+    {
+      // handle a.out
+      for (j = 0; j < sec->owner->symcount; ++j)
+	{
+	  struct ref_section_entry *he;
+	  asymbol * sym = sec->owner->outsymbols[j];
+	  he = (struct ref_section_entry*)bfd_hash_lookup(ht, sym->name, FALSE, FALSE);
+	  if (he && !he->section)
+	      he->section = sec;
+	}
+    }
   return TRUE;
 }
 
@@ -4049,7 +4061,6 @@ amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
     for (sec = ibfd->sections; sec != NULL; sec = sec->next)
       if (0 == strncmp(".list__", sec->name, 7))
     	amiga_keep_section(&referenced, sec);
-
   // loop until nothing new was added.
   for(i = 0;i != referenced.count;)
     {
