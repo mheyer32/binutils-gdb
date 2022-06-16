@@ -3990,17 +3990,17 @@ amiga_collect (struct bfd_hash_table *ht, asection * sec)
 	}
     }
   else
-    {
-      // handle a.out
-      for (j = 0; j < sec->owner->symcount; ++j)
-	{
-	  struct ref_section_entry *he;
-	  asymbol * sym = sec->owner->outsymbols[j];
-	  he = (struct ref_section_entry*)bfd_hash_lookup(ht, sym->name, FALSE, FALSE);
-	  if (he && !he->section)
-	      he->section = sec;
-	}
-    }
+    // handle a.out
+    for (j = 0; j < sec->owner->symcount; ++j)
+      {
+	asymbol * sym = sec->owner->outsymbols[j];
+	struct ref_section_entry *he = (struct ref_section_entry*)bfd_hash_lookup(ht, sym->name, FALSE, FALSE);
+	if (he && !he->section)
+	  {
+	    he->section = sec;
+	    sec->flags |= SEC_KEEP;
+	  }
+      }
   return TRUE;
 }
 
