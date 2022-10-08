@@ -18,14 +18,31 @@ SECTIONS
     *(.text*)
     *(.rodata*)
     *(.data.rel.ro*)
+    ___INIT_LIST__ = .;
+    LONG((___INIT_LIST__END__ - ___INIT_LIST__) / 4 - 2)
     *(.list___INIT_LIST__)
+    LONG(0)
+    ___INIT_LIST__END__ = .;    
+    ___EXIT_LIST__ = .;
+    LONG((___EXIT_LIST__END__ - ___EXIT_LIST__) / 4 - 2)
     *(.list___EXIT_LIST__)
+    LONG(0)
+    ___EXIT_LIST__END__ = .;    
+    ___CTOR_LIST__ = .;
+    LONG((___CTOR_LIST__END__ - ___CTOR_LIST__) / 4 - 2)
     *(.list___CTOR_LIST__)
-    ${RELOCATING+__EH_FRAME_BEGINS__ = .;}
-    *(.list___EH_FRAME_BEGINS__)
+    LONG(0)
+    ___CTOR_LIST__END__ = .;    
+    ___DTOR_LIST__ = .;
+    LONG((___DTOR_LIST__END__ - ___DTOR_LIST__) / 4 - 2)
     *(.list___DTOR_LIST__)
-    *(.list___LIB_LIST__)
-    ${CONSTRUCTING+CONSTRUCTORS}
+    LONG(0)
+    ___DTOR_LIST__END__ = .;    
+    ___EH_FRAME_BEGINS__ = .;
+    LONG((___EH_FRAME_BEGINS__END__ - ___EH_FRAME_BEGINS__) / 4 - 2)
+    *(.list___EH_FRAME_BEGINS__)
+    LONG(0)
+    ___EH_FRAME_BEGINS__END__ = .;    
     *(.gnu.linkonce.t.*)
     *(.gnu.linkonce.r.*)
     ${RELOCATING+___datadata_relocs = .;}
@@ -40,8 +57,16 @@ SECTIONS
     *(.data)
     *(.data.*)    
     *(.gnu.linkonce.d.*)
-    ${RELOCATING+__EH_FRAME_OBJECTS__ = .;}
+    ${RELOCATING+___LIB_LIST__ = .;}
+    LONG((___LIB_LIST__END__ - ___LIB_LIST__) / 4 - 2)
+    *(.list___LIB_LIST__)
+    LONG(0)
+    ${RELOCATING+___LIB_LIST__END__ = .;}    
+    ${RELOCATING+___EH_FRAME_OBJECTS__ = .;}
+    LONG((___EH_FRAME_OBJECTS__END__ - ___EH_FRAME_OBJECTS__) / 4 - 2)
     *(.list___EH_FRAME_OBJECTS__)
+    LONG(0)
+    ${RELOCATING+___EH_FRAME_OBJECTS__END__ = .;}   
     ${RELOCATING+___a4_init = 0x7ffe;}
     ${RELOCATING+__edata = .;}
   }
