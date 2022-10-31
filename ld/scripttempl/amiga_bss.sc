@@ -15,14 +15,15 @@ SECTIONS
     ${RELOCATING+__stext = .;}
     *(.text)
     *(.text.main)
-    *(SORT_BY_NAME(.list_*))
-    *(.end_of_lists)
     *(.text*)
     *(.rodata*)
     *(.data.rel.ro*)
     *(.gnu.linkonce.t.*)
     *(.gnu.linkonce.r.*)
     ${CONSTRUCTING+CONSTRUCTORS}    
+    *(SORT_BY_NAME(.list___EH_FRAME*))
+    *(SORT_BY_NAME(.list_*))
+    *(.end_of_lists)
     ${RELOCATING+___datadata_relocs = .;}
     ${RELOCATING+__etext = .;}
     ${PAD_TEXT+${RELOCATING+. = ${DATA_ALIGNMENT};}}
@@ -35,6 +36,7 @@ SECTIONS
     *(.data)
     *(.data.*)    
     *(.gnu.linkonce.d.*)
+    *(SORT_BY_NAME(.list___EH_FRAME*))
     *(SORT_BY_NAME(.dlist_*))
     *(.end_of_dlists)
     ${RELOCATING+___a4_init = 0x7ffe;}
