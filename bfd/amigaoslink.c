@@ -342,11 +342,14 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
 	      // 4. update output_offsets
 	      for (lo = lol->next; lo; lo = lo->next)
 		{
-		  asection *ss = lo->u.indirect.section;
-		  if (ss->output_section == target)
+		  if (lo->type == bfd_indirect_link_order)
 		    {
-		      ss->output_offset += delta;
-		      lo->offset += delta;
+		      asection *ss = lo->u.indirect.section;
+		      if (ss->output_section == target)
+			{
+			  ss->output_offset += delta;
+			  lo->offset += delta;
+			}
 		    }
 		}
 	    }
@@ -391,11 +394,8 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
 	  for (; oi < abfd->symcount; ++oi)
 	    {
 	      asymbol *sym = abfd->outsymbols[oi];
-	      if (strcmp ("__etext", sym->name))
-		continue;
-
-	      sym->value += datadata_addend;
-	      break;
+	      if (0 == strcmp ("__etext", sym->name) || 0 == strcmp ("___datadata_relocs", sym->name))
+		sym->value += datadata_addend;
 	    }
 	}
     }
