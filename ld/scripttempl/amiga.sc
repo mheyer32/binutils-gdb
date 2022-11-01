@@ -33,12 +33,12 @@ SECTIONS
   .data :
   {
     ${RELOCATING+__sdata = .;}
-    *(.data)
-    *(.data.*)
-    *(.gnu.linkonce.d.*)
     *(SORT_BY_NAME(.list___EH_FRAME*))
     *(SORT_BY_NAME(.dlist_*))
     *(.end_of_dlists)
+    *(.data)
+    *(.data.*)
+    *(.gnu.linkonce.d.*)
     ${RELOCATING+___a4_init = 0x7ffe;}
     ${RELOCATING+__edata = .;}
   }
