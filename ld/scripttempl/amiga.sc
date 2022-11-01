@@ -17,7 +17,7 @@ SECTIONS
     *(.text.main)
     *(.text*)
     *(.rodata*)
-    *(.data.rel.ro.*)
+    *(.data.rel.ro*)
     *(.gnu.linkonce.t.*)
     *(.gnu.linkonce.r.*)
     ${CONSTRUCTING+CONSTRUCTORS}    
