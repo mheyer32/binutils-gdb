@@ -440,9 +440,9 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
 		{
 		  // 3.
 		  signed relpos = src->relent.address;
-		  signed offset = rel_jumps[i].offset - input_section->output_offset - relpos;
-		  data[relpos] = offset >> 8;
-		  data[relpos + 1] = offset;
+		  signed noffset = rel_jumps[i].offset - input_section->output_offset - relpos;
+		  data[relpos] = noffset >> 8;
+		  data[relpos + 1] = noffset;
 
 		  src->relent.address = 0x80000000;
 
@@ -506,9 +506,9 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
 	  while (start < end)
 	    {
 	      // update the name offset
-	      unsigned offset = bfd_getb32(start);
-	      if (offset)
-		bfd_putb32(offset + input_section->output_offset, start);
+	      unsigned noffset = bfd_getb32(start);
+	      if (noffset)
+		bfd_putb32(noffset + input_section->output_offset, start);
 
 	      start += 12;
 	    }
@@ -872,21 +872,9 @@ amiga_perform_reloc (
 	{
 	  DPRINT(5,("PC relative\n"));
 
-	  /* SBF: relocation into .text and within an object file is resolved against the section */
-	  if (target_section->owner == sec->owner && 0 == strcmp(".text", target_section->name))
-	    relocation = target_section->output_offset - sec->output_offset;
-	  else
-	    {
-	      /* SBF: eliminate existing values. */
-	      int off = 0;
-	      if (r->howto->type == H_PC32)
-		off = bfd_getb_signed_32 (((bfd_byte *)data)+r->address);
-	      else if (r->howto->type == H_PC16)
-		off = bfd_getb_signed_16 (((bfd_byte *)data)+r->address);
 
 	      relocation = sym->value + target_section->output_offset
-		- sec->output_offset - r->address - off;
-	    }
+	    - sec->output_offset - r->address;
 	}
       break;
 
