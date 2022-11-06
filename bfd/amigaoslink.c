@@ -148,6 +148,9 @@ static unsigned r_datadata_count;
 static unsigned r_datadata_max;
 static int datadata_addend;
 
+static asymbol * etext;
+static asymbol * datadata_reloc;
+
 static void
 insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bfd_link_order *link_order,
 		   bfd_byte **datap)
@@ -176,11 +179,39 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
   // on first invocation there is no content yet in the output_section
   if (0 == strcmp (input_section->output_section->name, ".text") && !input_section->output_section->contents)
     {
+      {
+	unsigned oi = 0;
+	unsigned n = 0;
+	for (; oi < abfd->symcount; ++oi)
+	  {
+	    asymbol *sym = abfd->outsymbols[oi];
+	    if (0 == strcmp ("__etext", sym->name))
+	      {
+	        etext = sym;
+	        ++n;
+	      }
+	    else if (0 == strcmp ("___datadata_relocs", sym->name))
+	      {
+		datadata_reloc = sym;
+		++n;
+	      }
+	    if (n == 2)
+	      break;
+	  }
+
+      }
+
       target = input_section->output_section;
       // record the current sizes;
       struct bfd_link_order *lol = link_order;
       for (; lol; lol = lol->next)
 	{
+	  // shift data_data_relocs by the count of inserted data
+	  if (lol->type == bfd_data_link_order)
+	    {
+	      datadata_addend += lol->u.data.size;
+	      continue;
+	    }
 	  if (lol->type != bfd_indirect_link_order)
 	    continue;
 	  asection *s = lol->u.indirect.section;
@@ -332,6 +363,9 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
 		      if (lo->type == bfd_section_reloc_link_order && lo->u.reloc.p->u.section == target
 			  && lo->u.reloc.p->addend >= s->size + s->output_offset)
 			lo->u.reloc.p->addend += delta;
+//		      else if (lo->type == bfd_data_link_order && xs->output_section == target
+//			  && lo->offset >= s->size + s->output_offset)
+//			lo->offset += delta;
 		    }
 		}
 
@@ -342,13 +376,43 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
 	      // 4. update output_offsets
 	      for (lo = lol->next; lo; lo = lo->next)
 		{
+		  if (lo->type == bfd_data_link_order)
+		    {
+//		      if (lo->offset >= s->size + s->output_offset)
+			lo->offset += delta;
+//		      target->rawsize += lo->u.data.size;
+		      continue;
+		    }
+		  if (lo->type != bfd_indirect_link_order)
+		    continue;
 		  asection *ss = lo->u.indirect.section;
-		  if (ss->output_section == target)
+		  if (ss->output_section == target
+		      && ss->output_offset >= s->size + s->output_offset)
 		    {
 		      ss->output_offset += delta;
 		      lo->offset += delta;
 		    }
 		}
+
+	      unsigned oi = 0;
+	      for (; oi < abfd->symcount; ++oi)
+		{
+		  asymbol *sym = abfd->outsymbols[oi];
+		  if (sym->section->output_section == target &&
+		      (0 == strncmp ("___INIT", sym->name, 7)
+		      || 0 == strncmp ("___EXIT", sym->name, 7)
+		      || 0 == strncmp ("___CTOR", sym->name, 7)
+		      || 0 == strncmp ("___DTOR", sym->name, 7)
+		      || 0 == strncmp ("___EH_F", sym->name, 7)))
+		    {
+		      struct generic_link_hash_entry *h = (struct generic_link_hash_entry *) sym->udata.p;
+//		      if (sym->value >= s->size + s->output_offset)
+			symvalue sv = sym->value;
+			sym->value += delta;
+			fprintf(stderr, "%s %lx -> %lx\n", sym->name, sv, sym->value);
+		    }
+		}
+	      datadata_reloc->value += delta;
 	    }
 
 	  // stop if there was no size increase
@@ -387,16 +451,7 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
 	    }
 
 	  // patch __etext
-	  unsigned oi = 0;
-	  for (; oi < abfd->symcount; ++oi)
-	    {
-	      asymbol *sym = abfd->outsymbols[oi];
-	      if (strcmp ("__etext", sym->name))
-		continue;
-
-	      sym->value += datadata_addend;
-	      break;
-	    }
+	  etext->value += datadata_addend;
 	}
     }
 
@@ -440,9 +495,9 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
 		{
 		  // 3.
 		  signed relpos = src->relent.address;
-		  signed offset = rel_jumps[i].offset - input_section->output_offset - relpos;
-		  data[relpos] = offset >> 8;
-		  data[relpos + 1] = offset;
+		  signed noffset = rel_jumps[i].offset - input_section->output_offset - relpos;
+		  data[relpos] = noffset >> 8;
+		  data[relpos + 1] = noffset;
 
 		  src->relent.address = 0x80000000;
 
@@ -506,9 +561,9 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
 	  while (start < end)
 	    {
 	      // update the name offset
-	      unsigned offset = bfd_getb32(start);
-	      if (offset)
-		bfd_putb32(offset + input_section->output_offset, start);
+	      unsigned noffset = bfd_getb32(start);
+	      if (noffset)
+		bfd_putb32(noffset + input_section->output_offset, start);
 
 	      start += 12;
 	    }
@@ -872,21 +927,9 @@ amiga_perform_reloc (
 	{
 	  DPRINT(5,("PC relative\n"));
 
-	  /* SBF: relocation into .text and within an object file is resolved against the section */
-	  if (target_section->owner == sec->owner && 0 == strcmp(".text", target_section->name))
-	    relocation = target_section->output_offset - sec->output_offset;
-	  else
-	    {
-	      /* SBF: eliminate existing values. */
-	      int off = 0;
-	      if (r->howto->type == H_PC32)
-		off = bfd_getb_signed_32 (((bfd_byte *)data)+r->address);
-	      else if (r->howto->type == H_PC16)
-		off = bfd_getb_signed_16 (((bfd_byte *)data)+r->address);
 
-	      relocation = sym->value + target_section->output_offset
-		- sec->output_offset - r->address - off;
-	    }
+	  relocation = sym->value + target_section->output_offset
+	    - sec->output_offset - r->address;
 	}
       break;
 
