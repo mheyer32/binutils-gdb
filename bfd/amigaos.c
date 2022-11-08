@@ -3954,7 +3954,7 @@ amiga_keep_section (struct bfd_hash_table *ht, struct bfd_section * sec)
 
   // add all lists
   for (sec = sec->owner->sections; sec; sec = sec->next)
-      if (0 == strncmp(".list__", sec->name, 7))
+      if (0 == strncmp(".list__", sec->name, 7) || 0 == strncmp(".dlist__", sec->name, 8))
 	amiga_keep_section(ht, sec);
 
   return TRUE;
@@ -4056,10 +4056,10 @@ amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
   for (sec = info->input_bfds->sections; sec != NULL; sec = sec->next)
     amiga_keep_section(&referenced, sec);
 
-  // keep all init sections starting with .list__
+  // keep all init sections starting with .list__ or .dlist__
   for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
     for (sec = ibfd->sections; sec != NULL; sec = sec->next)
-      if (0 == strncmp(".list__", sec->name, 7))
+      if (0 == strncmp(".list__", sec->name, 7) || 0 == strncmp(".dlist__", sec->name, 8))
     	amiga_keep_section(&referenced, sec);
   // loop until nothing new was added.
   for(i = 0;i != referenced.count;)
