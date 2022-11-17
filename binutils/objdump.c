@@ -3301,9 +3301,11 @@ disassemble_bytes (struct disassemble_info * inf,
 	{
 	  if (dump_reloc_info || dump_dynamic_reloc_info)
 	    {
+	      bfd_vma addend;
 	      arelent *q;
 
 	      q = **relppp;
+	      addend = q->addend;
 
 	      if (wide_output)
 		putchar ('\t');
@@ -3328,11 +3330,24 @@ disassemble_bytes (struct disassemble_info * inf,
 		printf ("*unknown*");
 	      else
 		{
-		  const char *sym_name;
-
-		  sym_name = bfd_asymbol_name (*q->sym_ptr_ptr);
+		  const char *sym_name = NULL;
+		  struct bfd_symbol * asym = *q->sym_ptr_ptr;
+		  if (asym != NULL)
+		    {
+		      int off = q->howto->bitsize == 32
+			  ? bfd_getb_signed_32(data + q->address)
+			  :  bfd_getb_signed_16(data + q->address);
+		      int index = find_closest_symbol_index(off, asym->section);
+		      asymbol * sym = index >= 0 ? sorted_syms[index] : NULL;
+		      if (sym != NULL)
+			{
+			  asym = sym;
+			  addend = off - sym->value;
+			}
+		    }
+		  sym_name = bfd_asymbol_name (asym);
 		  if (sym_name != NULL && *sym_name != '\0')
-		    objdump_print_symname (aux->abfd, inf, *q->sym_ptr_ptr);
+		    objdump_print_symname (aux->abfd, inf, asym);
 		  else
 		    {
 		      asection *sym_sec;
@@ -3345,9 +3360,8 @@ disassemble_bytes (struct disassemble_info * inf,
 		    }
 		}
 
-	      if (q->addend)
+	      if (addend)
 		{
-		  bfd_signed_vma addend = q->addend;
 		  if (addend < 0)
 		    {
 		      printf ("-0x");
