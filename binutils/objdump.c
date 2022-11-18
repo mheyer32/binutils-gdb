@@ -3234,7 +3234,37 @@ disassemble_bytes (struct disassemble_info * inf,
 	  if (! insns)
 	    printf ("%s", buf);
 	  else if (sfile.pos)
-	    printf ("%s", sfile.buffer);
+	    {
+	      struct bfd_symbol * asym = NULL;
+	      /* check if relocation starts at start of insn, then it's a label */
+	      if ((*relppp) < relppend && (**relppp)->address == addr_offset)
+		{
+		  arelent *q = **relppp;
+		  const char *sym_name = NULL;
+		  asym = *q->sym_ptr_ptr;
+		  if (asym != NULL)
+		    {
+		      int off = q->howto->bitsize == 32
+			  ? bfd_getb_signed_32(data + q->address)
+			  :  bfd_getb_signed_16(data + q->address);
+		      int index = find_closest_symbol_index(off, asym->section);
+		      asym = index >= 0 ? sorted_syms[index] : NULL;
+		    }
+		}
+	      if (asym == NULL)
+		{
+		  /* handle the case that this insn starts with 0000 and the end of insn
+		   * matches a reloc. Then treat the current insn as long too
+		   */
+		  if ((*relppp) < relppend && (**relppp)->address == addr_offset + octets / opb
+		      && bfd_getb_signed_16(data + addr_offset) == 0)
+		    printf (".long 0x%08lx", bfd_getb_signed_32(data + addr_offset));
+		  else
+		    printf ("%s", sfile.buffer);
+		}
+	      else
+		printf (".long %s", bfd_asymbol_name (asym));
+	    }
 
 	  if (prefix_addresses || create_labels
 	      ? show_raw_insn > 0
@@ -3301,11 +3331,9 @@ disassemble_bytes (struct disassemble_info * inf,
 	{
 	  if (dump_reloc_info || dump_dynamic_reloc_info)
 	    {
-	      bfd_vma addend;
 	      arelent *q;
 
 	      q = **relppp;
-	      addend = q->addend;
 
 	      if (wide_output)
 		putchar ('\t');
@@ -3330,24 +3358,11 @@ disassemble_bytes (struct disassemble_info * inf,
 		printf ("*unknown*");
 	      else
 		{
-		  const char *sym_name = NULL;
-		  struct bfd_symbol * asym = *q->sym_ptr_ptr;
-		  if (asym != NULL)
-		    {
-		      int off = q->howto->bitsize == 32
-			  ? bfd_getb_signed_32(data + q->address)
-			  :  bfd_getb_signed_16(data + q->address);
-		      int index = find_closest_symbol_index(off, asym->section);
-		      asymbol * sym = index >= 0 ? sorted_syms[index] : NULL;
-		      if (sym != NULL)
-			{
-			  asym = sym;
-			  addend = off - sym->value;
-			}
-		    }
-		  sym_name = bfd_asymbol_name (asym);
+		  const char *sym_name;
+
+		  sym_name = bfd_asymbol_name (*q->sym_ptr_ptr);
 		  if (sym_name != NULL && *sym_name != '\0')
-		    objdump_print_symname (aux->abfd, inf, asym);
+		    objdump_print_symname (aux->abfd, inf, *q->sym_ptr_ptr);
 		  else
 		    {
 		      asection *sym_sec;
@@ -3360,8 +3375,9 @@ disassemble_bytes (struct disassemble_info * inf,
 		    }
 		}
 
-	      if (addend)
+	      if (q->addend)
 		{
+		  bfd_signed_vma addend = q->addend;
 		  if (addend < 0)
 		    {
 		      printf ("-0x");
