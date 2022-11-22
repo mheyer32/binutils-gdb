@@ -1346,7 +1346,7 @@ find_closest_symbol_index(bfd_vma vma, asection * section)
 {
   long min = 0;
   long max_count = sorted_symcount;
-  long thisplace;
+  long thisplace = -1;
 
   while (min + 1 < max_count)
     {
@@ -3245,9 +3245,9 @@ disassemble_bytes (struct disassemble_info * inf,
 		  if (asym != NULL)
 		    {
 		      int off = q->howto->bitsize == 32
-			  ? bfd_getb_signed_32(data + q->address)
-			  :  bfd_getb_signed_16(data + q->address);
-		      int index = find_closest_symbol_index(off, asym->section);
+			  ? bfd_getb_signed_32(data + addr_offset)
+			  :  bfd_getb_signed_16(data + addr_offset);
+		      long index = find_closest_symbol_index(off, asym->section);
 		      asym = index >= 0 ? sorted_syms[index] : NULL;
 		    }
 		}
