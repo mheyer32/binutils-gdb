@@ -3236,6 +3236,7 @@ disassemble_bytes (struct disassemble_info * inf,
 	  else if (sfile.pos)
 	    {
 	      struct bfd_symbol * asym = NULL;
+	      int off;
 	      /* check if relocation starts at start of insn, then it's a label */
 	      if ((*relppp) < relppend && (**relppp)->address == addr_offset)
 		{
@@ -3244,7 +3245,7 @@ disassemble_bytes (struct disassemble_info * inf,
 		  asym = *q->sym_ptr_ptr;
 		  if (asym != NULL)
 		    {
-		      int off = q->howto->bitsize == 32
+		      off = q->howto->bitsize == 32
 			  ? bfd_getb_signed_32(data + addr_offset)
 			  :  bfd_getb_signed_16(data + addr_offset);
 		      long index = find_closest_symbol_index(off, asym->section);
@@ -3263,7 +3264,11 @@ disassemble_bytes (struct disassemble_info * inf,
 		    printf ("%s", sfile.buffer);
 		}
 	      else
-		printf (".long %s", bfd_asymbol_name (asym));
+		{
+		  printf (".long %s", bfd_asymbol_name (asym));
+		  if (asym->value != off)
+		    printf("+0x%lx", off - asym->value);
+		}
 	    }
 
 	  if (prefix_addresses || create_labels
