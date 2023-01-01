@@ -60,9 +60,9 @@ show_use_gnu_source_highlight_enabled  (struct ui_file *file, int from_tty,
 					struct cmd_list_element *c,
 					const char *value)
 {
-  fprintf_filtered (file,
-		    _("Use of GNU Source Highlight library is \"%s\".\n"),
-		    value);
+  gdb_printf (file,
+	      _("Use of GNU Source Highlight library is \"%s\".\n"),
+	      value);
 }
 
 /* The "maint set gnu-source-highlight enabled" command.  */
@@ -107,8 +107,9 @@ source_cache::get_plain_source_lines (struct symtab *s,
     perror_with_name (symtab_to_filename_for_display (s));
 
   time_t mtime = 0;
-  if (SYMTAB_OBJFILE (s) != NULL && SYMTAB_OBJFILE (s)->obfd != NULL)
-    mtime = SYMTAB_OBJFILE (s)->mtime;
+  if (s->compunit ()->objfile () != NULL
+      && s->compunit ()->objfile ()->obfd != NULL)
+    mtime = s->compunit ()->objfile ()->mtime;
   else if (current_program_space->exec_bfd ())
     mtime = current_program_space->ebfd_mtime;
 
@@ -231,7 +232,7 @@ source_cache::ensure (struct symtab *s)
     {
 #ifdef HAVE_SOURCE_HIGHLIGHT
       bool already_styled = false;
-      const char *lang_name = get_language_name (SYMTAB_LANGUAGE (s));
+      const char *lang_name = get_language_name (s->language ());
       if (lang_name != nullptr && use_gnu_source_highlight)
 	{
 	  /* The global source highlight object, or null if one was
@@ -373,7 +374,7 @@ static void
 source_cache_flush_command (const char *command, int from_tty)
 {
   forget_cached_source_info ();
-  printf_filtered (_("Source cache flushed.\n"));
+  gdb_printf (_("Source cache flushed.\n"));
 }
 
 #if GDB_SELF_TEST

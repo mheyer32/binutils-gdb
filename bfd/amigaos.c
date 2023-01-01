@@ -135,7 +135,7 @@ BFD:
 #endif
 
 #ifndef alloca
-extern PTR alloca PARAMS ((size_t));
+extern void * alloca PARAMS ((size_t));
 #endif
 
 
@@ -223,7 +223,7 @@ static int determine_type PARAMS ((arelent *));
 static bool amiga_write_section_contents PARAMS ((bfd *, sec_ptr,
 	sec_ptr, unsigned long, int *, int));
 static bool amiga_write_symbols PARAMS ((bfd *, sec_ptr));
-static bool amiga_get_section_contents PARAMS ((bfd *, sec_ptr, PTR,
+static bool amiga_get_section_contents PARAMS ((bfd *, sec_ptr, void *,
 	file_ptr, bfd_size_type));
 static bool amiga_new_section_hook PARAMS ((bfd *, sec_ptr));
 static bool amiga_slurp_symbol_table PARAMS ((bfd *));
@@ -231,7 +231,7 @@ static long amiga_get_symtab_upper_bound PARAMS ((bfd *));
 static long amiga_canonicalize_symtab PARAMS ((bfd *, asymbol **));
 static asymbol *amiga_make_empty_symbol PARAMS ((bfd *));
 static void amiga_get_symbol_info PARAMS ((bfd *, asymbol *, symbol_info *));
-static void amiga_print_symbol PARAMS ((bfd *, PTR,   asymbol *,
+static void amiga_print_symbol PARAMS ((bfd *, void *,   asymbol *,
 	bfd_print_symbol_type));
 static long amiga_get_reloc_upper_bound PARAMS ((bfd *, sec_ptr));
 static bool read_raw_relocs PARAMS ((bfd *, sec_ptr, unsigned long,
@@ -239,7 +239,7 @@ static bool read_raw_relocs PARAMS ((bfd *, sec_ptr, unsigned long,
 static bool amiga_slurp_relocs PARAMS ((bfd *, sec_ptr, asymbol **));
 static long amiga_canonicalize_reloc PARAMS ((bfd *, sec_ptr, arelent **,
 	asymbol **));
-static bool amiga_set_section_contents PARAMS ((bfd *, sec_ptr, const PTR,
+static bool amiga_set_section_contents PARAMS ((bfd *, sec_ptr, const void *,
 	file_ptr, bfd_size_type));
 static bool amiga_set_arch_mach PARAMS ((bfd *, enum bfd_architecture,
 	unsigned long));
@@ -255,7 +255,7 @@ static bool amiga_slurp_armap PARAMS ((bfd *));
 static void amiga_truncate_arname PARAMS ((bfd *, const char *, char *));
 static bfd_cleanup amiga_archive_p PARAMS ((bfd *));
 static bfd *amiga_openr_next_archived_file PARAMS ((bfd *, bfd *));
-static PTR amiga_read_ar_hdr PARAMS ((bfd *));
+static void * amiga_read_ar_hdr PARAMS ((bfd *));
 static int amiga_generic_stat_arch_elt PARAMS ((bfd *, struct stat *));
 static bool amiga_gc_sections (bfd *abfd, struct bfd_link_info *info);
 
@@ -404,7 +404,7 @@ extern BFDDECL int amiga_resident;
 static bool
 get_long (bfd * abfd, unsigned long *n)
 {
-  if (bfd_bread ((PTR)n, 4, abfd) != 4)
+  if (bfd_bread ((void *)n, 4, abfd) != 4)
     return false;
   *n = GL (n);
   return true;
@@ -413,7 +413,7 @@ get_long (bfd * abfd, unsigned long *n)
 static bool
 get_word (bfd * abfd, unsigned long *n)
 {
-  if (bfd_bread ((PTR)n, 2, abfd) != 2)
+  if (bfd_bread ((void *)n, 2, abfd) != 2)
     return false;
   *n = GW (n);
   return true;
@@ -1590,7 +1590,7 @@ write_longs (
     {
       for (i=0; i<nb && i<10; in++,i++)
         bfd_putb32 (in[0], &out[i*4]);
-      if (bfd_bwrite ((PTR)out, 4*i, abfd) != 4*i)
+      if (bfd_bwrite ((void *)out, 4*i, abfd) != 4*i)
 	return false;
       nb -= i;
     }
@@ -1610,7 +1610,7 @@ write_words (
     {
       for (i=0; i<nb && i<10; in++,i++)
         bfd_putb16 (in[0], &out[i*2]);
-      if (bfd_bwrite ((PTR)out, 2*i, abfd) != 2*i)
+      if (bfd_bwrite ((void *)out, 2*i, abfd) != 2*i)
 	return false;
       nb -= i;
     }
@@ -1968,7 +1968,7 @@ amiga_write_object_contents (
 		    }
 		  bfd_h_put_32(abfd, offset, &data.e_strx[0]); /* Store index */
 		  offset += strlen(sym->name) + 1;
-		  if (bfd_bwrite ((PTR) &data, sizeof(data), abfd) != sizeof(data))
+		  if (bfd_bwrite ((void *) &data, sizeof(data), abfd) != sizeof(data))
 		    return false;
 		}
 	    }
@@ -1993,7 +1993,7 @@ amiga_write_object_contents (
 	  /* Write padding */
 	  n[0] = 0;
 	  ii = (4 - (str_size & 3)) & 3;
-	  if (ii && bfd_bwrite ((PTR) n, ii, abfd) != ii)
+	  if (ii && bfd_bwrite ((void *) n, ii, abfd) != ii)
 	    return false;
 
 	  /* write a HUNK_END here to finish the loadfile, or AmigaOS
@@ -2029,7 +2029,7 @@ write_name (
     return false;
   n[0] = 0;
   l = (4 - (l & 3)) & 3;
-  return (l && bfd_bwrite ((PTR)n, l, abfd) != l ? false : true);
+  return (l && bfd_bwrite ((void *)n, l, abfd) != l ? false : true);
 }
 
 static bool
@@ -2331,7 +2331,7 @@ amiga_write_section_contents (
   /* Write the section contents */
   if (amiga_per_section(section)->disk_size != 0)
     {
-      if (bfd_bwrite ((PTR)section->contents,
+      if (bfd_bwrite ((void *)section->contents,
       amiga_per_section(section)->disk_size,
 		      abfd) !=
 	  amiga_per_section(section)->disk_size)
@@ -2339,7 +2339,7 @@ amiga_write_section_contents (
 
       /* pad the section on disk if necessary (to a long boundary) */
       pad = (4 - (amiga_per_section(section)->disk_size & 3)) & 3;
-      if (pad && (bfd_bwrite ((PTR)&zero, pad, abfd) != pad))
+      if (pad && (bfd_bwrite ((void *)&zero, pad, abfd) != pad))
 	return false;
     }
 
@@ -2793,7 +2793,7 @@ static bool amiga_write_symbols (
 
 static bool
 amiga_get_section_contents (bfd *abfd, sec_ptr section,
-			    PTR location,
+			    void * location,
 			    file_ptr offset,
 			    bfd_size_type count)
 {
@@ -2823,7 +2823,7 @@ amiga_new_section_hook (
      bfd *abfd,
      sec_ptr newsect)
 {
-  newsect->used_by_bfd = (PTR) bfd_zalloc (abfd, sizeof(amiga_per_section_type));
+  newsect->used_by_bfd = (void *) bfd_zalloc (abfd, sizeof(amiga_per_section_type));
   newsect->alignment_power = 2;
   if (!strcmp (newsect->name, ".datachip") || !strcmp (newsect->name, ".bsschip"))
     amiga_per_section(newsect)->attribute |= MEMF_CHIP;
@@ -2899,7 +2899,7 @@ amiga_slurp_symbol_table (
 	  /* read the name */
 	  if ((asp->symbol.name = bfd_alloc (abfd, len+1))==NULL)
 	    return false;
-	  if (bfd_bread ((PTR)asp->symbol.name, len, abfd) != len)
+	  if (bfd_bread ((void *)asp->symbol.name, len, abfd) != len)
 	    return false;
 	  ((char *)asp->symbol.name)[len] = '\0';
 
@@ -3169,7 +3169,7 @@ amiga_get_symbol_info (
 static void
 amiga_print_symbol (
   bfd *abfd,
-  PTR afile,
+  void * afile,
 asymbol *symbol,
 bfd_print_symbol_type how)
 {
@@ -3192,7 +3192,7 @@ bfd_print_symbol_type how)
       }
     else
       {
-	bfd_print_symbol_vandf (abfd, (PTR)file, symbol);
+	bfd_print_symbol_vandf (abfd, (void *)file, symbol);
 	fprintf (file, " %-10s %04lx %02x %s",
 		 symbol->section->name,
 		 amiga_symbol(symbol)->refnum,
@@ -3399,7 +3399,7 @@ static bool
 amiga_set_section_contents (
      bfd *abfd,
      sec_ptr section,
-  const PTR location,
+  const void * location,
 file_ptr offset,
 bfd_size_type count)
 {
@@ -3796,7 +3796,7 @@ amiga_openr_next_archived_file (
   return _bfd_get_elt_at_filepos (archive, filestart, NULL);
 }
 
-static PTR
+static void *
 amiga_read_ar_hdr (
 bfd *abfd)
 {
@@ -3869,7 +3869,7 @@ bfd *abfd)
   if (bfd_seek (abfd, start_pos, SEEK_SET))
     return NULL;
 
-  return (PTR) ared;
+  return (void *) ared;
 }
 
 static int

@@ -101,6 +101,18 @@ objfpy_get_username (PyObject *self, void *closure)
   Py_RETURN_NONE;
 }
 
+/* Get the 'is_file' attribute.  */
+
+static PyObject *
+objfpy_get_is_file (PyObject *o, void *ignore)
+{
+  objfile_object *self = (objfile_object *) o;
+
+  if (self->objfile != nullptr)
+    return PyBool_FromLong ((self->objfile->flags & OBJF_NOT_FILENAME) == 0);
+  Py_RETURN_NONE;
+}
+
 /* If SELF is a separate debug-info file, return the "backlink" field.
    Otherwise return None.  */
 
@@ -510,10 +522,10 @@ objfpy_repr (PyObject *self_)
   objfile *obj = self->objfile;
 
   if (obj == nullptr)
-    return PyString_FromString ("<gdb.Objfile (invalid)>");
+    return PyUnicode_FromString ("<gdb.Objfile (invalid)>");
 
-  return PyString_FromFormat ("<gdb.Objfile filename=%s>",
-			      objfile_filename (obj));
+  return PyUnicode_FromFormat ("<gdb.Objfile filename=%s>",
+			       objfile_name (obj));
 }
 
 /* Subroutine of gdbpy_lookup_objfile_by_build_id to simplify it.
@@ -550,7 +562,7 @@ objfpy_build_id_matches (const struct bfd_build_id *build_id,
   for (i = 0; i < build_id->size; ++i)
     {
       char c1 = string[i * 2], c2 = string[i * 2 + 1];
-      int byte = (host_hex_value (c1) << 4) | host_hex_value (c2);
+      int byte = (fromhex (c1) << 4) | fromhex (c2);
 
       if (byte != build_id->data[i])
 	return 0;
@@ -661,7 +673,7 @@ gdbpy_lookup_objfile (PyObject *self, PyObject *args, PyObject *kw)
 static void
 py_free_objfile (struct objfile *objfile, void *datum)
 {
-  gdbpy_enter enter_py (objfile->arch (), current_language);
+  gdbpy_enter enter_py (objfile->arch ());
   gdbpy_ref<objfile_object> object ((objfile_object *) datum);
   object->objfile = NULL;
 }
@@ -762,6 +774,8 @@ static gdb_PyGetSetDef objfile_getset[] =
     "Type printers.", NULL },
   { "xmethods", objfpy_get_xmethods, NULL,
     "Debug methods.", NULL },
+  { "is_file", objfpy_get_is_file, nullptr,
+    "Whether this objfile came from a file.", nullptr },
   { NULL }
 };
 

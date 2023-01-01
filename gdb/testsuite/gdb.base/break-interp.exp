@@ -16,7 +16,7 @@
 # This test only works on GNU/Linux.
 if { ![isnative] || [is_remote host] || [use_gdb_stub]
      || ![istarget *-linux*] || [skip_shlib_tests]} {
-    continue
+    return
 }
 
 load_lib prelink-support.exp
@@ -29,10 +29,6 @@ set binfile_test ${test}-test
 set binfile_lib ${binprefix}.so
 set srcfile "${test}-main.c"
 set srcfile_lib "${test}-lib.c"
-
-if [get_compiler_info] {
-    return -1
-}
 
 # Use -soname so that the new library gets copied by build_executable_own_libs.
 
@@ -437,7 +433,7 @@ proc test_ld {file ifmain trynosym displacement} {
 		} else {
 		    set pc $expect_out(1,string)
 		    regsub "0x0*" $pc "" pc
-		    gdb_test "p /x 0x$pc" ".*"
+		    gdb_test "p /x 0x$pc" ".*" "p /x \$pc"
 		    gdb_test_multiple "info probes stap rtld" $gdb_test_name {
 			-re -wrap "(?:init_start|init_complete) +0x0*$pc .*" {
 			    pass $gdb_test_name

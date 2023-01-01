@@ -205,7 +205,7 @@ struct amiga_data {
   struct aout_link_hash_entry **sym_hashes;
 
   /* A pointer for shared library information.  */
-  PTR dynamic_info;
+  void * dynamic_info;
 
   /* A mapping from local symbols to offsets into the global offset
      table, used when linking on SunOS.  This is indexed by the symbol

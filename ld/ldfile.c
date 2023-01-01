@@ -87,7 +87,7 @@ ldfile_add_flavor (const char * name)
 {
   n_flavors++;
   if (flavors)
-    flavors = (char **) xrealloc ((PTR)flavors, n_flavors * sizeof (char *));
+    flavors = (char **) xrealloc ((void *)flavors, n_flavors * sizeof (char *));
   else
     flavors = (char **) xmalloc (sizeof (char *));
   flavors [n_flavors-1] = (char *) name;

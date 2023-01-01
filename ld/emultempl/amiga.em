@@ -268,6 +268,7 @@ struct ld_emulation_xfer_struct ld_${EMULATION_NAME}_emulation =
   syslib_default,			/* syslib */
   hll_default,				/* hll */
   amiga_after_parse,			/* after_parse */
+  NULL, /* LDEMUL_BEFORE_PLUGIN_ALL_SYMBOLS_READ */
   amiga_after_open,			/* after_open */
   after_check_relocs_default,
   before_place_orphans_default,

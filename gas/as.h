@@ -385,6 +385,8 @@ extern int max_macro_nest;
 /* Verbosity level.  */
 extern int verbose;
 
+struct obstack;
+
 /* Obstack chunk size.  Keep large for efficient space use, make small to
    increase malloc calls for monitoring memory allocation.  */
 extern int chunksize;
@@ -458,6 +460,7 @@ void   input_scrub_insert_file (char *);
 char * input_scrub_new_file (const char *);
 char * input_scrub_next_buffer (char **bufp);
 size_t do_scrub_chars (size_t (*get) (char *, size_t), char *, size_t);
+size_t do_scrub_pending (void);
 bool   scan_for_multibyte_characters (const unsigned char *, const unsigned char *, bool);
 int    gen_to_words (LITTLENUM_TYPE *, int, long);
 int    had_err (void);
@@ -473,9 +476,10 @@ void   do_scrub_begin (int);
 void   input_scrub_begin (void);
 void   input_scrub_close (void);
 void   input_scrub_end (void);
-int    new_logical_line (const char *, int);
-int    new_logical_line_flags (const char *, int, int);
+void   new_logical_line (const char *, int);
+void   new_logical_line_flags (const char *, int, int);
 void   subsegs_begin (void);
+void   subsegs_end (struct obstack **);
 void   subseg_change (segT, int);
 segT   subseg_new (const char *, subsegT);
 segT   subseg_force_new (const char *, subsegT);
@@ -487,7 +491,7 @@ void   register_dependency (const char *);
 void   print_dependencies (void);
 segT   subseg_get (const char *, int);
 
-const char *remap_debug_filename (const char *);
+char *remap_debug_filename (const char *);
 void add_debug_prefix_map (const char *);
 
 static inline char *

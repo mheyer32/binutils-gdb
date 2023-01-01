@@ -69,7 +69,7 @@ the original routines from @file{linker.c} and @file{reloc.c}.
 #include "libamiga.h"
 
 #ifndef alloca
-extern PTR alloca PARAMS ((size_t));
+extern void * alloca PARAMS ((size_t));
 #endif
 
 #define bfd_msg (*_bfd_error_handler)
@@ -117,12 +117,12 @@ aout_amiga_final_link PARAMS ((bfd *, struct bfd_link_info *));
 bool amiga_slurp_relocs PARAMS ((bfd *, sec_ptr, asymbol **));
 
 static bfd_reloc_status_type
-my_add_to PARAMS ((arelent *, PTR, int, int));
+my_add_to PARAMS ((arelent *, void *, int, int));
 static void amiga_update_target_section PARAMS ((sec_ptr));
 static bfd_reloc_status_type
-amiga_perform_reloc PARAMS ((bfd *, arelent *, PTR, sec_ptr, bfd *, char **));
+amiga_perform_reloc PARAMS ((bfd *, arelent *, void *, sec_ptr, bfd *, char **));
 static bfd_reloc_status_type
-aout_perform_reloc PARAMS ((bfd *, arelent *, PTR, sec_ptr, bfd *, char **));
+aout_perform_reloc PARAMS ((bfd *, arelent *, void *, sec_ptr, bfd *, char **));
 static bool
 amiga_reloc_link_order PARAMS ((bfd *, struct bfd_link_info *, asection *,
 	struct bfd_link_order *));
@@ -367,7 +367,7 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
       /* increase memory for the section. */
       if (input_section->compressed_size < input_section->rawsize)
 	{
-	  PTR odata = data;
+	  void * odata = data;
 	  data = bfd_alloc (abfd, input_section->rawsize);
 	  memcpy (data, odata, input_section->compressed_size);
 	  *datap = data;
@@ -535,7 +535,7 @@ get_relocated_section_contents (
   long reloc_size = bfd_get_reloc_upper_bound (input_bfd, input_section);
   arelent **reloc_vector = NULL;
   long reloc_count;
-  bfd_reloc_status_type (*reloc_func)(bfd *, arelent *, PTR, sec_ptr,
+  bfd_reloc_status_type (*reloc_func)(bfd *, arelent *, void *, sec_ptr,
 				      bfd *, char **);
 
   DPRINT(5,("Entering get_rel_sec_cont\n"));
@@ -565,7 +565,7 @@ get_relocated_section_contents (
   /* Read in the section.  */
   if (!bfd_get_section_contents (input_bfd,
 				 input_section,
-				 (PTR) data,
+				 (void *) data,
 				 (bfd_vma) 0,
 				 input_section->rawsize))
     goto error_return;
@@ -600,7 +600,7 @@ get_relocated_section_contents (
 		    "*parent=%lx\n",parent,reloc_vector,*parent));
 	  r=(*reloc_func) (input_bfd,
 			   *parent,
-			   (PTR) data,
+			   (void *) data,
 			   input_section,
 			   relocateable ? abfd : (bfd *) NULL,
 			   &error_message);
@@ -668,7 +668,7 @@ error_return:
 static bfd_reloc_status_type
 my_add_to (
      arelent *r,
-     PTR data,
+     void * data,
      int add, int flags)
 {
   bfd_reloc_status_type ret=bfd_reloc_ok;
@@ -781,7 +781,7 @@ static bfd_reloc_status_type
 amiga_perform_reloc (
      bfd *abfd,
      arelent *r,
-     PTR data,
+     void * data,
      sec_ptr sec,
      bfd *obfd,
      char **error_message ATTRIBUTE_UNUSED)
@@ -941,7 +941,7 @@ static bfd_reloc_status_type
 aout_perform_reloc (
      bfd *abfd,
      arelent *r,
-     PTR data,
+     void * data,
      sec_ptr sec,
      bfd *obfd,
      char **error_message ATTRIBUTE_UNUSED)
@@ -1184,7 +1184,7 @@ amiga_final_link (
   wginfo.psymalloc = &outsymalloc;
   _bfd_generic_link_hash_traverse (_bfd_generic_hash_table (info),
 				   _bfd_generic_link_write_global_symbol,
-				   (PTR) &wginfo);
+				   (void *) &wginfo);
 
   DPRINT(10,("Accumulated global symbols\n"));
 
@@ -1389,7 +1389,7 @@ amiga_reloc_link_order (
 //    }
 //  else /* Try to apply the reloc */
     {
-      PTR data=(PTR)sec->contents;
+      void * data=(void *)sec->contents;
       bfd_reloc_status_type ret;
       char *em=NULL;
 
