@@ -5716,6 +5716,14 @@ demand_copy_string (int *lenP)
 
   len = 0;
   SKIP_WHITESPACE ();
+
+  if (ISDIGIT(*input_line_pointer))
+    {
+      while (ISDIGIT(*input_line_pointer))
+	++input_line_pointer;
+      SKIP_WHITESPACE ();
+    }
+
   if (*input_line_pointer == '\"')
     {
       input_line_pointer++;	/* Skip opening quote.  */
