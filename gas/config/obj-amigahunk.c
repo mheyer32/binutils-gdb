@@ -108,7 +108,7 @@ static void s_custom_section(char const * secname)
   if (!seg_info (seg)->hadone)
     {
       int flags;
-      if (strstr(secname, "lto"))
+      if (0 == strncmp(secname, ".gnu.lto", 8))
 	flags = SEC_DEBUGGING;
       else if (strncmp(secname, ".gnu.", 5) == 0 || strncmp(secname, ".text", 5) == 0 || strncmp(secname, ".rodata", 7) == 0)
 	flags = SEC_ALLOC | SEC_LOAD | SEC_RELOC | SEC_CODE;
@@ -118,7 +118,10 @@ static void s_custom_section(char const * secname)
 	flags = SEC_ALLOC | SEC_LOAD | SEC_RELOC | SEC_DATA;
       bfd_set_section_flags (seg, flags);
       seg_info (seg)->hadone = 1;
-      seg->name = xstrdup(secname);
+      if (0 == strcmp(secname, ".text.main") || 0 == strcmp(secname, ".text.unlikely"))
+	seg->name = xstrdup(".text");
+      else
+	seg->name = xstrdup(secname);
     }
 }
 
@@ -188,7 +191,7 @@ obj_amiga_frob_symbol (
 	  if (type & N_EXT)
 	    {
 	      symbol_get_bfdsym (sym)->flags |= BSF_EXPORT;
-	      symbol_get_bfdsym (sym)->flags &=~ BSF_LOCAL;
+	      // symbol_get_bfdsym (sym)->flags &=~ BSF_LOCAL;
 	    }
 	  break;
 	case N_WARNING:

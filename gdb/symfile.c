@@ -2853,30 +2853,27 @@ allocate_compunit_symtab (struct objfile *objfile, const char *name)
   return cu;
 }
 
-/* Hook CU to the objfile it comes from.  */
-#if (DEFAULT_BFD_VEC == amiga_vec)
-extern CORE_ADDR text_offset;
-#endif
-
 void
 add_compunit_symtab_to_objfile (struct compunit_symtab *cu)
 {
   cu->next = cu->objfile->compunit_symtabs;
   cu->objfile->compunit_symtabs = cu;
 #if (DEFAULT_BFD_VEC == amiga_vec)
+  unsigned long text_offset = cu->objfile->section_offsets[0];
   if (text_offset)
     {
       struct symtab *s;
       struct linetable *l;
       int i;
 
-      for ((s) = (cu) -> filetabs; (s) != NULL; (s) = (s) -> next)
-      {
-	l = SYMTAB_LINETABLE (s);
-	if (l)
-	for (i = 0; i < l->nitems; ++i)
-		    l->item[i].pc += text_offset;
-      }
+      for ((s) = (cu)->filetabs; (s) != NULL; (s) = (s)->next)
+	{
+	  l = SYMTAB_LINETABLE(s);
+	  if (l)
+	    for (i = 0; i < l->nitems; ++i)
+	      if (l->item[i].pc < text_offset)
+		l->item[i].pc += text_offset;
+	}
     }
 #endif
 }
@@ -3713,7 +3710,7 @@ symfile_find_segment_sections (struct objfile *objfile)
   if (data == NULL)
     return;
 
-  if (data->segments.size () != 1 && data->segments.size () != 2)
+  if (data->segments.size () != 1 && data->segments.size () != 2 && data->segments.size () != 3)
     return;
 
   for (i = 0, sect = abfd->sections; sect != NULL; i++, sect = sect->next)
@@ -3734,6 +3731,11 @@ symfile_find_segment_sections (struct objfile *objfile)
 	    objfile->sect_index_data = sect->index;
 
 	  if (objfile->sect_index_bss == -1)
+	    objfile->sect_index_bss = sect->index;
+	}
+      else if (which == 3)
+	{
+	  if (objfile->sect_index_bss == objfile->sect_index_data)
 	    objfile->sect_index_bss = sect->index;
 	}
     }

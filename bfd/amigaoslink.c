@@ -181,6 +181,8 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
       struct bfd_link_order *lol = link_order;
       for (; lol; lol = lol->next)
 	{
+	  if (lol->type != bfd_indirect_link_order)
+	    continue;
 	  asection *s = lol->u.indirect.section;
 	  if (s->owner->xvec->flavour != bfd_target_amiga_flavour)
 	    continue;
@@ -205,6 +207,8 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
 	  lol = link_order;
 	  for (; lol; lol = lol->next)
 	    {
+	      if (lol->type != bfd_indirect_link_order)
+		continue;
 	      asection *s = lol->u.indirect.section;
 	      if (s->owner->xvec->flavour != bfd_target_amiga_flavour)
 		continue;
@@ -338,11 +342,14 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
 	      // 4. update output_offsets
 	      for (lo = lol->next; lo; lo = lo->next)
 		{
-		  asection *ss = lo->u.indirect.section;
-		  if (ss->output_section == target)
+		  if (lo->type == bfd_indirect_link_order)
 		    {
-		      ss->output_offset += delta;
-		      lo->offset += delta;
+		      asection *ss = lo->u.indirect.section;
+		      if (ss->output_section == target)
+			{
+			  ss->output_offset += delta;
+			  lo->offset += delta;
+			}
 		    }
 		}
 	    }
@@ -387,11 +394,8 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
 	  for (; oi < abfd->symcount; ++oi)
 	    {
 	      asymbol *sym = abfd->outsymbols[oi];
-	      if (strcmp ("__etext", sym->name))
-		continue;
-
-	      sym->value += datadata_addend;
-	      break;
+	      if (0 == strcmp ("__etext", sym->name) || 0 == strcmp ("___datadata_relocs", sym->name))
+		sym->value += datadata_addend;
 	    }
 	}
     }
@@ -436,9 +440,9 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
 		{
 		  // 3.
 		  signed relpos = src->relent.address;
-		  signed offset = rel_jumps[i].offset - input_section->output_offset - relpos;
-		  data[relpos] = offset >> 8;
-		  data[relpos + 1] = offset;
+		  signed noffset = rel_jumps[i].offset - input_section->output_offset - relpos;
+		  data[relpos] = noffset >> 8;
+		  data[relpos + 1] = noffset;
 
 		  src->relent.address = 0x80000000;
 
@@ -502,9 +506,9 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
 	  while (start < end)
 	    {
 	      // update the name offset
-	      unsigned offset = bfd_getb32(start);
-	      if (offset)
-		bfd_putb32(offset + input_section->output_offset, start);
+	      unsigned noffset = bfd_getb32(start);
+	      if (noffset)
+		bfd_putb32(noffset + input_section->output_offset, start);
 
 	      start += 12;
 	    }
@@ -806,11 +810,9 @@ amiga_perform_reloc (
 
   sym=*(r->sym_ptr_ptr);
 
-// SBF: no idea what to fix here...?? /* FIXME: XXX */
-//   if (0 && sym->udata.p)
-//     sym = ((struct generic_link_hash_entry *) sym->udata.p)->sym;
-
   target_section=sym->section;
+  if ((target_section->flags & SEC_EXCLUDE) && target_section->kept_section)
+    target_section = target_section->kept_section;
 
   if (bfd_is_und_section(target_section)) /* Error */
     {
@@ -869,7 +871,9 @@ amiga_perform_reloc (
       else /* Same section */
 	{
 	  DPRINT(5,("PC relative\n"));
-	  relocation = sym->value + target_section->output_offset
+
+
+	      relocation = sym->value + target_section->output_offset
 	    - sec->output_offset - r->address;
 	}
       break;

@@ -759,7 +759,7 @@ CODE_FRAGMENT
 /* These symbols are global, not specific to any BFD.  Therefore, anything
    that tries to change them is broken, and should be repaired.  */
 
-static const asymbol global_syms[] =
+static asymbol global_syms[] =
 {
   GLOBAL_SYM_INIT (BFD_COM_SECTION_NAME, bfd_com_section_ptr),
   GLOBAL_SYM_INIT (BFD_UND_SECTION_NAME, bfd_und_section_ptr),

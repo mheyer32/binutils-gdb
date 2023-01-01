@@ -8044,11 +8044,16 @@ md_pcrel_from_m68k (fixS *fixP, segT current_section)
     adjust = -1;
 
   /* Amiga Hunk adjusts to current address. */
-  if (stdoutput->xvec == &amiga_vec && fixP->fx_addsy)
+  if (stdoutput->xvec == &amiga_vec)
     {
+      if (!fixP->fx_addsy)
+	return -adjust;
+
       asymbol * sym = symbol_get_bfdsym (fixP->fx_addsy);
-      if (sym->section != current_section)
-	return - adjust;
+      if (adjust != -1 && sym->section != current_section)
+	return -adjust;
+
+      // fall through
     }
 
   return fixP->fx_where + fixP->fx_frag->fr_address - adjust;

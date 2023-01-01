@@ -1436,7 +1436,7 @@ const bfd_target *const *const bfd_target_vector = _bfd_target_vector;
 /* bfd_default_vector[0] contains either the address of the default vector,
    if there is one, or zero if there isn't.  */
 
-const bfd_target *bfd_default_vector[] = {
+bfd_target * bfd_default_vector[] = {
 #ifdef DEFAULT_VECTOR
 	&DEFAULT_VECTOR,
 #endif

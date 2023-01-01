@@ -230,6 +230,7 @@ typedef struct amiga_data_struct {
   bool baserel;/* true if there is ___init_a4 in the global hash table */
   bfd_vma a4init;     /* cache the value for efficiency */
   struct aout_symbol ** stab_symbols;
+  struct bfd_hash_table * section_lookup;
 } amiga_data_type;
 
 #define adata(bfd)	((bfd)->tdata.amiga_data->a)
@@ -264,3 +265,15 @@ typedef struct amiga_data_struct {
 #ifndef PARAMS
 #define PARAMS(a) a
 #endif
+
+
+struct ref_section_entry
+{
+  struct bfd_hash_entry root;
+  asection * section;
+};
+
+extern
+struct bfd_hash_entry *
+ref_section_hash_newfunc (struct bfd_hash_entry *entry,
+			struct bfd_hash_table *table, const char *string);

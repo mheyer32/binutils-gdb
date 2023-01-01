@@ -1760,6 +1760,8 @@ match_insn_m68k (bfd_vma memaddr,
       && strcmp("bfexts", best->name)
       && strcmp("bfins", best->name)
       && strcmp("cas", best->name)
+      && strcmp("tas", best->name)
+      && strcmp("illegal", best->name)
       && (c == 's' || c == 'w' || c == 'b' || c == 'l'))
     {
       static char b[32];

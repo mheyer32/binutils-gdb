@@ -584,7 +584,7 @@ size_seg (bfd *abfd ATTRIBUTE_UNUSED, asection *sec, void *xxx ATTRIBUTE_UNUSED)
     flags |= SEC_HAS_CONTENTS;
 
 #ifdef OBJ_AMIGAHUNK
-  if (size == 0 && 0 == strcmp( sec->name, ".text"))
+  if (size == 0 && 0 == strncmp( sec->name, ".text", 5))
       flags |= SEC_HAS_CONTENTS | SEC_CODE;
 //  fprintf(stderr, "%s: %d\n", sec->name, size);
 #endif

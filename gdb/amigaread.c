@@ -97,75 +97,52 @@ amiga_symfile_segments (bfd *abfd)
 {
   Elf_Internal_Phdr *phdrs = 0, **segments;
 //  long phdrs_size;
-  int num_phdrs = -1, num_segments, num_sections, i;
+  int num_phdrs = -1, num_segments, num_sections, i, j;
   asection *sect;
 
-#if 0
-  phdrs_size = bfd_get_amiga_phdr_upper_bound (abfd);
-  if (phdrs_size == -1)
-    return NULL;
-
-  phdrs = (Elf_Internal_Phdr *) alloca (phdrs_size);
-  num_phdrs = bfd_get_amiga_phdrs (abfd, phdrs);
-#endif
-  if (num_phdrs == -1)
-    return NULL;
-
+  // count real sections
+  num_sections = 0;
   num_segments = 0;
-  segments = XALLOCAVEC (Elf_Internal_Phdr *, num_phdrs);
-  for (i = 0; i < num_phdrs; i++)
-    if (phdrs[i].p_type == PT_LOAD)
-      segments[num_segments++] = &phdrs[i];
+  for (sect = abfd->sections; sect != NULL; sect = sect->next, ++num_sections)
+    if ((sect->flags & SEC_DEBUGGING) == 0)
+      ++num_segments;
+
+  segments = XALLOCAVEC (Elf_Internal_Phdr *, num_segments);
+
+  // fake elf segment headers
+  for (i = 0, sect = abfd->sections; sect != NULL; sect = sect->next, ++i)
+    if ((sect->flags & SEC_DEBUGGING) == 0)
+      {
+	phdrs = segments[i] = XALLOCA(Elf_Internal_Phdr);
+	phdrs->p_align = 4;
+	phdrs->p_memsz = phdrs->p_filesz = sect->size;
+	phdrs->p_flags = (sect->flags & SEC_CODE) ? SHF_EXECINSTR | SHF_ALLOC : SHF_ALLOC | SHF_WRITE;
+	phdrs->p_vaddr = phdrs->p_paddr = phdrs->p_offset = 0;
+	phdrs->p_type = PT_LOAD;
+
+	sect->vma = sect->lma = 0;
+      }
+
+  num_phdrs = num_segments;
 
   if (num_segments == 0)
     return NULL;
 
   symfile_segment_data_up data (new symfile_segment_data);
-  data->segments.reserve (num_segments);
 
+  data->segments.reserve (num_segments);
   for (i = 0; i < num_segments; i++)
     data->segments.emplace_back (segments[i]->p_vaddr, segments[i]->p_memsz);
 
-  num_sections = bfd_count_sections (abfd);
 
   /* All elements are initialized to 0 (map to no segment).  */
+  /* j is an indicator: 1 = text, 2 = data, 3 = bss. */
   data->segment_info.resize (num_sections);
-
-  for (i = 0, sect = abfd->sections; sect != NULL; i++, sect = sect->next)
-    {
-      int j;
-
-      if ((bfd_section_flags (sect) & SEC_ALLOC) == 0)
-	continue;
-
-      Elf_Internal_Shdr *this_hdr = &elf_section_data (sect)->this_hdr;
-
-      for (j = 0; j < num_segments; j++)
-	if (ELF_SECTION_IN_SEGMENT (this_hdr, segments[j]))
-	  {
-	    data->segment_info[i] = j + 1;
-	    break;
-	  }
-
-      /* We should have found a segment for every non-empty section.
-	 If we haven't, we will not relocate this section by any
-	 offsets we apply to the segments.  As an exception, do not
-	 warn about SHT_NOBITS sections; in normal AMIGA execution
-	 environments, SHT_NOBITS means zero-initialized and belongs
-	 in a segment, but in no-OS environments some tools (e.g. ARM
-	 RealView) use SHT_NOBITS for uninitialized data.  Since it is
-	 uninitialized, it doesn't need a program header.  Such
-	 binaries are not relocatable.  */
-
-      /* Exclude debuginfo files from this warning, too, since those
-	 are often not strictly compliant with the standard. See, e.g.,
-	 ld/24717 for more discussion.  */
-      if (1 // !is_debuginfo_file (abfd)
-	  && bfd_section_size (sect) > 0 && j == num_segments
-	  && (bfd_section_flags (sect) & SEC_LOAD) != 0)
-	warning (_("Loadable section \"%s\" outside of Amiga Hunks"),
-		 bfd_section_name (sect));
-    }
+  for (i = 0, j = 0, sect = abfd->sections; j < 3 && sect != NULL; sect = sect->next, ++i)
+    if ((sect->flags & SEC_DEBUGGING) == 0)
+      data->segment_info[i] = ++j;
+    else
+      data->segment_info[i] = 1;
 
   return data;
 }
@@ -1408,7 +1385,7 @@ amiga_get_probes (struct objfile *objfile)
   return *probes_per_bfd;
 }
 
-
+
 
 /* Implementation `sym_probe_fns', as documented in symfile.h.  */
 

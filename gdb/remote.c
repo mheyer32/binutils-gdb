@@ -4221,10 +4221,6 @@ remote_target::~remote_target ()
   delete rs->notif_state;
 }
 
-/* Query the remote side for the text, data and bss offsets.  */
-#if (DEFAULT_BFD_VEC == amiga_vec)
-CORE_ADDR text_offset;
-#endif
 
 void
 remote_target::get_offsets ()
@@ -4233,7 +4229,7 @@ remote_target::get_offsets ()
   char *buf;
   char *ptr;
   int lose, num_segments = 0, do_sections, do_segments;
-  CORE_ADDR text_addr, data_addr, bss_addr, segments[2];
+  CORE_ADDR text_addr, data_addr, bss_addr, segments[3];
 
   if (current_program_space->symfile_object_file == NULL)
     return;
@@ -4301,6 +4297,15 @@ remote_target::get_offsets ()
 	  while (*ptr && *ptr != ';')
 	    data_addr = (data_addr << 4) + fromhex (*ptr++);
 	  num_segments++;
+
+	  if (startswith (ptr, ";BssSeg="))
+	    {
+	      ptr += 8;
+	      while (*ptr && *ptr != ';')
+		bss_addr = (bss_addr << 4) + fromhex (*ptr++);
+
+	      num_segments++;
+	    }
 	}
     }
   else
@@ -4322,6 +4327,7 @@ remote_target::get_offsets ()
     {
       segments[0] = text_addr;
       segments[1] = data_addr;
+      segments[2] = bss_addr;
     }
   /* If we have two segments, we can still try to relocate everything
      by assuming that the .text and .data offsets apply to the whole

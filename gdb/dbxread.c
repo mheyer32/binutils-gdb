@@ -2592,7 +2592,9 @@ process_one_symbol (int type, int desc, CORE_ADDR valu, const char *name,
 
       /* Relocate for dynamic loading and for ELF acc
 	 function-relative symbols.  */
+#if (DEFAULT_BFD_VEC != amiga_vec)
       valu += function_start_offset;
+#endif
 
       /* GCC 2.95.3 emits the first N_SLINE stab somewhere in the
 	 middle of the prologue instead of right at the start of the

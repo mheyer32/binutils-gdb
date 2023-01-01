@@ -17,8 +17,13 @@ SECTIONS
     *(.text.main)
     *(.text*)
     *(.rodata*)
+    *(.data.rel.ro*)
     *(.gnu.linkonce.t.*)
     *(.gnu.linkonce.r.*)
+    ${CONSTRUCTING+CONSTRUCTORS}    
+    *(SORT_BY_NAME(.list___EH_FRAME*))
+    *(SORT_BY_NAME(.list_*))
+    *(.end_of_lists)
     ${RELOCATING+___datadata_relocs = .;}
     ${RELOCATING+__etext = .;}
     ${PAD_TEXT+${RELOCATING+. = ${DATA_ALIGNMENT};}}
@@ -28,8 +33,11 @@ SECTIONS
   .data :
   {
     ${RELOCATING+__sdata = .;}
-    ${CONSTRUCTING+CONSTRUCTORS}
+    *(SORT_BY_NAME(.list___EH_FRAME*))
+    *(SORT_BY_NAME(.dlist_*))
+    *(.end_of_dlists)
     *(.data)
+    *(.data.*)    
     *(.gnu.linkonce.d.*)
     ${RELOCATING+___a4_init = 0x7ffe;}
     ${RELOCATING+__edata = .;}
@@ -38,11 +46,20 @@ SECTIONS
   {
     ${RELOCATING+__bss_start = .;}
     *(.bss)
+    *(.bss.*)
     *(COMMON)
     ${RELOCATING+__end = .;}
   }
   ${RELOCATING+___data_size = SIZEOF(.data) + SIZEOF(.bss);}
   ${RELOCATING+___bss_size = 0x0;}
   ${RELOCATING+___bss_init_size = SIZEOF(.bss);}
+  .datachip :
+  {
+    *(.datachip)
+  }
+  .bsschip :
+  {
+    *(.bsschip)
+  }  
 }
 EOF
