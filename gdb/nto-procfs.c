@@ -1,7 +1,7 @@
 /* Machine independent support for QNX Neutrino /proc (process file system)
    for GDB.  Written by Colin Burgess at QNX Software Systems Limited.
 
-   Copyright (C) 2003-2020 Free Software Foundation, Inc.
+   Copyright (C) 2003-2022 Free Software Foundation, Inc.
 
    Contributed by QNX Software Systems Ltd.
 
@@ -69,7 +69,7 @@ struct nto_procfs_target : public inf_child_target
 
   void resume (ptid_t, int, enum gdb_signal) override;
 
-  ptid_t wait (ptid_t, struct target_waitstatus *, int) override;
+  ptid_t wait (ptid_t, struct target_waitstatus *, target_wait_flags) override;
 
   void fetch_registers (struct regcache *, int) override;
   void store_registers (struct regcache *, int) override;
@@ -656,10 +656,10 @@ nto_procfs_target::files_info ()
 {
   struct inferior *inf = current_inferior ();
 
-  printf_unfiltered ("\tUsing the running image of %s %s via %s.\n",
-		     inf->attach_flag ? "attached" : "child",
-		     target_pid_to_str (inferior_ptid).c_str (),
-		     (nodestr != NULL) ? nodestr : "local node");
+  printf_filtered ("\tUsing the running image of %s %s via %s.\n",
+		   inf->attach_flag ? "attached" : "child",
+		   target_pid_to_str (inferior_ptid).c_str (),
+		   (nodestr != NULL) ? nodestr : "local node");
 }
 
 /* Target to_pid_to_exec_file implementation.  */
@@ -701,24 +701,15 @@ nto_procfs_target::attach (const char *args, int from_tty)
   if (pid == getpid ())
     error (_("Attaching GDB to itself is not a good idea..."));
 
-  if (from_tty)
-    {
-      const char *exec_file = get_exec_file (0);
+  target_announce_attach (from_tty, pid);
 
-      if (exec_file)
-	printf_unfiltered ("Attaching to program `%s', %s\n", exec_file,
-			   target_pid_to_str (ptid_t (pid)).c_str ());
-      else
-	printf_unfiltered ("Attaching to %s\n",
-			   target_pid_to_str (ptid_t (pid)).c_str ());
-    }
   ptid_t ptid = do_attach (ptid_t (pid));
   inf = current_inferior ();
   inferior_appeared (inf, pid);
   inf->attach_flag = 1;
 
-  if (!target_is_pushed (ops))
-    push_target (ops);
+  if (!inf->target_is_pushed (ops))
+    inf->push_target (ops);
 
   update_thread_list ();
 
@@ -728,7 +719,7 @@ nto_procfs_target::attach (const char *args, int from_tty)
 void
 nto_procfs_target::post_attach (pid_t pid)
 {
-  if (exec_bfd)
+  if (current_program_space->exec_bfd ())
     solib_create_inferior_hook (0);
 }
 
@@ -795,19 +786,18 @@ nto_handle_sigint (int signo)
 
 sptid_t
 nto_procfs_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,
-			 int options)
+			 target_wait_flags options)
 {
   sigset_t set;
   siginfo_t info;
   procfs_status status;
   static int exit_signo = 0;	/* To track signals that cause termination.  */
 
-  ourstatus->kind = TARGET_WAITKIND_SPURIOUS;
+  ourstatus->set_spurious ();
 
   if (inferior_ptid == null_ptid)
     {
-      ourstatus->kind = TARGET_WAITKIND_STOPPED;
-      ourstatus->value.sig = GDB_SIGNAL_0;
+      ourstatus->set_stopped (GDB_SIGNAL_0);
       exit_signo = 0;
       return null_ptid;
     }
@@ -828,38 +818,29 @@ nto_procfs_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,
   nto_inferior_data (NULL)->stopped_pc = status.ip;
 
   if (status.flags & _DEBUG_FLAG_SSTEP)
-    {
-      ourstatus->kind = TARGET_WAITKIND_STOPPED;
-      ourstatus->value.sig = GDB_SIGNAL_TRAP;
-    }
+    ourstatus->set_stopped (GDB_SIGNAL_TRAP);
   /* Was it a breakpoint?  */
   else if (status.flags & _DEBUG_FLAG_TRACE)
-    {
-      ourstatus->kind = TARGET_WAITKIND_STOPPED;
-      ourstatus->value.sig = GDB_SIGNAL_TRAP;
-    }
+    ourstatus->set_stopped (GDB_SIGNAL_TRAP);
   else if (status.flags & _DEBUG_FLAG_ISTOP)
     {
       switch (status.why)
 	{
 	case _DEBUG_WHY_SIGNALLED:
-	  ourstatus->kind = TARGET_WAITKIND_STOPPED;
-	  ourstatus->value.sig =
-	    gdb_signal_from_host (status.info.si_signo);
+	  ourstatus->set_stopped (gdb_signal_from_host (status.info.si_signo));
 	  exit_signo = 0;
 	  break;
 	case _DEBUG_WHY_FAULTED:
-	  ourstatus->kind = TARGET_WAITKIND_STOPPED;
 	  if (status.info.si_signo == SIGTRAP)
 	    {
-	      ourstatus->value.sig = 0;
+	      ourstatus->set_stopped (0);
 	      exit_signo = 0;
 	    }
 	  else
 	    {
-	      ourstatus->value.sig =
-		gdb_signal_from_host (status.info.si_signo);
-	      exit_signo = ourstatus->value.sig;
+	      ourstatus->set_stopped
+		(gdb_signal_from_host (status.info.si_signo));
+	      exit_signo = ourstatus->sig ();
 	    }
 	  break;
 
@@ -871,14 +852,12 @@ nto_procfs_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,
 	    if (exit_signo)
 	      {
 		/* Abnormal death.  */
-		ourstatus->kind = TARGET_WAITKIND_SIGNALLED;
-		ourstatus->value.sig = exit_signo;
+		ourstatus->set_signalled (exit_signo);
 	      }
 	    else
 	      {
 		/* Normal death.  */
-		ourstatus->kind = TARGET_WAITKIND_EXITED;
-		ourstatus->value.integer = WEXITSTATUS (waitval);
+		ourstatus->set_exited (WEXITSTATUS (waitval));
 	      }
 	    exit_signo = 0;
 	    break;
@@ -886,8 +865,7 @@ nto_procfs_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,
 
 	case _DEBUG_WHY_REQUESTED:
 	  /* We are assuming a requested stop is due to a SIGINT.  */
-	  ourstatus->kind = TARGET_WAITKIND_STOPPED;
-	  ourstatus->value.sig = GDB_SIGNAL_INT;
+	  ourstatus->set_stopped (GDB_SIGNAL_INT);
 	  exit_signo = 0;
 	  break;
 	}
@@ -972,7 +950,7 @@ nto_procfs_target::xfer_partial (enum target_object object,
 	    return TARGET_XFER_E_IO;
 
 	  err = devctl (ctl_fd, DCMD_PROC_INFO, &procinfo,
-		        sizeof procinfo, 0);
+			sizeof procinfo, 0);
 	  if (err != EOK)
 	    return TARGET_XFER_E_IO;
 
@@ -1142,7 +1120,7 @@ nto_procfs_target::mourn_inferior ()
    the string "a b c d", and as output it would fill in argv with
    the four arguments "a", "b", "c", "d".  The only additional
    functionality is simple quoting.  The gdb command:
-  	run a "b c d" f
+	run a "b c d" f
    will fill in argv with the three args "a", "b c d", "e".  */
 static void
 breakup_args (char *scratch, char **argv)
@@ -1316,14 +1294,15 @@ nto_procfs_target::create_inferior (const char *exec_file,
     {
       /* FIXME: expected warning?  */
       /* warning( "Failed to set Kill-on-Last-Close flag: errno = %d(%s)\n",
-         errn, safe_strerror(errn) ); */
+	 errn, safe_strerror(errn) ); */
     }
-  if (!target_is_pushed (ops))
-    push_target (ops);
+  if (!inf->target_is_pushed (ops))
+    inf->push_target (ops);
   target_terminal::init ();
 
-  if (exec_bfd != NULL
-      || (symfile_objfile != NULL && symfile_objfile->obfd != NULL))
+  if (current_program_space->exec_bfd () != NULL
+      || (current_program_space->symfile_object_file != NULL
+	  && current_program_space->symfile_object_file->obfd != NULL))
     solib_create_inferior_hook (0);
 }
 
@@ -1450,7 +1429,7 @@ nto_procfs_target::pass_signals
     {
       int target_signo = gdb_signal_from_host (signo);
       if (target_signo < pass_signals.size () && pass_signals[target_signo])
-        sigdelset (&run.trace, signo);
+	sigdelset (&run.trace, signo);
     }
 }
 

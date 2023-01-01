@@ -48,7 +48,7 @@ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  */
 
 /* shared functions */
 void amiga_add_options PARAMS ((int, char **, int, struct option **, int, struct option **));
-bfd_boolean amiga_handle_option PARAMS ((int));
+bool amiga_handle_option PARAMS ((int));
 void amiga_after_parse PARAMS ((void));
 void amiga_after_open PARAMS ((void));
 void amiga_after_allocation PARAMS ((void));
@@ -111,14 +111,14 @@ amiga_add_options (ns, shortopts, nl, longopts, nrl, really_longopts)
   memcpy (*longopts + nl, &xtra_long, sizeof (xtra_long));
 }
 
-bfd_boolean
+bool
 amiga_handle_option (optc)
      int optc;
 {
   switch (optc)
     {
     default:
-      return FALSE;
+      return false;
 
     case 0:
       /* Long option which just sets a flag.  */
@@ -158,7 +158,7 @@ amiga_handle_option (optc)
       break;
     }
 
-  return TRUE;
+  return true;
 }
 
 void 
@@ -224,7 +224,7 @@ cat >>e${EMULATION_NAME}.c <<EOF
 {
   *isfile = 0;
 
-  if (link_info.type == 1 && config.build_constructors == TRUE)
+  if (link_info.type == 1 && config.build_constructors == true)
     return
 EOF
 sed $sc ldscripts/${EMULATION_NAME}.xu                     >> e${EMULATION_NAME}.c
@@ -245,7 +245,7 @@ cat >>e${EMULATION_NAME}.c <<EOF
 {
   *isfile = 1;
 
-  if (link_info.type == 1 && config.build_constructors == TRUE)
+  if (link_info.type == 1 && config.build_constructors == true)
     return "ldscripts/${EMULATION_NAME}.xu";
   else if (link_info.type == 1)
     return "ldscripts/${EMULATION_NAME}.xr";

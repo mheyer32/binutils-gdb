@@ -1,4 +1,4 @@
-# Copyright (C) 2016-2020 Free Software Foundation, Inc.
+# Copyright (C) 2016-2022 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -135,6 +135,8 @@ if {[lsearch $supported_archs "arm"] >= 0} {
     gdb_assert {[llength $supported_arm_abi] != 0} "at least one arm abi"
 }
 
+set default_architecture "i386"
+
 # Exercise printing float, double and long double.
 
 proc print_floats {} {
@@ -148,15 +150,27 @@ proc print_floats {} {
     gdb_test_internal "print 1.0f" " = 1" "print, float"
 }
 
-# Run tests on the current architecture.
+# Run tests on the current architecture ARCH.
 
-proc do_arch_tests {} {
+proc do_arch_tests {arch} {
     print_floats
+
+    # When we disassemble using the default architecture then we
+    # expect that the only error we should get from the disassembler
+    # is a memory error.
+    #
+    # When we force the architecture to something other than the
+    # default then we might get the message about unknown errors, this
+    # happens if the libopcodes disassembler returns -1 without first
+    # registering a memory error.
+    set pattern "Cannot access memory at address 0x100"
+    if { $arch != $::default_architecture } {
+	set pattern "(($pattern)|(unknown disassembler error \\(error = -1\\)))"
+    }
 
     # GDB can't access memory because there is no loaded executable
     # nor live inferior.
-    gdb_test_internal "disassemble 0x0,+4" \
-	"Cannot access memory at address 0x0"
+    gdb_test_internal "disassemble 0x100,+4" "${pattern}"
 }
 
 # Given we can't change arch, osabi, endianness, etc. atomically, we
@@ -225,7 +239,7 @@ with_test_prefix "tests" {
 		    continue
 		} elseif {$endian == "auto"} {
 		    gdb_test_multiple "set endian $endian" $test {
-			-re "^set endian $endian\r\n(${osabi_warning})?The target endianness is set automatically \\(currently .* endian\\)\r\n$gdb_prompt $" {
+			-re "^set endian $endian\r\n(${osabi_warning})?The target endianness is set automatically \\(currently .* endian\\)\\.\r\n$gdb_prompt $" {
 			    internal_pass $test
 			}
 		    }
@@ -235,7 +249,7 @@ with_test_prefix "tests" {
 			    internal_pass $test
 			    continue
 			}
-			-re "^set endian $endian\r\n(${osabi_warning})?The target is assumed to be $endian endian\r\n$gdb_prompt $" {
+			-re "^set endian $endian\r\n(${osabi_warning})?The target is set to $endian endian\\.\r\n$gdb_prompt $" {
 			    internal_pass $test
 			}
 		    }
@@ -246,7 +260,7 @@ with_test_prefix "tests" {
 		    set arch_re [string_to_regexp $arch]
 		    set test "set architecture $arch"
 		    gdb_test_multiple $test $test {
-			-re "^set architecture $arch_re\r\n(${osabi_warning})?The target architecture is assumed to be $arch_re\r\n$gdb_prompt $" {
+			-re "^set architecture $arch_re\r\n(${osabi_warning})?The target architecture is set to \"$arch_re\"\\.\r\n$gdb_prompt $" {
 			    internal_pass $test
 			}
 			-re "Architecture .* not recognized.*$gdb_prompt $" {
@@ -303,9 +317,9 @@ with_test_prefix "tests" {
 		# Run testing axis CUR_AXIS.  This is a recursive
 		# procedure that tries all combinations of options of
 		# all the testing axes.
-		proc run_axis {all_axes cur_axis} {
+		proc run_axis {all_axes cur_axis arch} {
 		    if {$cur_axis == [llength $all_axes]} {
-			do_arch_tests
+			do_arch_tests $arch
 			return
 		    }
 
@@ -318,12 +332,12 @@ with_test_prefix "tests" {
 		    foreach v $options {
 			with_test_prefix "$var=$v" {
 			    gdb_test_no_output_osabi "$cmd $v" "$cmd"
-			    run_axis $all_axes [expr $cur_axis + 1]
+			    run_axis $all_axes [expr $cur_axis + 1] $arch
 			}
 		    }
 		}
 
-		run_axis $all_axes 0
+		run_axis $all_axes 0 $arch
 	    }
 	}
     }

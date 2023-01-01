@@ -1,6 +1,6 @@
 /* GDB CLI commands.
 
-   Copyright (C) 2000-2020 Free Software Foundation, Inc.
+   Copyright (C) 2000-2022 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -24,7 +24,7 @@
 #include "target.h"	/* For baud_rate, remote_debug and remote_timeout.  */
 #include "gdbsupport/gdb_wait.h"	/* For shell escape implementation.  */
 #include "gdbcmd.h"
-#include "gdb_regex.h"	/* Used by apropos_command.  */
+#include "gdbsupport/gdb_regex.h"	/* Used by apropos_command.  */
 #include "gdb_vfork.h"
 #include "linespec.h"
 #include "expression.h"
@@ -54,6 +54,7 @@
 
 #include "extension.h"
 #include "gdbsupport/pathstuff.h"
+#include "gdbsupport/gdb_tilde_expand.h"
 
 #ifdef TUI
 #include "tui/tui.h"	/* For tui_active et.al.  */
@@ -151,6 +152,10 @@ struct cmd_list_element *maintenanceprintlist;
 
 struct cmd_list_element *maintenancechecklist;
 
+/* Chain containing all defined "maintenance flush" subcommands.  */
+
+struct cmd_list_element *maintenanceflushlist;
+
 struct cmd_list_element *setprintlist;
 
 struct cmd_list_element *showprintlist;
@@ -162,6 +167,10 @@ struct cmd_list_element *showdebuglist;
 struct cmd_list_element *setchecklist;
 
 struct cmd_list_element *showchecklist;
+
+struct cmd_list_element *setsourcelist;
+
+struct cmd_list_element *showsourcelist;
 
 /* Command tracing state.  */
 
@@ -227,7 +236,7 @@ with_command_1 (const char *set_cmd_prefix,
 					  /*ignore_help_classes=*/ 1);
   gdb_assert (set_cmd != nullptr);
 
-  if (set_cmd->var == nullptr)
+  if (!set_cmd->var.has_value ())
     error (_("Cannot use this setting with the \"with\" command"));
 
   std::string temp_value
@@ -236,7 +245,8 @@ with_command_1 (const char *set_cmd_prefix,
   if (nested_cmd == nullptr)
     nested_cmd = skip_spaces (delim + 2);
 
-  std::string org_value = get_setshow_command_value_string (set_cmd);
+  gdb_assert (set_cmd->var.has_value ());
+  std::string org_value = get_setshow_command_value_string (*set_cmd->var);
 
   /* Tweak the setting to the new temporary value.  */
   do_set_command (temp_value.c_str (), from_tty, set_cmd);
@@ -438,7 +448,7 @@ complete_command (const char *arg, int from_tty)
 int
 is_complete_command (struct cmd_list_element *c)
 {
-  return cmd_cfunc_eq (c, complete_command);
+  return cmd_simple_func_eq (c, complete_command);
 }
 
 static void
@@ -488,17 +498,17 @@ pwd_command (const char *args, int from_tty)
 
   if (cwd == NULL)
     error (_("Error finding name of working directory: %s"),
-           safe_strerror (errno));
+	   safe_strerror (errno));
 
   if (strcmp (cwd.get (), current_directory) != 0)
-    printf_unfiltered (_("Working directory %ps\n (canonically %ps).\n"),
-		       styled_string (file_name_style.style (),
-				      current_directory),
-		       styled_string (file_name_style.style (), cwd.get ()));
+    printf_filtered (_("Working directory %ps\n (canonically %ps).\n"),
+		     styled_string (file_name_style.style (),
+				    current_directory),
+		     styled_string (file_name_style.style (), cwd.get ()));
   else
-    printf_unfiltered (_("Working directory %ps.\n"),
-		       styled_string (file_name_style.style (),
-				      current_directory));
+    printf_filtered (_("Working directory %ps.\n"),
+		     styled_string (file_name_style.style (),
+				    current_directory));
 }
 
 void
@@ -532,7 +542,7 @@ cd_command (const char *dir, int from_tty)
   if (IS_DIR_SEPARATOR (dir[len - 1]))
     {
       /* Remove the trailing slash unless this is a root directory
-         (including a drive letter on non-Unix systems).  */
+	 (including a drive letter on non-Unix systems).  */
       if (!(len == 1)		/* "/" */
 #ifdef HAVE_DOS_BASED_FILE_SYSTEM
 	  && !(len == 3 && dir[1] == ':') /* "d:/" */
@@ -571,7 +581,7 @@ cd_command (const char *dir, int from_tty)
 	  if (found_real_path)
 	    {
 	      /* Search backwards for the directory just before the "/.."
-	         and obliterate it and the "/..".  */
+		 and obliterate it and the "/..".  */
 	      char *q = p;
 
 	      while (q != current_directory && !IS_DIR_SEPARATOR (q[-1]))
@@ -640,7 +650,7 @@ find_and_open_script (const char *script_file, int search_path)
   /* Search for and open 'file' on the search path used for source
      files.  Put the full location in *FULL_PATHP.  */
   gdb::unique_xmalloc_ptr<char> full_path;
-  fd = openp (source_path, search_flags,
+  fd = openp (source_path.c_str (), search_flags,
 	      file.get (), O_RDONLY, &full_path);
 
   if (fd == -1)
@@ -716,7 +726,7 @@ source_script_with_search (const char *file, int from_tty, int search_path)
   if (!opened)
     {
       /* The script wasn't found, or was otherwise inaccessible.
-         If the source command was invoked interactively, throw an
+	 If the source command was invoked interactively, throw an
 	 error.  Otherwise (e.g. if it was invoked by a script),
 	 just emit a warning, rather than cause an error.  */
       if (from_tty)
@@ -733,8 +743,16 @@ source_script_with_search (const char *file, int from_tty, int search_path)
      anyway so that error messages show the actual file used.  But only do
      this if we (may have) used search_path, as printing the full path in
      errors for the non-search case can be more noise than signal.  */
-  source_script_from_stream (opened->stream.get (), file,
-			     search_path ? opened->full_path.get () : file);
+  const char *file_to_open;
+  gdb::unique_xmalloc_ptr<char> tilde_expanded_file;
+  if (search_path)
+    file_to_open = opened->full_path.get ();
+  else
+    {
+      tilde_expanded_file = gdb_tilde_expand_up (file);
+      file_to_open = tilde_expanded_file.get ();
+    }
+  source_script_from_stream (opened->stream.get (), file, file_to_open);
 }
 
 /* Wrapper around source_script_with_search to export it to main.c
@@ -925,7 +943,6 @@ edit_command (const char *arg, int from_tty)
   struct symtab_and_line sal;
   struct symbol *sym;
   const char *editor;
-  char *p;
   const char *fn;
 
   /* Pull in the current default source line if necessary.  */
@@ -971,40 +988,40 @@ edit_command (const char *arg, int from_tty)
       sal = sals[0];
 
       if (*arg1)
-        error (_("Junk at end of line specification."));
+	error (_("Junk at end of line specification."));
 
       /* If line was specified by address, first print exactly which
-         line, and which file.  In this case, sal.symtab == 0 means
-         address is outside of all known source files, not that user
-         failed to give a filename.  */
+	 line, and which file.  In this case, sal.symtab == 0 means
+	 address is outside of all known source files, not that user
+	 failed to give a filename.  */
       if (*arg == '*')
-        {
+	{
 	  struct gdbarch *gdbarch;
 
-          if (sal.symtab == 0)
+	  if (sal.symtab == 0)
 	    error (_("No source file for address %s."),
 		   paddress (get_current_arch (), sal.pc));
 
 	  gdbarch = SYMTAB_OBJFILE (sal.symtab)->arch ();
-          sym = find_pc_function (sal.pc);
-          if (sym)
+	  sym = find_pc_function (sal.pc);
+	  if (sym)
 	    printf_filtered ("%s is in %s (%s:%d).\n",
 			     paddress (gdbarch, sal.pc),
 			     sym->print_name (),
 			     symtab_to_filename_for_display (sal.symtab),
 			     sal.line);
-          else
+	  else
 	    printf_filtered ("%s is at %s:%d.\n",
 			     paddress (gdbarch, sal.pc),
 			     symtab_to_filename_for_display (sal.symtab),
 			     sal.line);
-        }
+	}
 
       /* If what was given does not imply a symtab, it must be an
-         undebuggable symbol which means no source code.  */
+	 undebuggable symbol which means no source code.  */
 
       if (sal.symtab == 0)
-        error (_("No line number known for %s."), arg);
+	error (_("No line number known for %s."), arg);
     }
 
   if ((editor = getenv ("EDITOR")) == NULL)
@@ -1014,9 +1031,9 @@ edit_command (const char *arg, int from_tty)
 
   /* Quote the file name, in case it has whitespace or other special
      characters.  */
-  p = xstrprintf ("%s +%d \"%s\"", editor, sal.line, fn);
-  shell_escape (p, from_tty);
-  xfree (p);
+  gdb::unique_xmalloc_ptr<char> p
+    = xstrprintf ("%s +%d \"%s\"", editor, sal.line, fn);
+  shell_escape (p.get (), from_tty);
 }
 
 /* The options for the "pipe" command.  */
@@ -1024,12 +1041,7 @@ edit_command (const char *arg, int from_tty)
 struct pipe_cmd_opts
 {
   /* For "-d".  */
-  char *delimiter = nullptr;
-
-  ~pipe_cmd_opts ()
-  {
-    xfree (delimiter);
-  }
+  std::string delimiter;
 };
 
 static const gdb::option::option_def pipe_cmd_option_defs[] = {
@@ -1066,8 +1078,8 @@ pipe_command (const char *arg, int from_tty)
     (&arg, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_OPERAND, grp);
 
   const char *delim = "|";
-  if (opts.delimiter != nullptr)
-    delim = opts.delimiter;
+  if (!opts.delimiter.empty ())
+    delim = opts.delimiter.c_str ();
 
   const char *command = arg;
   if (command == nullptr)
@@ -1110,7 +1122,7 @@ pipe_command (const char *arg, int from_tty)
 
   if (exit_status < 0)
     error (_("shell command \"%s\" failed: %s"), shell_command,
-           safe_strerror (errno));
+	   safe_strerror (errno));
   exit_status_set_internal_vars (exit_status);
 }
 
@@ -1130,8 +1142,8 @@ pipe_command_completer (struct cmd_list_element *ignore,
     return;
 
   const char *delimiter = "|";
-  if (opts.delimiter != nullptr)
-    delimiter = opts.delimiter;
+  if (!opts.delimiter.empty ())
+    delimiter = opts.delimiter.c_str ();
 
   /* Check if we're past option values already.  */
   if (text > org_text && !isspace (text[-1]))
@@ -1395,32 +1407,38 @@ print_disassembly (struct gdbarch *gdbarch, const char *name,
   else
 #endif
     {
-      printf_filtered ("Dump of assembler code ");
+      printf_filtered (_("Dump of assembler code "));
       if (name != NULL)
-	printf_filtered ("for function %s:\n", name);
+	printf_filtered (_("for function %ps:\n"),
+			 styled_string (function_name_style.style (), name));
       if (block == nullptr || BLOCK_CONTIGUOUS_P (block))
-        {
+	{
 	  if (name == NULL)
-	    printf_filtered ("from %s to %s:\n",
-			     paddress (gdbarch, low), paddress (gdbarch, high));
+	    printf_filtered (_("from %ps to %ps:\n"),
+			     styled_string (address_style.style (),
+					    paddress (gdbarch, low)),
+			     styled_string (address_style.style (),
+					    paddress (gdbarch, high)));
 
 	  /* Dump the specified range.  */
 	  gdb_disassembly (gdbarch, current_uiout, flags, -1, low, high);
 	}
       else
-        {
+	{
 	  for (int i = 0; i < BLOCK_NRANGES (block); i++)
 	    {
 	      CORE_ADDR range_low = BLOCK_RANGE_START (block, i);
 	      CORE_ADDR range_high = BLOCK_RANGE_END (block, i);
-	      printf_filtered (_("Address range %s to %s:\n"),
-			       paddress (gdbarch, range_low),
-			       paddress (gdbarch, range_high));
+	      printf_filtered (_("Address range %ps to %ps:\n"),
+			       styled_string (address_style.style (),
+					      paddress (gdbarch, range_low)),
+			       styled_string (address_style.style (),
+					      paddress (gdbarch, range_high)));
 	      gdb_disassembly (gdbarch, current_uiout, flags, -1,
 			       range_low, range_high);
 	    }
 	}
-      printf_filtered ("End of assembler dump.\n");
+      printf_filtered (_("End of assembler dump.\n"));
     }
 }
 
@@ -1482,6 +1500,7 @@ disassemble_command (const char *arg, int from_tty)
 {
   struct gdbarch *gdbarch = get_current_arch ();
   CORE_ADDR low, high;
+  const general_symbol_info *symbol = nullptr;
   const char *name;
   CORE_ADDR pc;
   gdb_disassembly_flags flags;
@@ -1537,8 +1556,14 @@ disassemble_command (const char *arg, int from_tty)
   if (p[0] == '\0')
     {
       /* One argument.  */
-      if (find_pc_partial_function (pc, &name, &low, &high, &block) == 0)
+      if (!find_pc_partial_function_sym (pc, &symbol, &low, &high, &block))
 	error (_("No function contains specified address."));
+
+      if (asm_demangle)
+	name = symbol->print_name ();
+      else
+	name = symbol->linkage_name ();
+
 #if defined(TUI)
       /* NOTE: cagney/2003-02-13 The `tui_active' was previously
 	 `tui_version'.  */
@@ -1599,10 +1624,79 @@ show_user (const char *args, int from_tty)
     {
       for (c = cmdlist; c; c = c->next)
 	{
-	  if (cli_user_command_p (c) || c->prefixlist != NULL)
+	  if (cli_user_command_p (c) || c->is_prefix ())
 	    show_user_1 (c, "", c->name, gdb_stdout);
 	}
     }
+}
+
+/* Return true if COMMAND or any of its sub-commands is a user defined command.
+   This is a helper function for show_user_completer.  */
+
+static bool
+has_user_subcmd (struct cmd_list_element *command)
+{
+  if (cli_user_command_p (command))
+    return true;
+
+  /* Alias command can yield false positive.  Ignore them as the targeted
+     command should be reachable anyway.  */
+  if (command->is_alias ())
+    return false;
+
+  if (command->is_prefix ())
+    for (struct cmd_list_element *subcommand = *command->subcommands;
+	 subcommand != nullptr;
+	 subcommand = subcommand->next)
+      if (has_user_subcmd (subcommand))
+	return true;
+
+  return false;
+}
+
+/* Implement completer for the 'show user' command.  */
+
+static void
+show_user_completer (cmd_list_element *,
+		     completion_tracker &tracker, const char *text,
+		     const char *word)
+{
+  struct cmd_list_element *cmd_group = cmdlist;
+
+  /* TEXT can contain a chain of commands and subcommands.  Follow the
+     commands chain until we reach the point where the user wants a
+     completion.  */
+  while (word > text)
+    {
+      const char *curr_cmd = text;
+      const char *after = skip_to_space (text);
+      const size_t curr_cmd_len = after - text;
+      text = skip_spaces (after);
+
+      for (struct cmd_list_element *c = cmd_group; c != nullptr; c = c->next)
+	{
+	  if (strlen (c->name) == curr_cmd_len
+	      && strncmp (c->name, curr_cmd, curr_cmd_len) == 0)
+	    {
+	      if (c->subcommands == nullptr)
+		/* We arrived after a command with no child, so nothing more
+		   to complete.  */
+		return;
+
+	      cmd_group = *c->subcommands;
+	      break;
+	    }
+	}
+    }
+
+  const int wordlen = strlen (word);
+  for (struct cmd_list_element *c = cmd_group; c != nullptr; c = c->next)
+    if (has_user_subcmd (c))
+      {
+	if (strncmp (c->name, word, wordlen) == 0)
+	  tracker.add_completion
+	    (gdb::unique_xmalloc_ptr<char> (xstrdup (c->name)));
+      }
 }
 
 /* Search through names of commands and documentations for a certain
@@ -1724,19 +1818,20 @@ argv_to_string (char **argv, int n)
    and the user would expect bbb to execute 'backtrace -full -past-main'
    while it will execute 'backtrace -past-main'.  */
 
-static void
+static cmd_list_element *
 validate_aliased_command (const char *command)
 {
-  struct cmd_list_element *c;
   std::string default_args;
-
-  c = lookup_cmd_1 (& command, cmdlist, NULL, &default_args, 1);
+  cmd_list_element *c
+    = lookup_cmd_1 (& command, cmdlist, NULL, &default_args, 1);
 
   if (c == NULL || c == (struct cmd_list_element *) -1)
     error (_("Invalid command to alias to: %s"), command);
 
   if (!default_args.empty ())
     error (_("Cannot define an alias of an alias that has default args"));
+
+  return c;
 }
 
 /* Called when "alias" was incorrectly used.  */
@@ -1806,7 +1901,7 @@ alias_command (const char *args, int from_tty)
   std::string command_string (argv_to_string (command_argv.get (),
 					      command_argc));
   command = command_string.c_str ();
-  validate_aliased_command (command);
+  cmd_list_element *target_cmd = validate_aliased_command (command);
 
   /* ALIAS must not exist.  */
   std::string alias_string (argv_to_string (alias_argv, alias_argc));
@@ -1849,8 +1944,8 @@ alias_command (const char *args, int from_tty)
   if (alias_argc == 1)
     {
       /* add_cmd requires *we* allocate space for name, hence the xstrdup.  */
-      alias_cmd = add_com_alias (xstrdup (alias_argv[0]), command, class_alias,
-				 a_opts.abbrev_flag);
+      alias_cmd = add_com_alias (xstrdup (alias_argv[0]), target_cmd,
+				 class_alias, a_opts.abbrev_flag);
     }
   else
     {
@@ -1874,16 +1969,15 @@ alias_command (const char *args, int from_tty)
       /* We've already tried to look up COMMAND.  */
       gdb_assert (c_command != NULL
 		  && c_command != (struct cmd_list_element *) -1);
-      gdb_assert (c_command->prefixlist != NULL);
+      gdb_assert (c_command->is_prefix ());
       c_alias = lookup_cmd_1 (& alias_prefix, cmdlist, NULL, NULL, 1);
       if (c_alias != c_command)
 	error (_("ALIAS and COMMAND prefixes do not match."));
 
       /* add_cmd requires *we* allocate space for name, hence the xstrdup.  */
       alias_cmd = add_alias_cmd (xstrdup (alias_argv[alias_argc - 1]),
-				 command_argv[command_argc - 1],
-				 class_alias, a_opts.abbrev_flag,
-				 c_command->prefixlist);
+				 target_cmd, class_alias, a_opts.abbrev_flag,
+				 c_command->subcommands);
     }
 
   gdb_assert (alias_cmd != nullptr);
@@ -2021,23 +2115,6 @@ show_history_expansion_p (struct ui_file *file, int from_tty,
 }
 
 static void
-show_remote_debug (struct ui_file *file, int from_tty,
-		   struct cmd_list_element *c, const char *value)
-{
-  fprintf_filtered (file, _("Debugging of remote protocol is %s.\n"),
-		    value);
-}
-
-static void
-show_remote_timeout (struct ui_file *file, int from_tty,
-		     struct cmd_list_element *c, const char *value)
-{
-  fprintf_filtered (file,
-		    _("Timeout limit to wait for target to respond is %s.\n"),
-		    value);
-}
-
-static void
 show_max_user_call_depth (struct ui_file *file, int from_tty,
 			  struct cmd_list_element *c, const char *value)
 {
@@ -2066,7 +2143,7 @@ setting_cmd (const char *fnname, struct cmd_list_element *showlist,
       && type0->code () != TYPE_CODE_STRING)
     error (_("First argument of %s must be a string."), fnname);
 
-  const char *a0 = (const char *) value_contents (argv[0]);
+  const char *a0 = (const char *) value_contents (argv[0]).data ();
   cmd_list_element *cmd = lookup_cmd (&a0, showlist, "", NULL, -1, 0);
 
   if (cmd == nullptr || cmd->type != show_cmd)
@@ -2079,31 +2156,31 @@ setting_cmd (const char *fnname, struct cmd_list_element *showlist,
 /* Builds a value from the show CMD.  */
 
 static struct value *
-value_from_setting (const cmd_list_element *cmd, struct gdbarch *gdbarch)
+value_from_setting (const setting &var, struct gdbarch *gdbarch)
 {
-  switch (cmd->var_type)
+  switch (var.type ())
     {
     case var_integer:
-      if (*(int *) cmd->var == INT_MAX)
+      if (var.get<int> () == INT_MAX)
 	return value_from_longest (builtin_type (gdbarch)->builtin_int,
 				   0);
       else
 	return value_from_longest (builtin_type (gdbarch)->builtin_int,
-				   *(int *) cmd->var);
+				   var.get<int> ());
     case var_zinteger:
       return value_from_longest (builtin_type (gdbarch)->builtin_int,
-				 *(int *) cmd->var);
+				 var.get<int> ());
     case var_boolean:
       return value_from_longest (builtin_type (gdbarch)->builtin_int,
-				 *(bool *) cmd->var ? 1 : 0);
+				 var.get<bool> () ? 1 : 0);
     case var_zuinteger_unlimited:
       return value_from_longest (builtin_type (gdbarch)->builtin_int,
-				 *(int *) cmd->var);
+				 var.get<int> ());
     case var_auto_boolean:
       {
 	int val;
 
-	switch (*(enum auto_boolean*) cmd->var)
+	switch (var.get<enum auto_boolean> ())
 	  {
 	  case AUTO_BOOLEAN_TRUE:
 	    val = 1;
@@ -2121,27 +2198,43 @@ value_from_setting (const cmd_list_element *cmd, struct gdbarch *gdbarch)
 				   val);
       }
     case var_uinteger:
-      if (*(unsigned int *) cmd->var == UINT_MAX)
+      if (var.get<unsigned int> () == UINT_MAX)
 	return value_from_ulongest
 	  (builtin_type (gdbarch)->builtin_unsigned_int, 0);
       else
 	return value_from_ulongest
 	  (builtin_type (gdbarch)->builtin_unsigned_int,
-	   *(unsigned int *) cmd->var);
+	   var.get<unsigned int> ());
     case var_zuinteger:
       return value_from_ulongest (builtin_type (gdbarch)->builtin_unsigned_int,
-				  *(unsigned int *) cmd->var);
+				  var.get<unsigned int> ());
     case var_string:
     case var_string_noescape:
     case var_optional_filename:
     case var_filename:
     case var_enum:
-      if (*(char **) cmd->var)
-	return value_cstring (*(char **) cmd->var, strlen (*(char **) cmd->var),
-			      builtin_type (gdbarch)->builtin_char);
-      else
-	return value_cstring ("", 1,
-			      builtin_type (gdbarch)->builtin_char);
+      {
+	const char *value;
+	size_t len;
+	if (var.type () == var_enum)
+	  {
+	    value = var.get<const char *> ();
+	    len = strlen (value);
+	  }
+	else
+	  {
+	    const std::string &st = var.get<std::string> ();
+	    value = st.c_str ();
+	    len = st.length ();
+	  }
+
+	if (len > 0)
+	  return value_cstring (value, len,
+				builtin_type (gdbarch)->builtin_char);
+	else
+	  return value_cstring ("", 1,
+				builtin_type (gdbarch)->builtin_char);
+      }
     default:
       gdb_assert_not_reached ("bad var_type");
     }
@@ -2154,9 +2247,12 @@ gdb_setting_internal_fn (struct gdbarch *gdbarch,
 			 const struct language_defn *language,
 			 void *cookie, int argc, struct value **argv)
 {
-  return value_from_setting (setting_cmd ("$_gdb_setting", showlist,
-					  argc, argv),
-			     gdbarch);
+  cmd_list_element *show_cmd
+    = setting_cmd ("$_gdb_setting", showlist, argc, argv);
+
+  gdb_assert (show_cmd->var.has_value ());
+
+  return value_from_setting (*show_cmd->var, gdbarch);
 }
 
 /* Implementation of the convenience function $_gdb_maint_setting.  */
@@ -2166,18 +2262,20 @@ gdb_maint_setting_internal_fn (struct gdbarch *gdbarch,
 			       const struct language_defn *language,
 			       void *cookie, int argc, struct value **argv)
 {
-  return value_from_setting (setting_cmd ("$_gdb_maint_setting",
-					  maintenance_show_cmdlist,
-					  argc, argv),
-			     gdbarch);
+  cmd_list_element *show_cmd
+    = setting_cmd ("$_gdb_maint_setting", maintenance_show_cmdlist, argc, argv);
+
+  gdb_assert (show_cmd->var.has_value ());
+
+  return value_from_setting (*show_cmd->var, gdbarch);
 }
 
 /* Builds a string value from the show CMD.  */
 
 static struct value *
-str_value_from_setting (const cmd_list_element *cmd, struct gdbarch *gdbarch)
+str_value_from_setting (const setting &var, struct gdbarch *gdbarch)
 {
-  switch (cmd->var_type)
+  switch (var.type ())
     {
     case var_integer:
     case var_zinteger:
@@ -2187,7 +2285,7 @@ str_value_from_setting (const cmd_list_element *cmd, struct gdbarch *gdbarch)
     case var_uinteger:
     case var_zuinteger:
       {
-	std::string cmd_val = get_setshow_command_value_string (cmd);
+	std::string cmd_val = get_setshow_command_value_string (var);
 
 	return value_cstring (cmd_val.c_str (), cmd_val.size (),
 			      builtin_type (gdbarch)->builtin_char);
@@ -2200,15 +2298,30 @@ str_value_from_setting (const cmd_list_element *cmd, struct gdbarch *gdbarch)
     case var_enum:
       /* For these cases, we do not use get_setshow_command_value_string,
 	 as this function handle some characters specially, e.g. by
-	 escaping quotes.  So, we directly use the cmd->var string value,
-	 similarly to the value_from_setting code for these cases.  */
-      if (*(char **) cmd->var)
-	return value_cstring (*(char **) cmd->var, strlen (*(char **) cmd->var),
-			      builtin_type (gdbarch)->builtin_char);
-      else
-	return value_cstring ("", 1,
-			      builtin_type (gdbarch)->builtin_char);
+	 escaping quotevar.  So, we directly use the var string value,
+	 similarly to the value_from_setting code for these casevar.  */
+      {
+	const char *value;
+	size_t len;
+	if (var.type () == var_enum)
+	  {
+	    value = var.get<const char *> ();
+	    len = strlen (value);
+	  }
+	else
+	  {
+	    const std::string &st = var.get<std::string> ();
+	    value = st.c_str ();
+	    len = st.length ();
+	  }
 
+	if (len > 0)
+	  return value_cstring (value, len,
+				builtin_type (gdbarch)->builtin_char);
+	else
+	  return value_cstring ("", 1,
+				builtin_type (gdbarch)->builtin_char);
+      }
     default:
       gdb_assert_not_reached ("bad var_type");
     }
@@ -2221,9 +2334,12 @@ gdb_setting_str_internal_fn (struct gdbarch *gdbarch,
 			     const struct language_defn *language,
 			     void *cookie, int argc, struct value **argv)
 {
-  return str_value_from_setting (setting_cmd ("$_gdb_setting_str",
-					      showlist, argc, argv),
-				 gdbarch);
+  cmd_list_element *show_cmd
+    = setting_cmd ("$_gdb_setting_str", showlist, argc, argv);
+
+  gdb_assert (show_cmd->var.has_value ());
+
+  return str_value_from_setting (*show_cmd->var, gdbarch);
 }
 
 
@@ -2234,10 +2350,13 @@ gdb_maint_setting_str_internal_fn (struct gdbarch *gdbarch,
 				   const struct language_defn *language,
 				   void *cookie, int argc, struct value **argv)
 {
-  return str_value_from_setting (setting_cmd ("$_gdb_maint_setting_str",
-					      maintenance_show_cmdlist,
-					      argc, argv),
-				 gdbarch);
+  cmd_list_element *show_cmd
+    = setting_cmd ("$_gdb_maint_setting_str", maintenance_show_cmdlist, argc,
+		   argv);
+
+  gdb_assert (show_cmd->var.has_value ());
+
+  return str_value_from_setting (*show_cmd->var, gdbarch);
 }
 
 void _initialize_cli_cmds ();
@@ -2323,16 +2442,19 @@ strict == evaluate script according to filename extension, error if not supporte
 			show_script_ext_mode,
 			&setlist, &showlist);
 
-  add_com ("quit", class_support, quit_command, _("\
+  cmd_list_element *quit_cmd
+    = add_com ("quit", class_support, quit_command, _("\
 Exit gdb.\n\
-Usage: quit [EXPR]\n\
+Usage: quit [EXPR] or exit [EXPR]\n\
 The optional expression EXPR, if present, is evaluated and the result\n\
 used as GDB's exit code.  The default is zero."));
-  c = add_com ("help", class_support, help_command,
+  cmd_list_element *help_cmd
+    = add_com ("help", class_support, help_command,
 	       _("Print list of commands."));
-  set_cmd_completer (c, command_completer);
-  add_com_alias ("q", "quit", class_support, 1);
-  add_com_alias ("h", "help", class_support, 1);
+  set_cmd_completer (help_cmd, command_completer);
+  add_com_alias ("q", quit_cmd, class_support, 1);
+  add_com_alias ("exit", quit_cmd, class_support, 1);
+  add_com_alias ("h", help_cmd, class_support, 1);
 
   add_setshow_boolean_cmd ("verbose", class_support, &info_verbose, _("\
 Set verbosity."), _("\
@@ -2341,12 +2463,11 @@ Show verbosity."), NULL,
 			   show_info_verbose,
 			   &setlist, &showlist);
 
-  add_basic_prefix_cmd ("history", class_support, _("\
-Generic command for setting command history parameters."),
-			&sethistlist, "set history ", 0, &setlist);
-  add_show_prefix_cmd ("history", class_support, _("\
-Generic command for showing command history parameters."),
-		       &showhistlist, "show history ", 0, &showlist);
+  add_setshow_prefix_cmd
+    ("history", class_support,
+     _("Generic command for setting command history parameters."),
+     _("Generic command for showing command history parameters."),
+     &sethistlist, &showhistlist, &setlist, &showlist);
 
   add_setshow_boolean_cmd ("expansion", no_class, &history_expansion_p, _("\
 Set history expansion on command input."), _("\
@@ -2356,22 +2477,24 @@ Without an argument, history expansion is enabled."),
 			   show_history_expansion_p,
 			   &sethistlist, &showhistlist);
 
-  add_prefix_cmd ("info", class_info, info_command, _("\
+  cmd_list_element *info_cmd
+    = add_prefix_cmd ("info", class_info, info_command, _("\
 Generic command for showing things about the program being debugged."),
-		  &infolist, "info ", 0, &cmdlist);
-  add_com_alias ("i", "info", class_info, 1);
-  add_com_alias ("inf", "info", class_info, 1);
+		      &infolist, 0, &cmdlist);
+  add_com_alias ("i", info_cmd, class_info, 1);
+  add_com_alias ("inf", info_cmd, class_info, 1);
 
   add_com ("complete", class_obscure, complete_command,
 	   _("List the completions for the rest of the line as a command."));
 
   c = add_show_prefix_cmd ("show", class_info, _("\
 Generic command for showing things about the debugger."),
-			   &showlist, "show ", 0, &cmdlist);
+			   &showlist, 0, &cmdlist);
   /* Another way to get at the same thing.  */
   add_alias_cmd ("set", c, class_info, 0, &infolist);
 
-  c = add_com ("with", class_vars, with_command, _("\
+  cmd_list_element *with_cmd
+    = add_com ("with", class_vars, with_command, _("\
 Temporarily set SETTING to VALUE, run COMMAND, and restore SETTING.\n\
 Usage: with SETTING [VALUE] [-- COMMAND]\n\
 Usage: w SETTING [VALUE] [-- COMMAND]\n\
@@ -2385,8 +2508,8 @@ E.g.:\n\
 You can change multiple settings using nested with, and use\n\
 abbreviations for commands and/or values.  E.g.:\n\
   w la p -- w p el u -- p obj"));
-  set_cmd_completer_handle_brkchars (c, with_command_completer);
-  add_com_alias ("w", "with", class_vars, 1);
+  set_cmd_completer_handle_brkchars (with_cmd, with_command_completer);
+  add_com_alias ("w", with_cmd, class_vars, 1);
 
   add_internal_function ("_gdb_setting_str", _("\
 $_gdb_setting_str - returns the value of a GDB setting as a string.\n\
@@ -2438,39 +2561,19 @@ the previous command number shown."),
   add_cmd ("configuration", no_set_class, show_configuration,
 	   _("Show how GDB was configured at build time."), &showlist);
 
-  add_setshow_zinteger_cmd ("remote", no_class, &remote_debug, _("\
-Set debugging of remote protocol."), _("\
-Show debugging of remote protocol."), _("\
-When enabled, each packet sent or received with the remote target\n\
-is displayed."),
-			    NULL,
-			    show_remote_debug,
-			    &setdebuglist, &showdebuglist);
+  add_setshow_prefix_cmd ("debug", no_class,
+			  _("Generic command for setting gdb debugging flags."),
+			  _("Generic command for showing gdb debugging flags."),
+			  &setdebuglist, &showdebuglist,
+			  &setlist, &showlist);
 
-  add_setshow_zuinteger_unlimited_cmd ("remotetimeout", no_class,
-				       &remote_timeout, _("\
-Set timeout limit to wait for target to respond."), _("\
-Show timeout limit to wait for target to respond."), _("\
-This value is used to set the time limit for gdb to wait for a response\n\
-from the target."),
-				       NULL,
-				       show_remote_timeout,
-				       &setlist, &showlist);
-
-  add_basic_prefix_cmd ("debug", no_class,
-			_("Generic command for setting gdb debugging flags."),
-			&setdebuglist, "set debug ", 0, &setlist);
-
-  add_show_prefix_cmd ("debug", no_class,
-		       _("Generic command for showing gdb debugging flags."),
-		       &showdebuglist, "show debug ", 0, &showlist);
-
-  c = add_com ("shell", class_support, shell_command, _("\
+  cmd_list_element *shell_cmd
+    = add_com ("shell", class_support, shell_command, _("\
 Execute the rest of the line as a shell command.\n\
 With no arguments, run an inferior shell."));
-  set_cmd_completer (c, filename_completer);
+  set_cmd_completer (shell_cmd, filename_completer);
 
-  add_com_alias ("!", "shell", class_support, 0);
+  add_com_alias ("!", shell_cmd, class_support, 0);
 
   c = add_com ("edit", class_files, edit_command, _("\
 Edit specified file or function.\n\
@@ -2484,7 +2587,8 @@ Uses EDITOR environment variable contents as editor (or ex as default)."));
 
   c->completer = location_completer;
 
-  c = add_com ("pipe", class_support, pipe_command, _("\
+  cmd_list_element *pipe_cmd
+    = add_com ("pipe", class_support, pipe_command, _("\
 Send the output of a gdb command to a shell command.\n\
 Usage: | [COMMAND] | SHELL_COMMAND\n\
 Usage: | -d DELIM COMMAND DELIM SHELL_COMMAND\n\
@@ -2499,10 +2603,11 @@ case COMMAND contains a | character.\n\
 \n\
 With no COMMAND, repeat the last executed command\n\
 and send its output to SHELL_COMMAND."));
-  set_cmd_completer_handle_brkchars (c, pipe_command_completer);
-  add_com_alias ("|", "pipe", class_support, 0);
+  set_cmd_completer_handle_brkchars (pipe_cmd, pipe_command_completer);
+  add_com_alias ("|", pipe_cmd, class_support, 0);
 
-  add_com ("list", class_files, list_command, _("\
+  cmd_list_element *list_cmd
+    = add_com ("list", class_files, list_command, _("\
 List specified function or line.\n\
 With no argument, lists ten more lines after or around previous listing.\n\
 \"list -\" lists the ten lines before a previous ten-line listing.\n\
@@ -2521,14 +2626,19 @@ By default, when a single location is given, display ten lines.\n\
 This can be changed using \"set listsize\", and the current value\n\
 can be shown using \"show listsize\"."));
 
-  add_com_alias ("l", "list", class_files, 1);
+  add_com_alias ("l", list_cmd, class_files, 1);
 
   if (dbx_commands)
-    add_com_alias ("file", "list", class_files, 1);
+    add_com_alias ("file", list_cmd, class_files, 1);
 
   c = add_com ("disassemble", class_vars, disassemble_command, _("\
 Disassemble a specified section of memory.\n\
+Usage: disassemble[/m|/r|/s] START [, END]\n\
 Default is the function surrounding the pc of the selected frame.\n\
+\n\
+With a /s modifier, source lines are included (if available).\n\
+In this mode, the output is displayed in PC address order, and\n\
+file names and contents for all relevant source files are displayed.\n\
 \n\
 With a /m modifier, source lines are included (if available).\n\
 This view is \"source centric\": the output is in source line order,\n\
@@ -2536,11 +2646,6 @@ regardless of any optimization that is present.  Only the main source file\n\
 is displayed, not those of, e.g., any inlined functions.\n\
 This modifier hasn't proved useful in practice and is deprecated\n\
 in favor of /s.\n\
-\n\
-With a /s modifier, source lines are included (if available).\n\
-This differs from /m in two important respects:\n\
-- the output is still in pc address order, and\n\
-- file names and contents for all relevant source files are displayed.\n\
 \n\
 With a /r modifier, raw instructions in hex are included.\n\
 \n\
@@ -2557,10 +2662,11 @@ you must type \"disassemble 'foo.c'::bar\" and not \"disassemble foo.c:bar\"."))
   c = add_com ("make", class_support, make_command, _("\
 Run the ``make'' program using the rest of the line as arguments."));
   set_cmd_completer (c, filename_completer);
-  add_cmd ("user", no_class, show_user, _("\
+  c = add_cmd ("user", no_class, show_user, _("\
 Show definitions of non-python/scheme user defined commands.\n\
 Argument is the name of the user defined command.\n\
 With no argument, show definitions of all user defined commands."), &showlist);
+  set_cmd_completer (c, show_user_completer);
   add_com ("apropos", class_support, apropos_command, _("\
 Search for commands matching a REGEXP.\n\
 Usage: apropos [-v] REGEXP\n\
@@ -2601,9 +2707,9 @@ Use \"help aliases\" to list all user defined aliases and their default args.\n\
 \n\
 Examples:\n\
 Make \"spe\" an alias of \"set print elements\":\n\
-  alias spe set print elements\n\
+  alias spe = set print elements\n\
 Make \"elms\" an alias of \"elements\" in the \"set print\" command:\n\
-  alias -a set print elms set print elements\n\
+  alias -a set print elms = set print elements\n\
 Make \"btf\" an alias of \"backtrace -full -past-entry -past-main\" :\n\
   alias btf = backtrace -full -past-entry -past-main\n\
 Make \"wLapPeu\" an alias of 2 nested \"with\":\n\
@@ -2624,7 +2730,7 @@ Usage: source [-s] [-v] FILE\n\
 -v: each command in FILE is echoed as it is executed.\n\
 \n\
 Note that the file \"%s\" is read automatically in this way\n\
-when GDB is started."), GDBINIT);
+when GDB is started."), GDBINIT).release ();
   c = add_cmd ("source", class_support, source_command,
 	       source_help_text, &cmdlist);
   set_cmd_completer (c, filename_completer);

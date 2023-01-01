@@ -1,5 +1,5 @@
 /* Support for printing Ada types for GDB, the GNU debugger.
-   Copyright (C) 1986-2020 Free Software Foundation, Inc.
+   Copyright (C) 1986-2022 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -198,16 +198,16 @@ print_range_bound (struct type *type, const char *bounds, int *n,
   if (ada_scan_number (bounds, *n, &B, n))
     {
       /* STABS decodes all range types which bounds are 0 .. -1 as
-         unsigned integers (ie. the type code is TYPE_CODE_INT, not
-         TYPE_CODE_RANGE).  Unfortunately, ada_print_scalar() relies
-         on the unsigned flag to determine whether the bound should
-         be printed as a signed or an unsigned value.  This causes
-         the upper bound of the 0 .. -1 range types to be printed as
-         a very large unsigned number instead of -1.
-         To workaround this stabs deficiency, we replace the TYPE by NULL
-         to indicate default output when we detect that the bound is negative,
-         and the type is a TYPE_CODE_INT.  The bound is negative when
-         'm' is the last character of the number scanned in BOUNDS.  */
+	 unsigned integers (ie. the type code is TYPE_CODE_INT, not
+	 TYPE_CODE_RANGE).  Unfortunately, ada_print_scalar() relies
+	 on the unsigned flag to determine whether the bound should
+	 be printed as a signed or an unsigned value.  This causes
+	 the upper bound of the 0 .. -1 range types to be printed as
+	 a very large unsigned number instead of -1.
+	 To workaround this stabs deficiency, we replace the TYPE by NULL
+	 to indicate default output when we detect that the bound is negative,
+	 and the type is a TYPE_CODE_INT.  The bound is negative when
+	 'm' is the last character of the number scanned in BOUNDS.  */
       if (bounds[*n - 1] == 'm' && type->code () == TYPE_CODE_INT)
 	type = NULL;
       ada_print_scalar (type, B, stream);
@@ -326,42 +326,17 @@ print_enum_type (struct type *type, struct ui_file *stream)
       if (i)
 	fprintf_filtered (stream, ", ");
       wrap_here ("    ");
-      fputs_styled (ada_enum_name (TYPE_FIELD_NAME (type, i)),
+      fputs_styled (ada_enum_name (type->field (i).name ()),
 		    variable_name_style.style (), stream);
-      if (lastval != TYPE_FIELD_ENUMVAL (type, i))
+      if (lastval != type->field (i).loc_enumval ())
 	{
 	  fprintf_filtered (stream, " => %s",
-			    plongest (TYPE_FIELD_ENUMVAL (type, i)));
-	  lastval = TYPE_FIELD_ENUMVAL (type, i);
+			    plongest (type->field (i).loc_enumval ()));
+	  lastval = type->field (i).loc_enumval ();
 	}
       lastval += 1;
     }
   fprintf_filtered (stream, ")");
-}
-
-/* Print representation of Ada fixed-point type TYPE on STREAM.  */
-
-static void
-print_gnat_encoded_fixed_point_type (struct type *type, struct ui_file *stream)
-{
-  struct value *delta = gnat_encoded_fixed_point_delta (type);
-  struct value *small = ada_scaling_factor (type);
-
-  if (delta == nullptr)
-    fprintf_filtered (stream, "delta ??");
-  else
-    {
-      std::string str;
-      str = target_float_to_string (value_contents (delta),
-				    value_type (delta), "%g");
-      fprintf_filtered (stream, "delta %s", str.c_str());
-      if (!value_equal (delta, small))
-	{
-	  str = target_float_to_string (value_contents (small),
-					value_type (small), "%g");
-	  fprintf_filtered (stream, " <'small = %s>", str.c_str());
-	}
-    }
 }
 
 /* Print simple (constrained) array type TYPE on STREAM.  LEVEL is the
@@ -464,7 +439,7 @@ print_choices (struct type *type, int field_num, struct ui_file *stream,
 {
   int have_output;
   int p;
-  const char *name = TYPE_FIELD_NAME (type, field_num);
+  const char *name = type->field (field_num).name ();
 
   have_output = 0;
 
@@ -623,7 +598,7 @@ print_selected_record_field_types (struct type *type, struct type *outer_type,
 
   flds = 0;
 
-  if (fld0 > fld1 && TYPE_STUB (type))
+  if (fld0 > fld1 && type->is_stub ())
     return -1;
 
   for (i = fld0; i <= fld1; i += 1)
@@ -645,7 +620,7 @@ print_selected_record_field_types (struct type *type, struct type *outer_type,
 	  flds += 1;
 	  fprintf_filtered (stream, "\n%*s", level + 4, "");
 	  ada_print_type (type->field (i).type (),
-			  TYPE_FIELD_NAME (type, i),
+			  type->field (i).name (),
 			  stream, show - 1, level + 4, flags);
 	  fprintf_filtered (stream, ";");
 	}
@@ -707,7 +682,7 @@ print_variant_part (const variant_part &part,
     name = "?";
   else
     {
-      name = TYPE_FIELD_NAME (type, part.discriminant_index);
+      name = type->field (part.discriminant_index).name ();;
       discr_type = type->field (part.discriminant_index).type ();
     }
 
@@ -779,13 +754,13 @@ print_record_field_types (struct type *type, struct type *outer_type,
   struct dynamic_prop *prop = type->dyn_prop (DYN_PROP_VARIANT_PARTS);
   if (prop != nullptr)
     {
-      if (prop->kind == PROP_TYPE)
+      if (prop->kind () == PROP_TYPE)
 	{
-	  type = prop->data.original_type;
+	  type = prop->original_type ();
 	  prop = type->dyn_prop (DYN_PROP_VARIANT_PARTS);
 	}
-      gdb_assert (prop->kind == PROP_VARIANT_PARTS);
-      print_record_field_types_dynamic (*prop->data.variant_parts,
+      gdb_assert (prop->kind () == PROP_VARIANT_PARTS);
+      print_record_field_types_dynamic (*prop->variant_parts (),
 					0, type->num_fields (),
 					type, stream, show, level, flags);
       return type->num_fields ();
@@ -876,7 +851,7 @@ print_unchecked_union_type (struct type *type, struct ui_file *stream,
 	  fprintf_filtered (stream, "\n%*swhen ? =>\n%*s", level + 8, "",
 			    level + 12, "");
 	  ada_print_type (type->field (i).type (),
-			  TYPE_FIELD_NAME (type, i),
+			  type->field (i).name (),
 			  stream, show - 1, level + 12, flags);
 	  fprintf_filtered (stream, ";");
 	}
@@ -955,7 +930,20 @@ ada_print_type (struct type *type0, const char *varstring,
 		const struct type_print_options *flags)
 {
   struct type *type = ada_check_typedef (ada_get_base_type (type0));
-  char *type_name = decoded_type_name (type0);
+  /* If we can decode the original type name, use it.  However, there
+     are cases where the original type is an internally-generated type
+     with a name that can't be decoded (and whose encoded name might
+     not actually bear any relation to the type actually declared in
+     the sources). In that case, try using the name of the base type
+     in its place.
+
+     Note that we looked at the possibility of always using the name
+     of the base type. This does not always work, unfortunately, as
+     there are situations where it's the base type which has an
+     internally-generated name.  */
+  const char *type_name = decoded_type_name (type0);
+  if (type_name == nullptr)
+    type_name = decoded_type_name (type);
   int is_var_decl = (varstring != NULL && varstring[0] != '\0');
 
   if (type == NULL)
@@ -966,9 +954,6 @@ ada_print_type (struct type *type0, const char *varstring,
       fprintf_styled (stream, metadata_style.style (), "<null type?>");
       return;
     }
-
-  if (show > 0)
-    type = ada_check_typedef (type);
 
   if (is_var_decl && type->code () != TYPE_CODE_FUNC)
     fprintf_filtered (stream, "%.*s: ",
@@ -996,7 +981,11 @@ ada_print_type (struct type *type0, const char *varstring,
 	break;
       case TYPE_CODE_PTR:
       case TYPE_CODE_TYPEDEF:
-	fprintf_filtered (stream, "access ");
+	/* An __XVL field is not truly a pointer, so don't print
+	   "access" in this case.  */
+	if (type->code () != TYPE_CODE_PTR
+	    || strstr (varstring, "___XVL") == nullptr)
+	  fprintf_filtered (stream, "access ");
 	ada_print_type (TYPE_TARGET_TYPE (type), "", stream, show, level,
 			flags);
 	break;
@@ -1012,26 +1001,27 @@ ada_print_type (struct type *type0, const char *varstring,
 	fprintf_filtered (stream, "(false, true)");
 	break;
       case TYPE_CODE_INT:
-	if (ada_is_gnat_encoded_fixed_point_type (type))
-	  print_gnat_encoded_fixed_point_type (type, stream);
-	else
-	  {
-	    const char *name = ada_type_name (type);
+	{
+	  const char *name = ada_type_name (type);
 
-	    if (!ada_is_range_type_name (name))
-	      fprintf_styled (stream, metadata_style.style (),
-			      _("<%s-byte integer>"),
-			      pulongest (TYPE_LENGTH (type)));
-	    else
-	      {
-		fprintf_filtered (stream, "range ");
-		print_range_type (type, stream, 1 /* bounds_prefered_p */);
-	      }
-	  }
+	  if (!ada_is_range_type_name (name))
+	    fprintf_styled (stream, metadata_style.style (),
+			    _("<%s-byte integer>"),
+			    pulongest (TYPE_LENGTH (type)));
+	  else
+	    {
+	      fprintf_filtered (stream, "range ");
+	      print_range_type (type, stream, 1 /* bounds_prefered_p */);
+	    }
+	}
 	break;
       case TYPE_CODE_RANGE:
-	if (ada_is_gnat_encoded_fixed_point_type (type))
-	  print_gnat_encoded_fixed_point_type (type, stream);
+	if (is_fixed_point_type (type))
+	  {
+	    fprintf_filtered (stream, "<");
+	    print_type_fixed_point (type, stream);
+	    fprintf_filtered (stream, ">");
+	  }
 	else if (ada_is_modular_type (type))
 	  fprintf_filtered (stream, "mod %s", 
 			    int_string (ada_modulus (type), 10, 0, 0, 1));
@@ -1074,7 +1064,7 @@ ada_print_type (struct type *type0, const char *varstring,
 
 void
 ada_print_typedef (struct type *type, struct symbol *new_symbol,
-                   struct ui_file *stream)
+		   struct ui_file *stream)
 {
   type = ada_check_typedef (type);
   ada_print_type (type, "", stream, 0, 0, &type_print_raw_options);

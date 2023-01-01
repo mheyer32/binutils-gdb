@@ -1,6 +1,6 @@
 /* Simulator for TI MSP430 and MSP430X
 
-   Copyright (C) 2013-2020 Free Software Foundation, Inc.
+   Copyright (C) 2013-2022 Free Software Foundation, Inc.
    Contributed by Red Hat.
    Based on sim/bfin/bfin-sim.c which was contributed by Analog Devices, Inc.
 
@@ -19,7 +19,9 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "config.h"
+/* This must come before any other includes.  */
+#include "defs.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,8 +30,8 @@
 #include <assert.h>
 #include "opcode/msp430-decode.h"
 #include "sim-main.h"
+#include "sim-signal.h"
 #include "sim-syscall.h"
-#include "targ-vals.h"
 
 static sim_cia
 msp430_pc_fetch (SIM_CPU *cpu)
@@ -110,7 +112,10 @@ sim_open (SIM_OPEN_KIND kind,
 
   /* Initialise the simulator.  */
 
-  if (sim_cpu_alloc_all (sd, 1, /*cgen_cpu_max_extra_bytes ()*/0) != SIM_RC_OK)
+  /* Set default options before parsing user options.  */
+  current_target_byte_order = BFD_ENDIAN_LITTLE;
+
+  if (sim_cpu_alloc_all (sd, 1) != SIM_RC_OK)
     {
       sim_state_free (sd);
       return 0;
@@ -138,7 +143,7 @@ sim_open (SIM_OPEN_KIND kind,
   if (sim_core_read_buffer (sd, MSP430_CPU (sd), read_map, &c, 0x2, 1) == 0)
     sim_do_commandf (sd, "memory-region 0,0x20"); /* Needed by the GDB testsuite.  */
   if (sim_core_read_buffer (sd, MSP430_CPU (sd), read_map, &c, 0x500, 1) == 0)
-    sim_do_commandf (sd, "memory-region 0x500,0xfa00");  /* RAM and/or ROM */
+    sim_do_commandf (sd, "memory-region 0x500,0xfac0");  /* RAM and/or ROM */
   if (sim_core_read_buffer (sd, MSP430_CPU (sd), read_map, &c, 0xfffe, 1) == 0)
     sim_do_commandf (sd, "memory-region 0xffc0,0x40"); /* VECTORS.  */
   if (sim_core_read_buffer (sd, MSP430_CPU (sd), read_map, &c, 0x10000, 1) == 0)
@@ -147,10 +152,7 @@ sim_open (SIM_OPEN_KIND kind,
     sim_do_commandf (sd, "memory-region 0x90000,0x70000"); /* HIGH ROM.  */
 
   /* Check for/establish the a reference program image.  */
-  if (sim_analyze_program (sd,
-			   (STATE_PROG_ARGV (sd) != NULL
-			    ? *STATE_PROG_ARGV (sd)
-			    : NULL), abfd) != SIM_RC_OK)
+  if (sim_analyze_program (sd, STATE_PROG_FILE (sd), abfd) != SIM_RC_OK)
     {
       sim_state_free (sd);
       return 0;
@@ -566,8 +568,13 @@ put_op (SIM_DESC sd, MSP430_Opcode_Decoded *opc, int n, int val)
 	      switch (HWMULT (sd, hwmult_type))
 		{
 		case UNSIGN_32:
-		  HWMULT (sd, hwmult_result) = HWMULT (sd, hwmult_op1) * HWMULT (sd, hwmult_op2);
-		  HWMULT (sd, hwmult_signed_result) = (signed) HWMULT (sd, hwmult_result);
+		  a = HWMULT (sd, hwmult_op1);
+		  b = HWMULT (sd, hwmult_op2);
+		  /* For unsigned 32-bit multiplication of 16-bit operands, an
+		     explicit cast is required to prevent any implicit
+		     sign-extension.  */
+		  HWMULT (sd, hwmult_result) = (uint32_t) a * (uint32_t) b;
+		  HWMULT (sd, hwmult_signed_result) = a * b;
 		  HWMULT (sd, hwmult_accumulator) = HWMULT (sd, hwmult_signed_accumulator) = 0;
 		  break;
 
@@ -575,13 +582,16 @@ put_op (SIM_DESC sd, MSP430_Opcode_Decoded *opc, int n, int val)
 		  a = sign_ext (HWMULT (sd, hwmult_op1), 16);
 		  b = sign_ext (HWMULT (sd, hwmult_op2), 16);
 		  HWMULT (sd, hwmult_signed_result) = a * b;
-		  HWMULT (sd, hwmult_result) = (unsigned) HWMULT (sd, hwmult_signed_result);
+		  HWMULT (sd, hwmult_result) = (uint32_t) a * (uint32_t) b;
 		  HWMULT (sd, hwmult_accumulator) = HWMULT (sd, hwmult_signed_accumulator) = 0;
 		  break;
 
 		case UNSIGN_MAC_32:
-		  HWMULT (sd, hwmult_accumulator) += HWMULT (sd, hwmult_op1) * HWMULT (sd, hwmult_op2);
-		  HWMULT (sd, hwmult_signed_accumulator) += HWMULT (sd, hwmult_op1) * HWMULT (sd, hwmult_op2);
+		  a = HWMULT (sd, hwmult_op1);
+		  b = HWMULT (sd, hwmult_op2);
+		  HWMULT (sd, hwmult_accumulator)
+		    += (uint32_t) a * (uint32_t) b;
+		  HWMULT (sd, hwmult_signed_accumulator) += a * b;
 		  HWMULT (sd, hwmult_result) = HWMULT (sd, hwmult_accumulator);
 		  HWMULT (sd, hwmult_signed_result) = HWMULT (sd, hwmult_signed_accumulator);
 		  break;
@@ -589,7 +599,8 @@ put_op (SIM_DESC sd, MSP430_Opcode_Decoded *opc, int n, int val)
 		case SIGN_MAC_32:
 		  a = sign_ext (HWMULT (sd, hwmult_op1), 16);
 		  b = sign_ext (HWMULT (sd, hwmult_op2), 16);
-		  HWMULT (sd, hwmult_accumulator) += a * b;
+		  HWMULT (sd, hwmult_accumulator)
+		    += (uint32_t) a * (uint32_t) b;
 		  HWMULT (sd, hwmult_signed_accumulator) += a * b;
 		  HWMULT (sd, hwmult_result) = HWMULT (sd, hwmult_accumulator);
 		  HWMULT (sd, hwmult_signed_result) = HWMULT (sd, hwmult_signed_accumulator);
@@ -648,10 +659,13 @@ put_op (SIM_DESC sd, MSP430_Opcode_Decoded *opc, int n, int val)
 	      switch (HWMULT (sd, hw32mult_type))
 		{
 		case UNSIGN_64:
-		  HWMULT (sd, hw32mult_result) = HWMULT (sd, hw32mult_op1) * HWMULT (sd, hw32mult_op2);
+		  HWMULT (sd, hw32mult_result)
+		    = (uint64_t) HWMULT (sd, hw32mult_op1)
+		    * (uint64_t) HWMULT (sd, hw32mult_op2);
 		  break;
 		case SIGN_64:
-		  HWMULT (sd, hw32mult_result) = sign_ext (HWMULT (sd, hw32mult_op1), 32)
+		  HWMULT (sd, hw32mult_result)
+		    = sign_ext (HWMULT (sd, hw32mult_op1), 32)
 		    * sign_ext (HWMULT (sd, hw32mult_op2), 32);
 		  break;
 		}

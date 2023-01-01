@@ -1,5 +1,5 @@
 /* Target operations for the remote server for GDB.
-   Copyright (C) 2002-2020 Free Software Foundation, Inc.
+   Copyright (C) 2002-2022 Free Software Foundation, Inc.
 
    Contributed by MontaVista Software.
 
@@ -35,7 +35,7 @@ set_desired_thread ()
   client_state &cs = get_client_state ();
   thread_info *found = find_thread_ptid (cs.general_thread);
 
-  current_thread = found;
+  switch_to_thread (found);
   return (current_thread != NULL);
 }
 
@@ -101,7 +101,7 @@ prepare_to_access_memory (void)
       return 1;
     }
 
-  current_thread = thread;
+  switch_to_thread (thread);
   cs.general_thread = ptid_of (thread);
 
   return 0;
@@ -160,8 +160,8 @@ target_write_memory (CORE_ADDR memaddr, const unsigned char *myaddr,
 }
 
 ptid_t
-mywait (ptid_t ptid, struct target_waitstatus *ourstatus, int options,
-	int connected_wait)
+mywait (ptid_t ptid, struct target_waitstatus *ourstatus,
+	target_wait_flags options, int connected_wait)
 {
   ptid_t ret;
 
@@ -172,8 +172,8 @@ mywait (ptid_t ptid, struct target_waitstatus *ourstatus, int options,
 
   /* We don't expose _LOADED events to gdbserver core.  See the
      `dlls_changed' global.  */
-  if (ourstatus->kind == TARGET_WAITKIND_LOADED)
-    ourstatus->kind = TARGET_WAITKIND_STOPPED;
+  if (ourstatus->kind () == TARGET_WAITKIND_LOADED)
+    ourstatus->set_stopped (GDB_SIGNAL_0);
 
   /* If GDB is connected through TCP/serial, then GDBserver will most
      probably be running on its own terminal/console, so it's nice to
@@ -183,13 +183,13 @@ mywait (ptid_t ptid, struct target_waitstatus *ourstatus, int options,
      regular GDB output, in that same terminal.  */
   if (!remote_connection_is_stdio ())
     {
-      if (ourstatus->kind == TARGET_WAITKIND_EXITED)
+      if (ourstatus->kind () == TARGET_WAITKIND_EXITED)
 	fprintf (stderr,
-		 "\nChild exited with status %d\n", ourstatus->value.integer);
-      else if (ourstatus->kind == TARGET_WAITKIND_SIGNALLED)
+		 "\nChild exited with status %d\n", ourstatus->exit_status ());
+      else if (ourstatus->kind () == TARGET_WAITKIND_SIGNALLED)
 	fprintf (stderr, "\nChild terminated with signal = 0x%x (%s)\n",
-		 gdb_signal_to_host (ourstatus->value.sig),
-		 gdb_signal_to_name (ourstatus->value.sig));
+		 gdb_signal_to_host (ourstatus->sig ()),
+		 gdb_signal_to_name (ourstatus->sig ()));
     }
 
   if (connected_wait)
@@ -220,7 +220,8 @@ target_stop_and_wait (ptid_t ptid)
 /* See target/target.h.  */
 
 ptid_t
-target_wait (ptid_t ptid, struct target_waitstatus *status, int options)
+target_wait (ptid_t ptid, struct target_waitstatus *status,
+	     target_wait_flags options)
 {
   return the_target->wait (ptid, status, options);
 }
@@ -275,26 +276,23 @@ set_target_ops (process_stratum_target *target)
 
 /* Convert pid to printable format.  */
 
-const char *
+std::string
 target_pid_to_str (ptid_t ptid)
 {
-  static char buf[80];
-
   if (ptid == minus_one_ptid)
-    xsnprintf (buf, sizeof (buf), "<all threads>");
+    return string_printf("<all threads>");
   else if (ptid == null_ptid)
-    xsnprintf (buf, sizeof (buf), "<null thread>");
+    return string_printf("<null thread>");
   else if (ptid.tid () != 0)
-    xsnprintf (buf, sizeof (buf), "Thread %d.0x%lx",
-	       ptid.pid (), ptid.tid ());
+    return string_printf("Thread %d.0x%s",
+			 ptid.pid (),
+			 phex_nz (ptid.tid (), sizeof (ULONGEST)));
   else if (ptid.lwp () != 0)
-    xsnprintf (buf, sizeof (buf), "LWP %d.%ld",
-	       ptid.pid (), ptid.lwp ());
+    return string_printf("LWP %d.%ld",
+			 ptid.pid (), ptid.lwp ());
   else
-    xsnprintf (buf, sizeof (buf), "Process %d",
-	       ptid.pid ());
-
-  return buf;
+    return string_printf("Process %d",
+			 ptid.pid ());
 }
 
 int
@@ -463,6 +461,26 @@ process_stratum_target::supports_read_offsets ()
   return false;
 }
 
+bool
+process_stratum_target::supports_memory_tagging ()
+{
+  return false;
+}
+
+bool
+process_stratum_target::fetch_memtags (CORE_ADDR address, size_t len,
+				       gdb::byte_vector &tags, int type)
+{
+  gdb_assert_not_reached ("target op fetch_memtags not supported");
+}
+
+bool
+process_stratum_target::store_memtags (CORE_ADDR address, size_t len,
+				       const gdb::byte_vector &tags, int type)
+{
+  gdb_assert_not_reached ("target op store_memtags not supported");
+}
+
 int
 process_stratum_target::read_offsets (CORE_ADDR *text, CORE_ADDR *data)
 {
@@ -482,12 +500,6 @@ process_stratum_target::get_tls_address (thread_info *thread,
 					 CORE_ADDR *address)
 {
   gdb_assert_not_reached ("target op get_tls_address not supported");
-}
-
-void
-process_stratum_target::hostio_last_error (char *buf)
-{
-  hostio_last_error_from_errno (buf);
 }
 
 bool
@@ -599,7 +611,8 @@ process_stratum_target::read_loadmap (const char *annex,
 }
 
 void
-process_stratum_target::process_qsupported (char **features, int count)
+process_stratum_target::process_qsupported
+  (gdb::array_view<const char * const> features)
 {
   /* Nop.  */
 }
@@ -761,7 +774,7 @@ process_stratum_target::supports_pid_to_exec_file ()
   return false;
 }
 
-char *
+const char *
 process_stratum_target::pid_to_exec_file (int pid)
 {
   gdb_assert_not_reached ("target op pid_to_exec_file not supported");
@@ -820,6 +833,18 @@ process_stratum_target::thread_handle (ptid_t ptid, gdb_byte **handle,
 				       int *handle_len)
 {
   return false;
+}
+
+thread_info *
+process_stratum_target::thread_pending_parent (thread_info *thread)
+{
+  return nullptr;
+}
+
+thread_info *
+process_stratum_target::thread_pending_child (thread_info *thread)
+{
+  return nullptr;
 }
 
 bool

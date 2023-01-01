@@ -1,6 +1,6 @@
 /* Target-dependent code for the CSKY architecture, for GDB.
 
-   Copyright (C) 2010-2020 Free Software Foundation, Inc.
+   Copyright (C) 2010-2022 Free Software Foundation, Inc.
 
    Contributed by C-SKY Microsystems and Mentor Graphics.
 
@@ -162,7 +162,7 @@ csky_write_pc (regcache *regcache, CORE_ADDR val)
 
 /* C-Sky ABI register names.  */
 
-static const char *csky_register_names[] =
+static const char * const csky_register_names[] =
 {
   /* General registers 0 - 31.  */
   "r0",  "r1",  "r2",  "r3",  "r4",  "r5",  "r6",  "r7",
@@ -235,9 +235,6 @@ static const char *csky_register_names[] =
 static const char *
 csky_register_name (struct gdbarch *gdbarch, int reg_nr)
 {
-  if (tdesc_has_registers (gdbarch_target_desc (gdbarch)))
-    return tdesc_register_name (gdbarch, reg_nr);
-
   if (reg_nr < 0)
     return NULL;
 
@@ -266,7 +263,7 @@ csky_vector_type (struct gdbarch *gdbarch)
   append_composite_type_field (t, "u8",
 			       init_vector_type (bt->builtin_int8, 16));
 
-  TYPE_VECTOR (t) = 1;
+  t->set_is_vector (true);
   t->set_name ("builtin_type_vec128i");
 
   return t;
@@ -332,7 +329,6 @@ csky_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   int argnum;
   int argreg = CSKY_ABI_A0_REGNUM;
   int last_arg_regnum = CSKY_ABI_LAST_ARG_REGNUM;
-  int need_dummy_stack = 0;
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   std::vector<stack_item> stack_items;
 
@@ -365,7 +361,7 @@ csky_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
       arg_type = check_typedef (value_type (args[argnum]));
       len = TYPE_LENGTH (arg_type);
-      val = value_contents (args[argnum]);
+      val = value_contents (args[argnum]).data ();
 
       /* Copy the argument to argument registers or the dummy stack.
 	 Large arguments are split between registers and stack.
@@ -402,7 +398,6 @@ csky_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 		{
 		  /* The argument should be pushed onto the dummy stack.  */
 		  stack_items.emplace_back (4, val);
-		  need_dummy_stack += 4;
 		}
 	      len -= partial_len;
 	      val += partial_len;
@@ -502,7 +497,7 @@ struct csky_unwind_cache
   int framereg;
 
   /* Saved register offsets.  */
-  struct trad_frame_saved_reg *saved_regs;
+  trad_frame_saved_reg *saved_regs;
 };
 
 /* Do prologue analysis, returning the PC of the first instruction
@@ -805,21 +800,18 @@ csky_analyze_prologue (struct gdbarch *gdbarch,
 	  else if (CSKY_32_IS_PUSH (insn))
 	    {
 	      /* Push for 32_bit.  */
-	      int offset = 0;
 	      if (CSKY_32_IS_PUSH_R29 (insn))
 		{
 		  stacksize += 4;
 		  register_offsets[29] = stacksize;
 		  if (csky_debug)
 		    print_savedreg_msg (29, register_offsets, false);
-		  offset += 4;
 		}
 	      if (CSKY_32_PUSH_LIST2 (insn))
 		{
 		  int num = CSKY_32_PUSH_LIST2 (insn);
 		  int tmp = 0;
 		  stacksize += num * 4;
-		  offset += num * 4;
 		  if (csky_debug)
 		    {
 		      fprintf_unfiltered (gdb_stdlog,
@@ -845,14 +837,12 @@ csky_analyze_prologue (struct gdbarch *gdbarch,
 		  register_offsets[15] = stacksize;
 		  if (csky_debug)
 		    print_savedreg_msg (15, register_offsets, false);
-		  offset += 4;
 		}
 	      if (CSKY_32_PUSH_LIST1 (insn))
 		{
 		  int num = CSKY_32_PUSH_LIST1 (insn);
 		  int tmp = 0;
 		  stacksize += num * 4;
-		  offset += num * 4;
 		  if (csky_debug)
 		    {
 		      fprintf_unfiltered (gdb_stdlog,
@@ -1459,17 +1449,17 @@ csky_analyze_prologue (struct gdbarch *gdbarch,
 	{
 	  if (register_offsets[rn] >= 0)
 	    {
-	      this_cache->saved_regs[rn].addr
-		= this_cache->prev_sp - register_offsets[rn];
+	      this_cache->saved_regs[rn].set_addr (this_cache->prev_sp
+						   - register_offsets[rn]);
 	      if (csky_debug)
 		{
 		  CORE_ADDR rn_value = read_memory_unsigned_integer (
-		    this_cache->saved_regs[rn].addr, 4, byte_order);
+		    this_cache->saved_regs[rn].addr (), 4, byte_order);
 		  fprintf_unfiltered (gdb_stdlog, "Saved register %s "
 				      "stored at 0x%08lx, value=0x%08lx\n",
 				      csky_register_names[rn],
 				      (unsigned long)
-					this_cache->saved_regs[rn].addr,
+					this_cache->saved_regs[rn].addr (),
 				      (unsigned long) rn_value);
 		}
 	    }
@@ -1871,7 +1861,7 @@ csky_frame_unwind_cache (struct frame_info *this_frame)
 			    func_end, this_frame, cache, lr_type);
 
   /* gdbarch_sp_regnum contains the value and not the address.  */
-  trad_frame_set_value (cache->saved_regs, sp_regnum, cache->prev_sp);
+  cache->saved_regs[sp_regnum].set_value (cache->prev_sp);
   return cache;
 }
 
@@ -1916,6 +1906,7 @@ csky_frame_prev_register (struct frame_info *this_frame,
    unwinder.  */
 
 static const struct frame_unwind csky_unwind_cache = {
+  "cski prologue",
   NORMAL_FRAME,
   default_frame_unwind_stop_reason,
   csky_frame_this_id,
@@ -1998,7 +1989,8 @@ csky_stub_prev_register (struct frame_info *this_frame,
 				       prev_regnum);
 }
 
-struct frame_unwind csky_stub_unwind = {
+static frame_unwind csky_stub_unwind = {
+  "csky stub",
   NORMAL_FRAME,
   default_frame_unwind_stop_reason,
   csky_stub_this_id,
@@ -2165,7 +2157,6 @@ static struct gdbarch *
 csky_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 {
   struct gdbarch *gdbarch;
-  struct gdbarch_tdep *tdep;
 
   /* Find a candidate among the list of pre-declared architectures.  */
   arches = gdbarch_list_lookup_by_info (arches, &info);
@@ -2174,7 +2165,7 @@ csky_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* None found, create a new architecture from the information
      provided.  */
-  tdep = XCNEW (struct gdbarch_tdep);
+  csky_gdbarch_tdep *tdep = new csky_gdbarch_tdep;
   gdbarch = gdbarch_alloc (&info, tdep);
 
   /* Target data types.  */

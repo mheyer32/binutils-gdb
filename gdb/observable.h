@@ -1,6 +1,6 @@
 /* Observers
 
-   Copyright (C) 2016-2020 Free Software Foundation, Inc.
+   Copyright (C) 2016-2022 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,11 +22,12 @@
 
 #include "gdbsupport/observable.h"
 
-struct bpstats;
+struct bpstat;
 struct so_list;
 struct objfile;
 struct thread_info;
 struct inferior;
+struct process_stratum_target;
 struct trace_state_variable;
 
 namespace gdb
@@ -49,7 +50,7 @@ namespace observers
    condition that is not met.  If the breakpoint has any associated
    commands list, the commands are executed after the notification is
    emitted.  */
-extern observable<struct bpstats */* bs */, int /* print_frame */> normal_stop;
+extern observable<struct bpstat */* bs */, int /* print_frame */> normal_stop;
 
 /* The inferior was stopped by a signal.  */
 extern observable<enum gdb_signal /* siggnal */> signal_received;
@@ -86,8 +87,10 @@ extern observable<> executable_changed;
    instruction.  For 'attach' and 'core', gdb calls this observer
    immediately after connecting to the inferior, and before any
    information on the inferior has been printed.  */
-extern observable<struct target_ops */* target */,
-		  int /* from_tty */> inferior_created;
+extern observable<inferior */* inferior */> inferior_created;
+
+/* The inferior INF has exec'ed a new executable file.  */
+extern observable<struct inferior */* inf */> inferior_execd;
 
 /* The status of process record for inferior inferior in gdb has
    changed.  The process record is started if STARTED is true, and
@@ -165,8 +168,9 @@ extern observable<struct gdbarch */* newarch */> architecture_changed;
 
 /* The thread's ptid has changed.  The OLD_PTID parameter specifies
    the old value, and NEW_PTID specifies the new value.  */
-extern observable<ptid_t /* old_ptid */, ptid_t /* new_ptid */>
-    thread_ptid_changed;
+extern observable<process_stratum_target * /* target */,
+		  ptid_t /* old_ptid */, ptid_t /* new_ptid */>
+  thread_ptid_changed;
 
 /* The inferior INF has been added to the list of inferiors.  At
    this point, it might not be associated with any process.  */
@@ -237,15 +241,20 @@ extern observable<struct frame_info */* frame */, int /* regnum */>
 extern observable<user_selected_what /* selection */>
     user_selected_context_changed;
 
-/* This is notified when the source styling setting has changed and
-   should be reconsulted.  */
-extern observable<> source_styling_changed;
+/* This is notified when a styling setting has changed, content may need
+   to be updated based on the new settings.  */
+extern observable<> styling_changed;
 
 /* The CLI's notion of the current source has changed.  This differs
    from user_selected_context_changed in that it is also set by the
    "list" command.  */
-
 extern observable<> current_source_symtab_and_line_changed;
+
+/* Called when GDB is about to exit.  */
+extern observable<int> gdb_exiting;
+
+/* When a connection is removed.  */
+extern observable<process_stratum_target */* target */> connection_removed;
 
 } /* namespace observers */
 

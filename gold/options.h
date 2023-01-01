@@ -1,6 +1,6 @@
 // options.h -- handle command line options for gold  -*- C++ -*-
 
-// Copyright (C) 2006-2020 Free Software Foundation, Inc.
+// Copyright (C) 2006-2022 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -611,7 +611,7 @@ class Search_directory
   // We need a default constructor because we put this in a
   // std::vector.
   Search_directory()
-    : name_(NULL), put_in_sysroot_(false), is_in_sysroot_(false)
+    : name_(), put_in_sysroot_(false), is_in_sysroot_(false)
   { }
 
   // This is the usual constructor.
@@ -747,11 +747,20 @@ class General_options
   DEFINE_bool(Bshareable, options::ONE_DASH, '\0', false,
 	      N_("Generate shared library (alias for -G/-shared)"), NULL);
 
-  DEFINE_bool(Bsymbolic, options::ONE_DASH, '\0', false,
-	      N_("Bind defined symbols locally"), NULL);
+  DEFINE_special (Bno_symbolic, options::ONE_DASH, '\0',
+		  N_ ("Don't bind default visibility defined symbols locally "
+		      "for -shared (default)"),
+		  NULL);
 
-  DEFINE_bool(Bsymbolic_functions, options::ONE_DASH, '\0', false,
-	      N_("Bind defined function symbols locally"), NULL);
+  DEFINE_special (Bsymbolic_functions, options::ONE_DASH, '\0',
+		  N_ ("Bind default visibility defined function symbols "
+		      "locally for -shared"),
+		  NULL);
+
+  DEFINE_special (
+      Bsymbolic, options::ONE_DASH, '\0',
+      N_ ("Bind default visibility defined symbols locally for -shared"),
+      NULL);
 
   // c
 
@@ -1469,6 +1478,9 @@ class General_options
   DEFINE_bool(interpose, options::DASH_Z, '\0', false,
 	      N_("Mark object to interpose all DSOs but executable"),
 	      NULL);
+  DEFINE_bool(unique, options::DASH_Z, '\0', false,
+	      N_("Mark DSO to be loaded at most once, and only in the main namespace"),
+	      N_("Do not mark the DSO as one to be loaded only in the main namespace"));
   DEFINE_bool_alias(lazy, now, options::DASH_Z, '\0',
 		    N_("Mark object for lazy runtime binding"),
 		    NULL, true);
@@ -1737,6 +1749,21 @@ class General_options
   endianness() const
   { return this->endianness_; }
 
+  enum Bsymbolic_kind
+  {
+    BSYMBOLIC_NONE,
+    BSYMBOLIC_FUNCTIONS,
+    BSYMBOLIC_ALL,
+  };
+
+  bool
+  Bsymbolic() const
+  { return this->bsymbolic_ == BSYMBOLIC_ALL; }
+
+  bool
+  Bsymbolic_functions() const
+  { return this->bsymbolic_ == BSYMBOLIC_FUNCTIONS; }
+
   bool
   discard_all() const
   { return this->discard_locals_ == DISCARD_ALL; }
@@ -1870,6 +1897,8 @@ class General_options
   void
   copy_from_posdep_options(const Position_dependent_options&);
 
+  // Whether we bind default visibility defined symbols locally for -shared.
+  Bsymbolic_kind bsymbolic_;
   // Whether we printed version information.
   bool printed_version_;
   // Whether to mark the stack as executable.

@@ -1,6 +1,6 @@
 /* Native-dependent code for AMD64 BSD's.
 
-   Copyright (C) 2003-2020 Free Software Foundation, Inc.
+   Copyright (C) 2003-2022 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -60,7 +60,7 @@ amd64bsd_fetch_inferior_registers (struct regcache *regcache, int regnum)
   struct gdbarch *gdbarch = regcache->arch ();
   ptid_t ptid = regcache->ptid ();
 #if defined(PT_GETFSBASE) || defined(PT_GETGSBASE)
-  const struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  i386_gdbarch_tdep *tdep = (i386_gdbarch_tdep *) gdbarch_tdep (gdbarch);
 #endif
 
   if (regnum == -1 || amd64_native_gregset_supplies_p (gdbarch, regnum))
@@ -136,7 +136,7 @@ amd64bsd_store_inferior_registers (struct regcache *regcache, int regnum)
   struct gdbarch *gdbarch = regcache->arch ();
   ptid_t ptid = regcache->ptid ();
 #if defined(PT_SETFSBASE) || defined(PT_SETGSBASE)
-  const struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  i386_gdbarch_tdep *tdep = (i386_gdbarch_tdep *) gdbarch_tdep (gdbarch);
 #endif
 
   if (regnum == -1 || amd64_native_gregset_supplies_p (gdbarch, regnum))
@@ -144,12 +144,12 @@ amd64bsd_store_inferior_registers (struct regcache *regcache, int regnum)
       struct reg regs;
 
       if (gdb_ptrace (PT_GETREGS, ptid, (PTRACE_TYPE_ARG3) &regs, 0) == -1)
-        perror_with_name (_("Couldn't get registers"));
+	perror_with_name (_("Couldn't get registers"));
 
       amd64_collect_native_gregset (regcache, &regs, regnum);
 
       if (gdb_ptrace (PT_SETREGS, ptid, (PTRACE_TYPE_ARG3) &regs, 0) == -1)
-        perror_with_name (_("Couldn't write registers"));
+	perror_with_name (_("Couldn't write registers"));
 
       if (regnum != -1)
 	return;

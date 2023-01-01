@@ -1,6 +1,6 @@
 /* Manages interpreters for GDB, the GNU debugger.
 
-   Copyright (C) 2000-2020 Free Software Foundation, Inc.
+   Copyright (C) 2000-2022 Free Software Foundation, Inc.
 
    Written by Jim Ingham <jingham@apple.com> of Apple Computer, Inc.
 
@@ -37,14 +37,8 @@
 #include "interps.h"
 #include "completer.h"
 #include "top.h"		/* For command_loop.  */
-#include "continuations.h"
 #include "main.h"
-
-#ifdef __CYGWIN__
-#include <setjmp.h>
-//extern 
-jmp_buf pseudo;
-#endif
+#include "gdbsupport/buildargv.h"
 
 /* Each UI has its own independent set of interpreters.  */
 
@@ -341,27 +335,13 @@ interp_supports_command_editing (struct interp *interp)
 struct gdb_exception
 interp_exec (struct interp *interp, const char *command_str)
 {
-#ifdef __CYGWIN__
-  jmp_buf tmp;
-  memcpy(&tmp, &pseudo, sizeof(tmp));
-  int r = 0;
-#endif
-{
   struct ui_interp_info *ui_interp = get_current_interp_info ();
 
   /* See `command_interp' for why we do this.  */
   scoped_restore save_command_interp
     = make_scoped_restore (&ui_interp->command_interpreter, interp);
 
-#ifdef __CYGWIN__
-  r = setjmp(pseudo);
-  if (!r)
-#endif
   return interp->exec (command_str);
-}
-#ifdef __CYGWIN__
-  longjmp(tmp, r);
-#endif
 }
 
 /* A convenience routine that nulls out all the common command hooks.
@@ -389,6 +369,14 @@ interpreter_exec_cmd (const char *args, int from_tty)
   struct interp *old_interp, *interp_to_use;
   unsigned int nrules;
   unsigned int i;
+
+  /* Interpreters may clobber stdout/stderr (e.g.  in mi_interp::resume at time
+     of writing), preserve their state here.  */
+  scoped_restore save_stdout = make_scoped_restore (&gdb_stdout);
+  scoped_restore save_stderr = make_scoped_restore (&gdb_stderr);
+  scoped_restore save_stdlog = make_scoped_restore (&gdb_stdlog);
+  scoped_restore save_stdtarg = make_scoped_restore (&gdb_stdtarg);
+  scoped_restore save_stdtargerr = make_scoped_restore (&gdb_stdtargerr);
 
   if (args == NULL)
     error_no_arg (_("interpreter-exec command"));

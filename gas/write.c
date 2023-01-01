@@ -1,5 +1,5 @@
 /* write.c - emit .o file
-   Copyright (C) 1986-2020 Free Software Foundation, Inc.
+   Copyright (C) 1986-2022 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -69,16 +69,7 @@
 #endif
 
 #ifndef TC_VALIDATE_FIX_SUB
-#ifdef UNDEFINED_DIFFERENCE_OK
-/* The PA needs this for PIC code generation.  */
-#define TC_VALIDATE_FIX_SUB(FIX, SEG)			\
-  (md_register_arithmetic || (SEG) != reg_section)
-#else
-#define TC_VALIDATE_FIX_SUB(FIX, SEG)			\
-  ((md_register_arithmetic || (SEG) != reg_section)	\
-   && ((FIX)->fx_r_type == BFD_RELOC_GPREL32		\
-       || (FIX)->fx_r_type == BFD_RELOC_GPREL16))
-#endif
+#define TC_VALIDATE_FIX_SUB(FIX, SEG) 0
 #endif
 
 #ifndef TC_LINKRELAX_FIXUP
@@ -238,7 +229,7 @@ fix_new (fragS *frag,			/* Which frag?  */
 	 int baserel)
 {
   return fix_new_internal (frag, where, size, add_symbol,
-			   (symbolS *) NULL, offset, pcrel, r_type, baserel, FALSE);
+			   (symbolS *) NULL, offset, pcrel, r_type, baserel, false);
 }
 
 /* Create a fixup for an expression.  Currently we only support fixups
@@ -308,7 +299,7 @@ fix_new_exp (fragS *frag,		/* Which frag?  */
     }
 
   return fix_new_internal (frag, where, size, add, sub, off, pcrel,
-			   r_type, baserel, FALSE);
+			   r_type, baserel, false);
 }
 
 /* Create a fixup at the beginning of FRAG.  The arguments are the same
@@ -319,7 +310,7 @@ fix_at_start (fragS *frag, unsigned long size, symbolS *add_symbol,
 	      offsetT offset, int pcrel, RELOC_ENUM r_type)
 {
   return fix_new_internal (frag, 0, size, add_symbol,
-			   (symbolS *) NULL, offset, pcrel, r_type, TRUE, 0);
+			   (symbolS *) NULL, offset, pcrel, r_type, 0, true);
 }
 
 /* Generic function to determine whether a fixup requires a relocation.  */
@@ -598,7 +589,6 @@ size_seg (bfd *abfd ATTRIBUTE_UNUSED, asection *sec, void *xxx ATTRIBUTE_UNUSED)
 //  fprintf(stderr, "%s: %d\n", sec->name, size);
 #endif
 
-
   flags &= ~SEC_RELOC;
   x = bfd_set_section_flags (sec, flags);
   gas_assert (x);
@@ -748,7 +738,9 @@ resolve_reloc_expr_symbols (void)
 		 prevent the offset from overflowing the relocated field,
 	         unless it has enough bits to cover the whole address
 	         space.  */
-	      if (S_IS_LOCAL (sym) && !symbol_section_p (sym)
+	      if (S_IS_LOCAL (sym)
+		  && S_IS_DEFINED (sym)
+		  && !symbol_section_p (sym)
 		  && (sec->use_rela_p
 		      || (howto->partial_inplace
 			  && (!howto->pc_relative
@@ -859,7 +851,12 @@ adjust_reloc_syms (bfd *abfd ATTRIBUTE_UNUSED,
 	/* Since we're reducing to section symbols, don't attempt to reduce
 	   anything that's already using one.  */
 	if (symbol_section_p (sym))
-	  continue;
+	  {
+	    /* Mark the section symbol used in relocation so that it will
+	       be included in the symbol table.  */
+	    symbol_mark_used_in_reloc (sym);
+	    continue;
+	  }
 
 	symsec = S_GET_SEGMENT (sym);
 	if (symsec == NULL)
@@ -884,8 +881,7 @@ adjust_reloc_syms (bfd *abfd ATTRIBUTE_UNUSED,
 		    /* The GNU toolchain uses an extension for ELF: a
 		       section beginning with the magic string
 		       .gnu.linkonce is a linkonce section.  */
-		    && strncmp (segment_name (symsec), ".gnu.linkonce",
-				sizeof ".gnu.linkonce" - 1) == 0))
+		    && startswith (segment_name (symsec), ".gnu.linkonce")))
 	      continue;
 	  }
 
@@ -913,6 +909,15 @@ adjust_reloc_syms (bfd *abfd ATTRIBUTE_UNUSED,
   dump_section_relocs (abfd, sec, stderr);
 }
 
+void
+as_bad_subtract (fixS *fixp)
+{
+  as_bad_where (fixp->fx_file, fixp->fx_line,
+		_("can't resolve %s - %s"),
+		fixp->fx_addsy ? S_GET_NAME (fixp->fx_addsy) : "0",
+		S_GET_NAME (fixp->fx_subsy));
+}
+
 /* fixup_segment()
 
    Go through all the fixS's in a segment and see which ones can be
@@ -927,7 +932,6 @@ fixup_segment (fixS *fixP, segT this_segment)
 {
   valueT add_number;
   fragS *fragP;
-  segT add_symbol_segment = absolute_section;
 
   if (fixP != NULL && abs_section_sym == NULL)
     abs_section_sym = section_symbol (absolute_section);
@@ -958,6 +962,8 @@ fixup_segment (fixS *fixP, segT this_segment)
 
   for (; fixP; fixP = fixP->fx_next)
     {
+      segT add_symbol_segment = absolute_section;
+
 #ifdef DEBUG5
       fprintf (stderr, "\nprocessing fixup:\n");
       print_fixup (fixP);
@@ -1035,12 +1041,7 @@ fixup_segment (fixS *fixP, segT this_segment)
 		as_bad_where (fixP->fx_file, fixP->fx_line,
 			      _("register value used as expression"));
 	      else
-		as_bad_where (fixP->fx_file, fixP->fx_line,
-			      _("can't resolve `%s' {%s section} - `%s' {%s section}"),
-			      fixP->fx_addsy ? S_GET_NAME (fixP->fx_addsy) : "0",
-			      segment_name (add_symbol_segment),
-			      S_GET_NAME (fixP->fx_subsy),
-			      segment_name (sub_symbol_segment));
+		as_bad_subtract (fixP);
 	    }
 	  else if (sub_symbol_segment != undefined_section
 		   && ! bfd_is_com_section (sub_symbol_segment)
@@ -1112,12 +1113,15 @@ fixup_segment (fixS *fixP, segT this_segment)
 	      mask = 0;
 	      mask--;		/* Set all bits to one.  */
 	      mask <<= fixP->fx_size * 8 - (fixP->fx_signed ? 1 : 0);
-	      if ((add_number & mask) != 0 && (add_number & mask) != mask)
+	      if ((add_number & mask) != 0
+		  && (fixP->fx_signed
+		      ? (add_number & mask) != mask
+		      : (-add_number & mask) != 0))
 		{
 		  char buf[50], buf2[50];
-		  sprint_value (buf, fragP->fr_address + fixP->fx_where);
+		  bfd_sprintf_vma (stdoutput, buf, fragP->fr_address + fixP->fx_where);
 		  if (add_number > 1000)
-		    sprint_value (buf2, add_number);
+		    bfd_sprintf_vma (stdoutput, buf2, add_number);
 		  else
 		    sprintf (buf2, "%ld", (long) add_number);
 		  as_bad_where (fixP->fx_file, fixP->fx_line,
@@ -1296,6 +1300,13 @@ write_relocs (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
 	as_bad_where (fixp->fx_file, fixp->fx_line,
 		      _("internal error: fixup not contained within frag"));
 
+#ifdef obj_fixup_removed_symbol
+      if (fixp->fx_addsy && symbol_removed_p (fixp->fx_addsy))
+	obj_fixup_removed_symbol (&fixp->fx_addsy);
+      if (fixp->fx_subsy && symbol_removed_p (fixp->fx_subsy))
+	obj_fixup_removed_symbol (&fixp->fx_subsy);
+#endif
+
 #ifndef RELOC_EXPANSION_POSSIBLE
       *reloc = tc_gen_reloc (sec, fixp);
 #else
@@ -1315,7 +1326,34 @@ write_relocs (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
 		}
 	      r = r->next;
 	    }
-	  relocs[n++] = *reloc;
+#ifdef GAS_SORT_RELOCS
+	  if (n != 0 && (*reloc)->address < relocs[n - 1]->address)
+	    {
+	      size_t lo = 0;
+	      size_t hi = n - 1;
+	      bfd_vma look = (*reloc)->address;
+	      while (lo < hi)
+		{
+		  size_t mid = (lo + hi) / 2;
+		  if (relocs[mid]->address > look)
+		    hi = mid;
+		  else
+		    {
+		      lo = mid + 1;
+		      if (relocs[mid]->address == look)
+			break;
+		    }
+		}
+	      while (lo < hi && relocs[lo]->address == look)
+		lo++;
+	      memmove (relocs + lo + 1, relocs + lo,
+		       (n - lo) * sizeof (*relocs));
+	      n++;
+	      relocs[lo] = *reloc;
+	    }
+	  else
+#endif
+	    relocs[n++] = *reloc;
 	  install_reloc (sec, *reloc, fixp->fx_frag,
 			 fixp->fx_file, fixp->fx_line);
 #ifndef RELOC_EXPANSION_POSSIBLE
@@ -1455,7 +1493,7 @@ compress_debug (bfd *abfd, asection *sec, void *xxx ATTRIBUTE_UNUSED)
     return;
 
   section_name = bfd_section_name (sec);
-  if (strncmp (section_name, ".debug_", 7) != 0)
+  if (!startswith (section_name, ".debug_"))
     return;
 
   strm = compress_init ();
@@ -1760,14 +1798,18 @@ set_symtab (void)
   int nsyms;
   asymbol **asympp;
   symbolS *symp;
-  bfd_boolean result;
+  bool result;
 
   /* Count symbols.  We can't rely on a count made by the loop in
      write_object_file, because *_frob_file may add a new symbol or
-     two.  */
+     two.  Generate unused section symbols only if needed.  */
   nsyms = 0;
   for (symp = symbol_rootP; symp; symp = symbol_next (symp))
-    nsyms++;
+    if (!symbol_removed_p (symp)
+	&& (bfd_keep_unused_section_symbols (stdoutput)
+	    || !symbol_section_p (symp)
+	    || symbol_used_in_reloc_p (symp)))
+      nsyms++;
 
   if (nsyms)
     {
@@ -1776,15 +1818,23 @@ set_symtab (void)
 
       asympp = (asymbol **) bfd_alloc (stdoutput, amt);
       symp = symbol_rootP;
-      for (i = 0; i < nsyms; i++, symp = symbol_next (symp))
-	{
-	  asympp[i] = symbol_get_bfdsym (symp);
-	  if (asympp[i]->flags != BSF_SECTION_SYM
-	      || !(bfd_is_const_section (asympp[i]->section)
-		   && asympp[i]->section->symbol == asympp[i]))
-	    asympp[i]->flags |= BSF_KEEP;
-	  symbol_mark_written (symp);
-	}
+      for (i = 0; i < nsyms; symp = symbol_next (symp))
+	if (!symbol_removed_p (symp)
+	    && (bfd_keep_unused_section_symbols (stdoutput)
+		|| !symbol_section_p (symp)
+		|| symbol_used_in_reloc_p (symp)))
+	  {
+	    asympp[i] = symbol_get_bfdsym (symp);
+	    if (asympp[i]->flags != BSF_SECTION_SYM
+		|| !(bfd_is_const_section (asympp[i]->section)
+		     && asympp[i]->section->symbol == asympp[i]))
+	      asympp[i]->flags |= BSF_KEEP;
+	    symbol_mark_written (symp);
+	    /* Include this section symbol in the symbol table.  */
+	    if (symbol_section_p (symp))
+	      asympp[i]->flags |= BSF_SECTION_SYM_USED;
+	    i++;
+	  }
     }
   else
     asympp = 0;
@@ -1986,7 +2036,7 @@ maybe_generate_build_notes (void)
     return;
 
   /* Create a GNU Build Attribute section.  */
-  sec = subseg_new (GNU_BUILD_ATTRS_SECTION_NAME, FALSE);
+  sec = subseg_new (GNU_BUILD_ATTRS_SECTION_NAME, false);
   elf_section_type (sec) = SHT_NOTE;
   bfd_set_section_flags (sec, (SEC_READONLY | SEC_HAS_CONTENTS | SEC_DATA
 			       | SEC_OCTETS));
@@ -2039,7 +2089,7 @@ maybe_generate_build_notes (void)
 	/* Skip linkonce sections - we cannot use these section symbols as they may disappear.  */
 	&& (bsym->section->flags & (SEC_CODE | SEC_LINK_ONCE)) == SEC_CODE
 	/* Not all linkonce sections are flagged...  */
-	&& strncmp (S_GET_NAME (sym), ".gnu.linkonce", sizeof ".gnu.linkonce" - 1) != 0)
+	&& !startswith (S_GET_NAME (sym), ".gnu.linkonce"))
       {
 	/* Create a version note.  */
 	frag_now_fix ();
@@ -2074,6 +2124,10 @@ maybe_generate_build_notes (void)
 			   desc_reloc,
 			   bfd_section_size (bsym->section),
 			   note);
+
+	/* Mark the section symbol used in relocation so that it will be
+	   included in the symbol table.  */
+	symbol_mark_used_in_reloc (sym);
 
 	total_size += note_size;
 	/* FIXME: Maybe add a note recording the assembler command line and version ?  */
@@ -2327,7 +2381,7 @@ write_object_file (void)
   if (symbol_rootP)
     {
       symbolS *symp;
-      bfd_boolean skip_next_symbol = FALSE;
+      bool skip_next_symbol = false;
 
       for (symp = symbol_rootP; symp; symp = symbol_next (symp))
 	{
@@ -2339,7 +2393,7 @@ write_object_file (void)
 	      /* Don't do anything besides moving the value of the
 		 symbol from the GAS value-field to the BFD value-field.  */
 	      symbol_get_bfdsym (symp)->value = S_GET_VALUE (symp);
-	      skip_next_symbol = FALSE;
+	      skip_next_symbol = false;
 	      continue;
 	    }
 
@@ -2443,7 +2497,7 @@ write_object_file (void)
 	     symbol warned about.  Don't let anything object-format or
 	     target-specific muck with it; it's ready for output.  */
 	  if (symbol_get_bfdsym (symp)->flags & BSF_WARNING)
-	    skip_next_symbol = TRUE;
+	    skip_next_symbol = true;
 	}
     }
 
@@ -2696,7 +2750,7 @@ relax_segment (struct frag *segment_frag_root, segT segment, int pass)
 
 	    if (offset % fragP->fr_var != 0)
 	      {
-		as_warn_where (fragP->fr_file, fragP->fr_line,
+		as_bad_where (fragP->fr_file, fragP->fr_line,
 			      ngettext ("alignment padding (%lu byte) "
 					"not a multiple of %ld",
 					"alignment padding (%lu bytes) "
@@ -2862,7 +2916,9 @@ relax_segment (struct frag *segment_frag_root, segT segment, int pass)
 			  if (flag_warn_displacement)
 			    {
 			      char buf[50];
-			      sprint_value (buf, (addressT) lie->addnum);
+
+			      bfd_sprintf_vma (stdoutput, buf,
+					       (addressT) lie->addnum);
 			      as_warn_where (fragP->fr_file, fragP->fr_line,
 					     _(".word %s-%s+%s didn't fit"),
 					     S_GET_NAME (lie->add),

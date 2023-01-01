@@ -1,5 +1,5 @@
 /* debuginfod utilities for GDB.
-   Copyright (C) 2020 Free Software Foundation, Inc.
+   Copyright (C) 2020-2022 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,9 +18,37 @@
 
 #include "defs.h"
 #include <errno.h>
-#include "cli/cli-style.h"
 #include "gdbsupport/scoped_fd.h"
 #include "debuginfod-support.h"
+#include "gdbsupport/gdb_optional.h"
+#include "cli/cli-cmds.h"
+#include "cli/cli-style.h"
+#include "target.h"
+
+/* Set/show debuginfod commands.  */
+static cmd_list_element *set_debuginfod_prefix_list;
+static cmd_list_element *show_debuginfod_prefix_list;
+
+static const char debuginfod_on[] = "on";
+static const char debuginfod_off[] = "off";
+static const char debuginfod_ask[] = "ask";
+
+static const char *debuginfod_enabled_enum[] =
+{
+  debuginfod_on,
+  debuginfod_off,
+  debuginfod_ask,
+  nullptr
+};
+
+static const char *debuginfod_enabled =
+#if defined(HAVE_LIBDEBUGINFOD)
+  debuginfod_ask;
+#else
+  debuginfod_off;
+#endif
+
+static unsigned int debuginfod_verbose = 1;
 
 #ifndef HAVE_LIBDEBUGINFOD
 scoped_fd
@@ -40,46 +68,122 @@ debuginfod_debuginfo_query (const unsigned char *build_id,
 {
   return scoped_fd (-ENOSYS);
 }
+
+#define NO_IMPL _("Support for debuginfod is not compiled into GDB.")
+
 #else
 #include <elfutils/debuginfod.h>
 
-/* TODO: Use debuginfod API extensions instead of these globals.  */
-static std::string desc;
-static std::string fname;
-static bool has_printed;
+struct user_data
+{
+  user_data (const char *desc, const char *fname)
+    : desc (desc), fname (fname)
+  { }
+
+  const char * const desc;
+  const char * const fname;
+  gdb::optional<ui_out::progress_meter> meter;
+};
+
+/* Deleter for a debuginfod_client.  */
+
+struct debuginfod_client_deleter
+{
+  void operator() (debuginfod_client *c)
+  {
+    debuginfod_end (c);
+  }
+};
+
+using debuginfod_client_up
+  = std::unique_ptr<debuginfod_client, debuginfod_client_deleter>;
 
 static int
 progressfn (debuginfod_client *c, long cur, long total)
 {
+  user_data *data = static_cast<user_data *> (debuginfod_get_user_data (c));
+  gdb_assert (data != nullptr);
+
   if (check_quit_flag ())
     {
       printf_filtered ("Cancelling download of %s %ps...\n",
-		       desc.c_str (),
-		       styled_string (file_name_style.style (), fname.c_str ()));
+		       data->desc,
+		       styled_string (file_name_style.style (), data->fname));
       return 1;
     }
 
-  if (!has_printed && total != 0)
+  if (total == 0)
+    return 0;
+
+  if (!data->meter.has_value ())
     {
-      /* Print this message only once.  */
-      has_printed = true;
-      printf_filtered ("Downloading %s %ps...\n",
-		       desc.c_str (),
-		       styled_string (file_name_style.style (), fname.c_str ()));
+      float size_in_mb = 1.0f * total / (1024 * 1024);
+      string_file styled_filename (current_uiout->can_emit_style_escape ());
+      fprintf_styled (&styled_filename,
+		      file_name_style.style (),
+		      "%s",
+		      data->fname);
+      std::string message
+	= string_printf ("Downloading %.2f MB %s %s", size_in_mb, data->desc,
+			 styled_filename.c_str());
+      data->meter.emplace (current_uiout, message, 1);
     }
+
+  current_uiout->progress ((double)cur / (double)total);
 
   return 0;
 }
 
 static debuginfod_client *
-debuginfod_init ()
+get_debuginfod_client ()
 {
-  debuginfod_client *c = debuginfod_begin ();
+  static debuginfod_client_up global_client;
 
-  if (c != nullptr)
-    debuginfod_set_progressfn (c, progressfn);
+  if (global_client == nullptr)
+    {
+      global_client.reset (debuginfod_begin ());
 
-  return c;
+      if (global_client != nullptr)
+	debuginfod_set_progressfn (global_client.get (), progressfn);
+    }
+
+  return global_client.get ();
+}
+
+/* Check if debuginfod is enabled.  If configured to do so, ask the user
+   whether to enable debuginfod.  */
+
+static bool
+debuginfod_is_enabled ()
+{
+  const char *urls = getenv (DEBUGINFOD_URLS_ENV_VAR);
+
+  if (urls == nullptr || urls[0] == '\0'
+      || debuginfod_enabled == debuginfod_off)
+    return false;
+
+  if (debuginfod_enabled == debuginfod_ask)
+    {
+      int resp = nquery (_("\nThis GDB supports auto-downloading debuginfo " \
+			   "from the following URLs:\n%s\nEnable debuginfod " \
+			   "for this session? "),
+			 urls);
+      if (!resp)
+	{
+	  printf_filtered (_("Debuginfod has been disabled.\nTo make this " \
+			     "setting permanent, add \'set debuginfod " \
+			     "enabled off\' to .gdbinit.\n"));
+	  debuginfod_enabled = debuginfod_off;
+	  return false;
+	}
+
+      printf_filtered (_("Debuginfod has been enabled.\nTo make this " \
+			 "setting permanent, add \'set debuginfod enabled " \
+			 "on\' to .gdbinit.\n"));
+      debuginfod_enabled = debuginfod_on;
+    }
+
+  return true;
 }
 
 /* See debuginfod-support.h  */
@@ -90,33 +194,39 @@ debuginfod_source_query (const unsigned char *build_id,
 			 const char *srcpath,
 			 gdb::unique_xmalloc_ptr<char> *destname)
 {
-  if (getenv (DEBUGINFOD_URLS_ENV_VAR) == NULL)
+  if (!debuginfod_is_enabled ())
     return scoped_fd (-ENOSYS);
 
-  debuginfod_client *c = debuginfod_init ();
+  debuginfod_client *c = get_debuginfod_client ();
 
   if (c == nullptr)
     return scoped_fd (-ENOMEM);
 
-  desc = std::string ("source file");
-  fname = std::string (srcpath);
-  has_printed = false;
+  user_data data ("source file", srcpath);
+
+  debuginfod_set_user_data (c, &data);
+  gdb::optional<target_terminal::scoped_restore_terminal_state> term_state;
+  if (target_supports_terminal_ours ())
+    {
+      term_state.emplace ();
+      target_terminal::ours ();
+    }
 
   scoped_fd fd (debuginfod_find_source (c,
 					build_id,
 					build_id_len,
 					srcpath,
 					nullptr));
+  debuginfod_set_user_data (c, nullptr);
 
-  /* TODO: Add 'set debug debuginfod' command to control when error messages are shown.  */
-  if (fd.get () < 0 && fd.get () != -ENOENT)
+  if (debuginfod_verbose > 0 && fd.get () < 0 && fd.get () != -ENOENT)
     printf_filtered (_("Download failed: %s.  Continuing without source file %ps.\n"),
 		     safe_strerror (-fd.get ()),
 		     styled_string (file_name_style.style (),  srcpath));
-  else
-    destname->reset (xstrdup (srcpath));
 
-  debuginfod_end (c);
+  if (fd.get () >= 0)
+    *destname = make_unique_xstrdup (srcpath);
+
   return fd;
 }
 
@@ -128,28 +238,174 @@ debuginfod_debuginfo_query (const unsigned char *build_id,
 			    const char *filename,
 			    gdb::unique_xmalloc_ptr<char> *destname)
 {
-  if (getenv (DEBUGINFOD_URLS_ENV_VAR) == NULL)
+  if (!debuginfod_is_enabled ())
     return scoped_fd (-ENOSYS);
 
-  debuginfod_client *c = debuginfod_init ();
+  debuginfod_client *c = get_debuginfod_client ();
 
   if (c == nullptr)
     return scoped_fd (-ENOMEM);
 
-  desc = std::string ("separate debug info for");
-  fname = std::string (filename);
-  has_printed = false;
   char *dname = nullptr;
+  user_data data ("separate debug info for", filename);
 
-  scoped_fd fd (debuginfod_find_debuginfo (c, build_id, build_id_len, &dname));
+  debuginfod_set_user_data (c, &data);
+  gdb::optional<target_terminal::scoped_restore_terminal_state> term_state;
+  if (target_supports_terminal_ours ())
+    {
+      term_state.emplace ();
+      target_terminal::ours ();
+    }
 
-  if (fd.get () < 0 && fd.get () != -ENOENT)
+  scoped_fd fd (debuginfod_find_debuginfo (c, build_id, build_id_len,
+					   &dname));
+  debuginfod_set_user_data (c, nullptr);
+
+  if (debuginfod_verbose > 0 && fd.get () < 0 && fd.get () != -ENOENT)
     printf_filtered (_("Download failed: %s.  Continuing without debug info for %ps.\n"),
 		     safe_strerror (-fd.get ()),
 		     styled_string (file_name_style.style (),  filename));
 
-  destname->reset (dname);
-  debuginfod_end (c);
+  if (fd.get () >= 0)
+    destname->reset (dname);
+
   return fd;
 }
 #endif
+
+/* Set callback for "set debuginfod enabled".  */
+
+static void
+set_debuginfod_enabled (const char *value)
+{
+#if defined(HAVE_LIBDEBUGINFOD)
+  debuginfod_enabled = value;
+#else
+  error (NO_IMPL);
+#endif
+}
+
+/* Get callback for "set debuginfod enabled".  */
+
+static const char *
+get_debuginfod_enabled ()
+{
+  return debuginfod_enabled;
+}
+
+/* Show callback for "set debuginfod enabled".  */
+
+static void
+show_debuginfod_enabled (ui_file *file, int from_tty, cmd_list_element *cmd,
+			 const char *value)
+{
+  fprintf_filtered (file,
+		    _("Debuginfod functionality is currently set to "
+		      "\"%s\".\n"), debuginfod_enabled);
+}
+
+/* Set callback for "set debuginfod urls".  */
+
+static void
+set_debuginfod_urls (const std::string &urls)
+{
+#if defined(HAVE_LIBDEBUGINFOD)
+  if (setenv (DEBUGINFOD_URLS_ENV_VAR, urls.c_str (), 1) != 0)
+    warning (_("Unable to set debuginfod URLs: %s"), safe_strerror (errno));
+#else
+  error (NO_IMPL);
+#endif
+}
+
+/* Get callback for "set debuginfod urls".  */
+
+static const std::string&
+get_debuginfod_urls ()
+{
+  static std::string urls;
+#if defined(HAVE_LIBDEBUGINFOD)
+  const char *envvar = getenv (DEBUGINFOD_URLS_ENV_VAR);
+
+  if (envvar != nullptr)
+    urls = envvar;
+  else
+    urls.clear ();
+#endif
+
+  return urls;
+}
+
+/* Show callback for "set debuginfod urls".  */
+
+static void
+show_debuginfod_urls (ui_file *file, int from_tty, cmd_list_element *cmd,
+		      const char *value)
+{
+  if (value[0] == '\0')
+    fprintf_filtered (file, _("Debuginfod URLs have not been set.\n"));
+  else
+    fprintf_filtered (file, _("Debuginfod URLs are currently set to:\n%s\n"),
+		      value);
+}
+
+/* Show callback for "set debuginfod verbose".  */
+
+static void
+show_debuginfod_verbose_command (ui_file *file, int from_tty,
+				 cmd_list_element *cmd, const char *value)
+{
+  fprintf_filtered (file, _("Debuginfod verbose output is set to %s.\n"),
+		    value);
+}
+
+/* Register debuginfod commands.  */
+
+void _initialize_debuginfod ();
+void
+_initialize_debuginfod ()
+{
+  /* set/show debuginfod */
+  add_setshow_prefix_cmd ("debuginfod", class_run,
+			  _("Set debuginfod options."),
+			  _("Show debuginfod options."),
+			  &set_debuginfod_prefix_list,
+			  &show_debuginfod_prefix_list,
+			  &setlist, &showlist);
+
+  add_setshow_enum_cmd ("enabled", class_run, debuginfod_enabled_enum,
+			_("Set whether to use debuginfod."),
+			_("Show whether to use debuginfod."),
+			_("\
+When on, enable the use of debuginfod to download missing debug info and\n\
+source files."),
+			set_debuginfod_enabled,
+			get_debuginfod_enabled,
+			show_debuginfod_enabled,
+			&set_debuginfod_prefix_list,
+			&show_debuginfod_prefix_list);
+
+  /* set/show debuginfod urls */
+  add_setshow_string_noescape_cmd ("urls", class_run, _("\
+Set the list of debuginfod server URLs."), _("\
+Show the list of debuginfod server URLs."), _("\
+Manage the space-separated list of debuginfod server URLs that GDB will query \
+when missing debuginfo, executables or source files.\nThe default value is \
+copied from the DEBUGINFOD_URLS environment variable."),
+				   set_debuginfod_urls,
+				   get_debuginfod_urls,
+				   show_debuginfod_urls,
+				   &set_debuginfod_prefix_list,
+				   &show_debuginfod_prefix_list);
+
+  /* set/show debuginfod verbose */
+  add_setshow_zuinteger_cmd ("verbose", class_support,
+			     &debuginfod_verbose, _("\
+Set verbosity of debuginfod output."), _("\
+Show debuginfod debugging."), _("\
+When set to a non-zero value, display verbose output for each debuginfod \
+query.\nTo disable, set to zero.  Verbose output is displayed by default."),
+			     nullptr,
+			     show_debuginfod_verbose_command,
+			     &set_debuginfod_prefix_list,
+			     &show_debuginfod_prefix_list);
+}

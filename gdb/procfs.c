@@ -1,6 +1,6 @@
 /* Machine independent support for Solaris /proc (process file system) for GDB.
 
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright (C) 1999-2022 Free Software Foundation, Inc.
 
    Written by Michael Snyder at Cygnus Solutions.
    Based on work by Fred Fish, Stu Grossman, Geoff Noer, and others.
@@ -33,8 +33,6 @@
 #include "nat/fork-inferior.h"
 #include "gdbarch.h"
 
-#define _STRUCTURED_PROC 1	/* Should be done by configure script.  */
-
 #include <sys/procfs.h>
 #include <sys/fault.h>
 #include <sys/syscall.h>
@@ -42,7 +40,6 @@
 #include <signal.h>
 #include <ctype.h>
 #include "gdb_bfd.h"
-#include "inflow.h"
 #include "auxv.h"
 #include "procfs.h"
 #include "observable.h"
@@ -107,7 +104,7 @@ public:
   void detach (inferior *inf, int) override;
 
   void resume (ptid_t, int, enum gdb_signal) override;
-  ptid_t wait (ptid_t, struct target_waitstatus *, int) override;
+  ptid_t wait (ptid_t, struct target_waitstatus *, target_wait_flags) override;
 
   void fetch_registers (struct regcache *, int) override;
   void store_registers (struct regcache *, int) override;
@@ -138,7 +135,7 @@ public:
   int find_memory_regions (find_memory_region_ftype func, void *data)
     override;
 
-  char *make_corefile_notes (bfd *, int *) override;
+  gdb::unique_xmalloc_ptr<char> make_corefile_notes (bfd *, int *) override;
 
   bool info_proc (const char *, enum info_proc_what) override;
 
@@ -1314,8 +1311,8 @@ proc_set_current_signal (procinfo *pi, int signo)
   get_last_target_status (&wait_target, &wait_ptid, &wait_status);
   if (wait_target == &the_procfs_target
       && wait_ptid == inferior_ptid
-      && wait_status.kind == TARGET_WAITKIND_STOPPED
-      && wait_status.value.sig == gdb_signal_from_host (signo)
+      && wait_status.kind () == TARGET_WAITKIND_STOPPED
+      && wait_status.sig () == gdb_signal_from_host (signo)
       && proc_get_status (pi)
       && pi->prstatus.pr_lwp.pr_info.si_signo == signo
       )
@@ -1769,40 +1766,27 @@ procfs_target::attach (const char *args, int from_tty)
   if (pid == getpid ())
     error (_("Attaching GDB to itself is not a good idea..."));
 
-  if (from_tty)
+  /* Push the target if needed, ensure it gets un-pushed it if attach fails.  */
+  inferior *inf = current_inferior ();
+  target_unpush_up unpusher;
+  if (!inf->target_is_pushed (this))
     {
-      const char *exec_file = get_exec_file (0);
-
-      if (exec_file)
-	printf_filtered (_("Attaching to program `%s', %s\n"),
-			 exec_file, target_pid_to_str (ptid_t (pid)).c_str ());
-      else
-	printf_filtered (_("Attaching to %s\n"),
-			 target_pid_to_str (ptid_t (pid)).c_str ());
-
-      fflush (stdout);
+      inf->push_target (this);
+      unpusher.reset (this);
     }
+
+  target_announce_attach (from_tty, pid);
+
   do_attach (ptid_t (pid));
-  if (!target_is_pushed (this))
-    push_target (this);
+
+  /* Everything went fine, keep the target pushed.  */
+  unpusher.release ();
 }
 
 void
 procfs_target::detach (inferior *inf, int from_tty)
 {
-  int pid = inferior_ptid.pid ();
-
-  if (from_tty)
-    {
-      const char *exec_file;
-
-      exec_file = get_exec_file (0);
-      if (exec_file == NULL)
-	exec_file = "";
-
-      printf_filtered (_("Detaching from program: %s, %s\n"), exec_file,
-		       target_pid_to_str (ptid_t (pid)).c_str ());
-    }
+  target_announce_detach (from_tty);
 
   do_detach ();
 
@@ -2035,7 +2019,7 @@ procfs_target::store_registers (struct regcache *regcache, int regnum)
 
 ptid_t
 procfs_target::wait (ptid_t ptid, struct target_waitstatus *status,
-		     int options)
+		     target_wait_flags options)
 {
   /* First cut: loosely based on original version 2.1.  */
   procinfo *pi;
@@ -2248,7 +2232,7 @@ wait_again:
 		      printf_unfiltered (_("[%s exited]\n"),
 					 target_pid_to_str (retval).c_str ());
 		    delete_thread (find_thread_ptid (this, retval));
-		    status->kind = TARGET_WAITKIND_SPURIOUS;
+		    status->set_spurious ();
 		    return retval;
 		  }
 		else
@@ -2298,8 +2282,7 @@ wait_again:
 		    if (!in_thread_list (this, temp_ptid))
 		      add_thread (this, temp_ptid);
 
-		    status->kind = TARGET_WAITKIND_STOPPED;
-		    status->value.sig = GDB_SIGNAL_0;
+		    status->set_stopped (GDB_SIGNAL_0);
 		    return retval;
 		  }
 #endif
@@ -2346,7 +2329,7 @@ wait_again:
 	}
 
       if (status)
-	store_waitstatus (status, wstat);
+	*status = host_status_to_waitstatus (wstat);
     }
 
   return retval;
@@ -2854,8 +2837,9 @@ procfs_target::create_inferior (const char *exec_file,
       shell_file = tryname;
     }
 
-  if (!target_is_pushed (this))
-    push_target (this);
+  inferior *inf = current_inferior ();
+  if (!inf->target_is_pushed (this))
+    inf->push_target (this);
 
   pid = fork_inferior (exec_file, allargs, env, procfs_set_exec_trap,
 		       NULL, procfs_pre_trace, shell_file, NULL);
@@ -2867,13 +2851,6 @@ procfs_target::create_inferior (const char *exec_file,
   switch_to_thread (thr);
 
   procfs_init_inferior (pid);
-}
-
-/* An observer for the "inferior_created" event.  */
-
-static void
-procfs_inferior_created (struct target_ops *ops, int from_tty)
-{
 }
 
 /* Callback for update_thread_list.  Calls "add_thread".  */
@@ -3087,7 +3064,7 @@ procfs_target::insert_watchpoint (CORE_ADDR addr, int len,
 				  enum target_hw_bp_type type,
 				  struct expression *cond)
 {
-  if (!target_have_steppable_watchpoint
+  if (!target_have_steppable_watchpoint ()
       && !gdbarch_have_nonsteppable_watchpoint (target_gdbarch ()))
     /* When a hardware watchpoint fires off the PC will be left at
        the instruction following the one which caused the
@@ -3472,8 +3449,6 @@ void _initialize_procfs ();
 void
 _initialize_procfs ()
 {
-  gdb::observers::inferior_created.attach (procfs_inferior_created);
-
   add_com ("proc-trace-entry", no_class, proc_trace_sysentry_cmd,
 	   _("Give a trace of entries into the syscall."));
   add_com ("proc-trace-exit", no_class, proc_trace_sysexit_cmd,
@@ -3506,10 +3481,10 @@ procfs_first_available (void)
 
 /* ===================  GCORE .NOTE "MODULE" =================== */
 
-static char *
+static void
 procfs_do_thread_registers (bfd *obfd, ptid_t ptid,
-			    char *note_data, int *note_size,
-			    enum gdb_signal stop_signal)
+			    gdb::unique_xmalloc_ptr<char> &note_data,
+			    int *note_size, enum gdb_signal stop_signal)
 {
   struct regcache *regcache = get_thread_regcache (&the_procfs_target, ptid);
   gdb_gregset_t gregs;
@@ -3526,25 +3501,31 @@ procfs_do_thread_registers (bfd *obfd, ptid_t ptid,
   target_fetch_registers (regcache, -1);
 
   fill_gregset (regcache, &gregs, -1);
-  note_data = (char *) elfcore_write_lwpstatus (obfd,
-						note_data,
-						note_size,
-						merged_pid,
-						stop_signal,
-						&gregs);
+  note_data.reset (elfcore_write_lwpstatus (obfd,
+					    note_data.release (),
+					    note_size,
+					    merged_pid,
+					    stop_signal,
+					    &gregs));
   fill_fpregset (regcache, &fpregs, -1);
-  note_data = (char *) elfcore_write_prfpreg (obfd,
-					      note_data,
-					      note_size,
-					      &fpregs,
-					      sizeof (fpregs));
-
-  return note_data;
+  note_data.reset (elfcore_write_prfpreg (obfd,
+					  note_data.release (),
+					  note_size,
+					  &fpregs,
+					  sizeof (fpregs)));
 }
 
-struct procfs_corefile_thread_data {
+struct procfs_corefile_thread_data
+{
+  procfs_corefile_thread_data (bfd *obfd,
+			       gdb::unique_xmalloc_ptr<char> &note_data,
+			       int *note_size, gdb_signal stop_signal)
+    : obfd (obfd), note_data (note_data), note_size (note_size),
+      stop_signal (stop_signal)
+  {}
+
   bfd *obfd;
-  char *note_data;
+  gdb::unique_xmalloc_ptr<char> &note_data;
   int *note_size;
   enum gdb_signal stop_signal;
 };
@@ -3559,10 +3540,10 @@ procfs_corefile_thread_callback (procinfo *pi, procinfo *thread, void *data)
     {
       ptid_t ptid = ptid_t (pi->pid, thread->tid, 0);
 
-      args->note_data = procfs_do_thread_registers (args->obfd, ptid,
-						    args->note_data,
-						    args->note_size,
-						    args->stop_signal);
+      procfs_do_thread_registers (args->obfd, ptid,
+				  args->note_data,
+				  args->note_size,
+				  args->stop_signal);
     }
   return 0;
 }
@@ -3570,7 +3551,7 @@ procfs_corefile_thread_callback (procinfo *pi, procinfo *thread, void *data)
 static int
 find_signalled_thread (struct thread_info *info, void *data)
 {
-  if (info->suspend.stop_signal != GDB_SIGNAL_0
+  if (info->stop_signal () != GDB_SIGNAL_0
       && info->ptid.pid () == inferior_ptid.pid ())
     return 1;
 
@@ -3584,21 +3565,19 @@ find_stop_signal (void)
     iterate_over_threads (find_signalled_thread, NULL);
 
   if (info)
-    return info->suspend.stop_signal;
+    return info->stop_signal ();
   else
     return GDB_SIGNAL_0;
 }
 
-char *
+gdb::unique_xmalloc_ptr<char>
 procfs_target::make_corefile_notes (bfd *obfd, int *note_size)
 {
   gdb_gregset_t gregs;
   char fname[16] = {'\0'};
   char psargs[80] = {'\0'};
   procinfo *pi = find_procinfo_or_die (inferior_ptid.pid (), 0);
-  char *note_data = NULL;
-  const char *inf_args;
-  struct procfs_corefile_thread_data thread_args;
+  gdb::unique_xmalloc_ptr<char> note_data;
   enum gdb_signal stop_signal;
 
   if (get_exec_file (0))
@@ -3608,45 +3587,42 @@ procfs_target::make_corefile_notes (bfd *obfd, int *note_size)
       strncpy (psargs, get_exec_file (0), sizeof (psargs));
       psargs[sizeof (psargs) - 1] = 0;
 
-      inf_args = get_inferior_args ();
-      if (inf_args && *inf_args
-	  && (strlen (inf_args)
-	      < ((int) sizeof (psargs) - (int) strlen (psargs))))
+      const std::string &inf_args = current_inferior ()->args ();
+      if (!inf_args.empty () &&
+	  inf_args.length () < ((int) sizeof (psargs) - (int) strlen (psargs)))
 	{
 	  strncat (psargs, " ",
 		   sizeof (psargs) - strlen (psargs));
-	  strncat (psargs, inf_args,
+	  strncat (psargs, inf_args.c_str (),
 		   sizeof (psargs) - strlen (psargs));
 	}
     }
 
-  note_data = (char *) elfcore_write_prpsinfo (obfd,
-					       note_data,
-					       note_size,
-					       fname,
-					       psargs);
+  note_data.reset (elfcore_write_prpsinfo (obfd,
+					   note_data.release (),
+					   note_size,
+					   fname,
+					   psargs));
 
   stop_signal = find_stop_signal ();
 
   fill_gregset (get_current_regcache (), &gregs, -1);
-  note_data = elfcore_write_pstatus (obfd, note_data, note_size,
-				     inferior_ptid.pid (),
-				     stop_signal, &gregs);
+  note_data.reset (elfcore_write_pstatus (obfd, note_data.release (), note_size,
+					  inferior_ptid.pid (),
+					  stop_signal, &gregs));
 
-  thread_args.obfd = obfd;
-  thread_args.note_data = note_data;
-  thread_args.note_size = note_size;
-  thread_args.stop_signal = stop_signal;
+  procfs_corefile_thread_data thread_args (obfd, note_data, note_size,
+					   stop_signal);
   proc_iterate_over_threads (pi, procfs_corefile_thread_callback,
 			     &thread_args);
-  note_data = thread_args.note_data;
 
   gdb::optional<gdb::byte_vector> auxv =
-    target_read_alloc (current_top_target (), TARGET_OBJECT_AUXV, NULL);
+    target_read_alloc (current_inferior ()->top_target (),
+		       TARGET_OBJECT_AUXV, NULL);
   if (auxv && !auxv->empty ())
-    note_data = elfcore_write_note (obfd, note_data, note_size,
-				    "CORE", NT_AUXV, auxv->data (),
-				    auxv->size ());
+    note_data.reset (elfcore_write_note (obfd, note_data.release (), note_size,
+					 "CORE", NT_AUXV, auxv->data (),
+					 auxv->size ()));
 
   return note_data;
 }

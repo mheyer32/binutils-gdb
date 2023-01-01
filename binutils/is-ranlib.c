@@ -1,4 +1,4 @@
-/* Copyright (C) 2007-2020 Free Software Foundation, Inc.
+/* Copyright (C) 2007-2022 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -21,7 +21,6 @@
 
 extern int armain(int argc, char ** argv, int isran);
 int main(int argc, char ** argv);
-
 int main(int argc, char ** argv) {
 	armain(argc, argv, 1);
 }

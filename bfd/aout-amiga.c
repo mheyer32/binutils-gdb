@@ -52,22 +52,22 @@ extern PTR alloca PARAMS ((size_t));
 #endif
 
 
-bfd_boolean
+bool
 MY(final_link) PARAMS ((bfd *, struct bfd_link_info *));
 
-bfd_boolean
+bool
 amiga_final_link PARAMS ((bfd *, struct bfd_link_info *));
 #define MY_bfd_final_link amiga_final_link
 
 bfd_byte *
 get_relocated_section_contents PARAMS ((bfd *, struct bfd_link_info *,
-	struct bfd_link_order *, bfd_byte *, bfd_boolean, asymbol **));
+	struct bfd_link_order *, bfd_byte *, bool, asymbol **));
 #define MY_bfd_get_relocated_section_contents get_relocated_section_contents
 
 static unsigned long MY(get_mach) PARAMS ((enum machine_type));
-static bfd_boolean MY(write_object_contents) PARAMS ((bfd *));
-static bfd_boolean MY(set_sizes) PARAMS ((bfd *));
-static bfd_boolean MY(link_add_symbols) PARAMS ((bfd *, struct bfd_link_info *));
+static bool MY(write_object_contents) PARAMS ((bfd *));
+static bool MY(set_sizes) PARAMS ((bfd *));
+static bool MY(link_add_symbols) PARAMS ((bfd *, struct bfd_link_info *));
 #define MY_bfd_link_add_symbols aout_amiga_link_add_symbols
 
 static unsigned long
@@ -97,7 +97,7 @@ MY(get_mach) (
 #define SET_ARCH_MACH(ABFD, EXEC) \
   bfd_set_arch_mach (ABFD, bfd_arch_m68k, MY(get_mach) (N_MACHTYPE (EXEC)))
 
-static bfd_boolean
+static bool
 MY(write_object_contents) (
      bfd *abfd)
 {
@@ -128,18 +128,18 @@ MY(write_object_contents) (
 
   WRITE_HEADERS (abfd, execp);
 
-  return TRUE;
+  return true;
 }
 #define MY_write_object_contents MY(write_object_contents)
 
-static bfd_boolean
+static bool
 MY(set_sizes) (
      bfd *abfd)
 {
   adata (abfd).page_size = TARGET_PAGE_SIZE;
   adata (abfd).segment_size = TARGET_PAGE_SIZE;
   adata (abfd).exec_bytes_size = EXEC_BYTES_SIZE;
-  return TRUE;
+  return true;
 }
 #define MY_set_sizes MY(set_sizes)
 
@@ -147,7 +147,7 @@ MY(set_sizes) (
 #include "aout-target.h"
 
 /* Add symbols from an object file to the global hash table.  */
-static bfd_boolean
+static bool
 MY(link_add_symbols) (
      bfd *abfd,
      struct bfd_link_info *info)
@@ -158,7 +158,7 @@ MY(link_add_symbols) (
 }
 
 /* Public final_link routine.  */
-bfd_boolean
+bool
 MY(final_link) (
      bfd *abfd,
      struct bfd_link_info *info)

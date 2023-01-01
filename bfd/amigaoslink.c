@@ -103,18 +103,18 @@ BFDDECL int amiga_base_relative = 0;
 /* This one is used to indicate -resident linking */
 BFDDECL int amiga_resident = 0;
 
-bfd_boolean
+bool
 default_indirect_link_order PARAMS ((bfd *, struct bfd_link_info *,
-	 asection *, struct bfd_link_order *, bfd_boolean));
+	 asection *, struct bfd_link_order *, bool));
 bfd_byte *
 get_relocated_section_contents PARAMS ((bfd *, struct bfd_link_info *,
-	struct bfd_link_order *, bfd_byte *, bfd_boolean, asymbol **));
-bfd_boolean
+	struct bfd_link_order *, bfd_byte *, bool, asymbol **));
+bool
 amiga_final_link PARAMS ((bfd *, struct bfd_link_info *));
-bfd_boolean
+bool
 aout_amiga_final_link PARAMS ((bfd *, struct bfd_link_info *));
 
-bfd_boolean amiga_slurp_relocs PARAMS ((bfd *, sec_ptr, asymbol **));
+bool amiga_slurp_relocs PARAMS ((bfd *, sec_ptr, asymbol **));
 
 static bfd_reloc_status_type
 my_add_to PARAMS ((arelent *, PTR, int, int));
@@ -123,7 +123,7 @@ static bfd_reloc_status_type
 amiga_perform_reloc PARAMS ((bfd *, arelent *, PTR, sec_ptr, bfd *, char **));
 static bfd_reloc_status_type
 aout_perform_reloc PARAMS ((bfd *, arelent *, PTR, sec_ptr, bfd *, char **));
-static bfd_boolean
+static bool
 amiga_reloc_link_order PARAMS ((bfd *, struct bfd_link_info *, asection *,
 	struct bfd_link_order *));
 
@@ -525,7 +525,7 @@ get_relocated_section_contents (
      struct bfd_link_info *link_info,
      struct bfd_link_order *link_order,
      bfd_byte *data,
-     bfd_boolean relocateable,
+     bool relocateable,
      asymbol **symbols)
 {
   /* Get enough memory to hold the stuff.  */
@@ -574,7 +574,7 @@ get_relocated_section_contents (
 
   /* We're not relaxing the section, so just copy the size info.  */
   input_section->size = input_section->rawsize;
-//  input_section->reloc_done = TRUE;
+//  input_section->reloc_done = true;
 
   DPRINT(5,("GRSC: CanReloc\n"));
   reloc_count = bfd_canonicalize_reloc (input_bfd,
@@ -622,7 +622,7 @@ get_relocated_section_contents (
 		  ((*link_info->callbacks->undefined_symbol)
 			(link_info, bfd_asymbol_name (*(*parent)->sym_ptr_ptr),
 			 input_bfd, input_section, (*parent)->address,
-			 TRUE));
+			 true));
 //		    goto error_return;
 		  break;
 		case bfd_reloc_dangerous:
@@ -789,7 +789,7 @@ amiga_perform_reloc (
   asymbol *sym; /* Reloc is relative to sym */
   sec_ptr target_section; /* reloc is relative to this section */
   bfd_reloc_status_type ret;
-  bfd_boolean copy;
+  bool copy;
    int flags;
   DPRINT(5,("Entering APR\nflavour is %d (amiga_flavour=%d, aout_flavour=%d)\n",
 	    bfd_get_flavour (sec->owner), bfd_target_amiga_flavour,
@@ -820,7 +820,7 @@ amiga_perform_reloc (
       return bfd_reloc_undefined;
     }
 
-  relocation=0; flags=RELOC_SIGNED; copy=FALSE; ret=bfd_reloc_ok;
+  relocation=0; flags=RELOC_SIGNED; copy=false; ret=bfd_reloc_ok;
 
   DPRINT(5,("%s: size=%u\n",r->howto->name,bfd_get_reloc_size(r->howto)));
   switch (r->howto->type)
@@ -832,7 +832,7 @@ amiga_perform_reloc (
       else if (bfd_is_com_section(target_section)) /* ref to common */
 	{
 	  relocation=0;
-	  copy=TRUE;
+	  copy=true;
 	}
       else
 	{
@@ -846,7 +846,7 @@ amiga_perform_reloc (
 	    if (amiga_base_relative)
 	      amiga_update_target_section (target_section);
 	    relocation=0;
-	    copy=TRUE;
+	    copy=true;
   	  }
 	}
       break;
@@ -949,7 +949,7 @@ aout_perform_reloc (
   asymbol *sym; /* Reloc is relative to sym */
   sec_ptr target_section; /* reloc is relative to this section */
   bfd_reloc_status_type ret;
-  bfd_boolean copy;
+  bool copy;
   int flags;
 
   DPRINT(5,("Entering aout_perf_reloc\n"));
@@ -979,7 +979,7 @@ aout_perform_reloc (
       target_section=bfd_abs_section_ptr;
     }
 
-  relocation=0; flags=RELOC_SIGNED; copy=FALSE; ret=bfd_reloc_ok;
+  relocation=0; flags=RELOC_SIGNED; copy=false; ret=bfd_reloc_ok;
 
   DPRINT(10,("RELOC: %s: size=%u\n",r->howto->name,bfd_get_reloc_size(r->howto)));
   switch (r->howto->type)
@@ -1027,14 +1027,14 @@ aout_perform_reloc (
       else if (bfd_is_com_section(target_section)) /* ref to common */
 	{
 	  relocation=0;
-	  copy=TRUE;
+	  copy=true;
 	}
       else
 	{
 	  if (amiga_base_relative)
 	    amiga_update_target_section (target_section);
 	  relocation=0;
-	  copy=TRUE;
+	  copy=true;
 	}
       DPRINT(10,("target->out=%s(%lx), sec->out=%s(%lx), symbol=%s\n",
 		 target_section->output_section->name,
@@ -1136,7 +1136,7 @@ aout_perform_reloc (
 
 /* The final link routine, used both by Amiga and a.out backend */
 /* This is nearly a copy of linker.c/_bfd_generic_final_link */
-bfd_boolean
+bool
 amiga_final_link (
      bfd *abfd,
      struct bfd_link_info *info)
@@ -1147,14 +1147,14 @@ amiga_final_link (
   size_t outsymalloc;
   struct generic_write_global_symbol_info wginfo;
   struct bfd_link_hash_entry *h =
-    bfd_link_hash_lookup (info->hash, "___a4_init", FALSE, FALSE, TRUE);
+    bfd_link_hash_lookup (info->hash, "___a4_init", false, false, true);
 
   if (amiga_base_relative && h && h->type == bfd_link_hash_defined) {
-    AMIGA_DATA(abfd)->baserel = TRUE;
+    AMIGA_DATA(abfd)->baserel = true;
     AMIGA_DATA(abfd)->a4init = h->u.def.value;
   }
   else
-    AMIGA_DATA(abfd)->baserel = FALSE;
+    AMIGA_DATA(abfd)->baserel = false;
 
   DPRINT(5,("Entering final_link\n"));
 
@@ -1169,12 +1169,12 @@ amiga_final_link (
   for (o = abfd->sections; o != NULL; o = o->next)
     for (p = o->map_head.link_order; p != NULL; p = p->next)
       if (p->type == bfd_indirect_link_order)
-	p->u.indirect.section->linker_mark = TRUE;
+	p->u.indirect.section->linker_mark = true;
 
   /* Build the output symbol table.  */
   for (sub = info->input_bfds; sub != (bfd *) NULL; sub = sub->link.next)
     if (! _bfd_generic_link_output_symbols (abfd, sub, info, &outsymalloc))
-      return FALSE;
+      return false;
 
   DPRINT(10,("Did build output symbol table\n"));
 
@@ -1234,11 +1234,11 @@ amiga_final_link (
 		    {
 		      DPRINT(10,("Relsize<0.I..in bfd %s, sec %s\n",
 				 input_bfd->filename, input_section->name));
-		      return FALSE;
+		      return false;
 		    }
 		  relocs = (arelent **) bfd_malloc ((bfd_size_type) relsize);
 		  if (!relocs && relsize != 0)
-		    return FALSE;
+		    return false;
 		  symbols = _bfd_generic_link_get_symbols (input_bfd);
 		  reloc_count = bfd_canonicalize_reloc (input_bfd,
 							input_section,
@@ -1249,7 +1249,7 @@ amiga_final_link (
 		    {
 		      DPRINT(10,("Relsize<0.II..in bfd %s, sec %s\n",
 				 input_bfd->filename, input_section->name));
-		      return FALSE;
+		      return false;
 		    }
 		  BFD_ASSERT ((unsigned long) reloc_count
 			      == input_section->reloc_count);
@@ -1264,7 +1264,7 @@ amiga_final_link (
 	      amt *= sizeof (arelent *);
 	      o->orelocation = (arelent **) bfd_alloc (abfd, amt);
 	      if (!o->orelocation)
-		return FALSE;
+		return false;
 	      /* o->flags |= SEC_RELOC; There may be no relocs. This can
 		 be determined later only */
 	      /* Reset the count so that it can be used as an index
@@ -1290,16 +1290,16 @@ amiga_final_link (
 	    case bfd_section_reloc_link_order:
 	    case bfd_symbol_reloc_link_order:
 	      if (! amiga_reloc_link_order (abfd, info, o, p)) /* We use an own routine */
-		return FALSE;
+		return false;
 	      break;
 	    case bfd_indirect_link_order:
-	      if (! default_indirect_link_order (abfd, info, o, p, FALSE))
+	      if (! default_indirect_link_order (abfd, info, o, p, false))
 		/* Calls our get_relocated_section_contents */
-		return FALSE;
+		return false;
 	      break;
 	    default:
 	      if (! _bfd_default_link_order (abfd, info, o, p))
-		return FALSE;
+		return false;
 	      break;
 	    }
 	}
@@ -1308,16 +1308,16 @@ amiga_final_link (
   if (bfd_get_flavour(abfd)==bfd_target_amiga_flavour
 //      &&!info->relocateable
       )
-    AMIGA_DATA(abfd)->IsLoadFile = TRUE;
+    AMIGA_DATA(abfd)->IsLoadFile = true;
 
   DPRINT(10,("Leaving final_link\n"));
-  return TRUE;
+  return true;
 }
 
 
 /* Handle reloc link order.
    This is nearly a copy of linker.c/_bfd_generic_reloc_link_order */
-static bfd_boolean
+static bool
 amiga_reloc_link_order (
      bfd *abfd,
      struct bfd_link_info *info,
@@ -1339,7 +1339,7 @@ amiga_reloc_link_order (
   if (r == (arelent *) NULL)
     {
       DPRINT(5,("Leaving amiga_reloc_link, no mem\n"));
-      return FALSE;
+      return false;
     }
 
   r->address = link_order->offset;
@@ -1348,7 +1348,7 @@ amiga_reloc_link_order (
     {
       bfd_set_error (bfd_error_bad_value);
       DPRINT(5,("Leaving amiga_reloc_link, bad value\n"));
-      return FALSE;
+      return false;
     }
 
   /* Get the symbol to use for the relocation.  */
@@ -1361,17 +1361,17 @@ amiga_reloc_link_order (
       h = ((struct generic_link_hash_entry *)
 	   bfd_wrapped_link_hash_lookup (abfd, info,
 					 link_order->u.reloc.p->u.name,
-					 FALSE, FALSE, TRUE));
+					 false, false, true));
       if (h == (struct generic_link_hash_entry *) NULL
 	  || ! h->written)
 	{
 	  ((*info->callbacks->unattached_reloc)
 		 (info, link_order->u.reloc.p->u.name,
 		  (bfd *) NULL, (asection *) NULL, (bfd_vma) 0));
-//	    return FALSE;
+//	    return false;
 	  bfd_set_error (bfd_error_bad_value);
 	  DPRINT(5,("Leaving amiga_reloc_link, bad value in hash lookup\n"));
-	  return FALSE;
+	  return false;
 	}
       r->sym_ptr_ptr = &h->sym;
     }
@@ -1406,10 +1406,10 @@ amiga_reloc_link_order (
 
       if (ret!=bfd_reloc_ok)
 	{
-	  DPRINT(5,("Leaving amiga_reloc_link, value FALSE\n"));
-	  return FALSE;
+	  DPRINT(5,("Leaving amiga_reloc_link, value false\n"));
+	  return false;
 	}
     }
   DPRINT(5,("Leaving amiga_reloc_link\n"));
-  return TRUE;
+  return true;
 }

@@ -1,5 +1,5 @@
 /* Helper routines for C++ support in GDB.
-   Copyright (C) 2002-2020 Free Software Foundation, Inc.
+   Copyright (C) 2002-2022 Free Software Foundation, Inc.
 
    Contributed by MontaVista Software.
 
@@ -147,9 +147,9 @@ inspect_type (struct demangle_parse_info *info,
   name[ret_comp->u.s_name.len] = '\0';
 
   /* Ignore any typedefs that should not be substituted.  */
-  for (int i = 0; i < ARRAY_SIZE (ignore_typedefs); ++i)
+  for (const char *ignorable : ignore_typedefs)
     {
-      if (strcmp (name, ignore_typedefs[i]) == 0)
+      if (strcmp (name, ignorable) == 0)
 	return 0;
     }
 
@@ -661,10 +661,9 @@ cp_canonicalize_string (const char *string)
 
 static std::unique_ptr<demangle_parse_info>
 mangled_name_to_comp (const char *mangled_name, int options,
-		      void **memory, char **demangled_p)
+		      void **memory,
+		      gdb::unique_xmalloc_ptr<char> *demangled_p)
 {
-  char *demangled_name;
-
   /* If it looks like a v3 mangled name, then try to go directly
      to trees.  */
   if (mangled_name[0] == '_' && mangled_name[1] == 'Z')
@@ -684,22 +683,20 @@ mangled_name_to_comp (const char *mangled_name, int options,
 
   /* If it doesn't, or if that failed, then try to demangle the
      name.  */
-  demangled_name = gdb_demangle (mangled_name, options);
+  gdb::unique_xmalloc_ptr<char> demangled_name = gdb_demangle (mangled_name,
+							       options);
   if (demangled_name == NULL)
    return NULL;
   
   /* If we could demangle the name, parse it to build the component
      tree.  */
   std::unique_ptr<demangle_parse_info> info
-    = cp_demangled_name_to_comp (demangled_name, NULL);
+    = cp_demangled_name_to_comp (demangled_name.get (), NULL);
 
   if (info == NULL)
-    {
-      xfree (demangled_name);
-      return NULL;
-    }
+    return NULL;
 
-  *demangled_p = demangled_name;
+  *demangled_p = std::move (demangled_name);
   return info;
 }
 
@@ -709,7 +706,7 @@ char *
 cp_class_name_from_physname (const char *physname)
 {
   void *storage = NULL;
-  char *demangled_name = NULL;
+  gdb::unique_xmalloc_ptr<char> demangled_name;
   gdb::unique_xmalloc_ptr<char> ret;
   struct demangle_component *ret_comp, *prev_comp, *cur_comp;
   std::unique_ptr<demangle_parse_info> info;
@@ -735,8 +732,8 @@ cp_class_name_from_physname (const char *physname)
       case DEMANGLE_COMPONENT_RESTRICT_THIS:
       case DEMANGLE_COMPONENT_VOLATILE_THIS:
       case DEMANGLE_COMPONENT_VENDOR_TYPE_QUAL:
-        ret_comp = d_left (ret_comp);
-        break;
+	ret_comp = d_left (ret_comp);
+	break;
       default:
 	done = 1;
 	break;
@@ -763,8 +760,8 @@ cp_class_name_from_physname (const char *physname)
       case DEMANGLE_COMPONENT_QUAL_NAME:
       case DEMANGLE_COMPONENT_LOCAL_NAME:
 	prev_comp = cur_comp;
-        cur_comp = d_right (cur_comp);
-        break;
+	cur_comp = d_right (cur_comp);
+	break;
       case DEMANGLE_COMPONENT_TEMPLATE:
       case DEMANGLE_COMPONENT_NAME:
       case DEMANGLE_COMPONENT_CTOR:
@@ -789,7 +786,6 @@ cp_class_name_from_physname (const char *physname)
     }
 
   xfree (storage);
-  xfree (demangled_name);
   return ret.release ();
 }
 
@@ -811,11 +807,11 @@ unqualified_name_from_comp (struct demangle_component *comp)
       {
       case DEMANGLE_COMPONENT_QUAL_NAME:
       case DEMANGLE_COMPONENT_LOCAL_NAME:
-        ret_comp = d_right (ret_comp);
-        break;
+	ret_comp = d_right (ret_comp);
+	break;
       case DEMANGLE_COMPONENT_TYPED_NAME:
-        ret_comp = d_left (ret_comp);
-        break;
+	ret_comp = d_left (ret_comp);
+	break;
       case DEMANGLE_COMPONENT_TEMPLATE:
 	gdb_assert (last_template == NULL);
 	last_template = ret_comp;
@@ -828,8 +824,8 @@ unqualified_name_from_comp (struct demangle_component *comp)
       case DEMANGLE_COMPONENT_RESTRICT_THIS:
       case DEMANGLE_COMPONENT_VOLATILE_THIS:
       case DEMANGLE_COMPONENT_VENDOR_TYPE_QUAL:
-        ret_comp = d_left (ret_comp);
-        break;
+	ret_comp = d_left (ret_comp);
+	break;
       case DEMANGLE_COMPONENT_NAME:
       case DEMANGLE_COMPONENT_CTOR:
       case DEMANGLE_COMPONENT_DTOR:
@@ -857,7 +853,7 @@ char *
 method_name_from_physname (const char *physname)
 {
   void *storage = NULL;
-  char *demangled_name = NULL;
+  gdb::unique_xmalloc_ptr<char> demangled_name;
   gdb::unique_xmalloc_ptr<char> ret;
   struct demangle_component *ret_comp;
   std::unique_ptr<demangle_parse_info> info;
@@ -875,7 +871,6 @@ method_name_from_physname (const char *physname)
     ret = cp_comp_to_string (ret_comp, 10);
 
   xfree (storage);
-  xfree (demangled_name);
   return ret.release ();
 }
 
@@ -936,8 +931,8 @@ cp_remove_params_1 (const char *demangled_name, bool require_params)
       case DEMANGLE_COMPONENT_RESTRICT_THIS:
       case DEMANGLE_COMPONENT_VOLATILE_THIS:
       case DEMANGLE_COMPONENT_VENDOR_TYPE_QUAL:
-        ret_comp = d_left (ret_comp);
-        break;
+	ret_comp = d_left (ret_comp);
+	break;
       default:
 	done = true;
 	break;
@@ -1335,10 +1330,9 @@ add_symbol_overload_list_adl_namespace (struct type *type,
   const char *type_name;
   int i, prefix_len;
 
-  while (type->code () == TYPE_CODE_PTR
-	 || TYPE_IS_REFERENCE (type)
-         || type->code () == TYPE_CODE_ARRAY
-         || type->code () == TYPE_CODE_TYPEDEF)
+  while (type->is_pointer_or_reference ()
+	 || type->code () == TYPE_CODE_ARRAY
+	 || type->code () == TYPE_CODE_TYPEDEF)
     {
       if (type->code () == TYPE_CODE_TYPEDEF)
 	type = check_typedef (type);
@@ -1415,12 +1409,12 @@ add_symbol_overload_list_using (const char *func_name,
 	if (current->searched)
 	  continue;
 
-        /* If this is a namespace alias or imported declaration ignore
+	/* If this is a namespace alias or imported declaration ignore
 	   it.  */
-        if (current->alias != NULL || current->declaration != NULL)
-          continue;
+	if (current->alias != NULL || current->declaration != NULL)
+	  continue;
 
-        if (strcmp (the_namespace, current->import_dest) == 0)
+	if (strcmp (the_namespace, current->import_dest) == 0)
 	  {
 	    /* Mark this import as searched so that the recursive call
 	       does not search it again.  */
@@ -1452,10 +1446,7 @@ add_symbol_overload_list_qualified (const char *func_name,
      matching FUNC_NAME.  Make sure we read that symbol table in.  */
 
   for (objfile *objf : current_program_space->objfiles ())
-    {
-      if (objf->sf)
-	objf->sf->qf->expand_symtabs_for_function (objf, func_name);
-    }
+    objf->expand_symtabs_for_function (func_name);
 
   /* Search upwards from currently selected frame (so that we can
      complete on local vars.  */
@@ -1607,14 +1598,11 @@ report_failed_demangle (const char *name, bool core_dump_allowed,
 #endif
 
 /* A wrapper for bfd_demangle.  */
-#ifdef __CYGWIN__ 
-extern void set_segv_handler(void (*hdl)(int));
-#endif
 
-char *
+gdb::unique_xmalloc_ptr<char>
 gdb_demangle (const char *name, int options)
 {
-  char *result = NULL;
+  gdb::unique_xmalloc_ptr<char> result;
   int crash_signal = 0;
 
 #ifdef HAVE_WORKING_FORK
@@ -1629,11 +1617,10 @@ gdb_demangle (const char *name, int options)
               : nullptr);
   set_segv_handler(thread_local_segv_handler_l);
 #else
- scoped_restore restore_segv
-     = make_scoped_restore (&thread_local_segv_handler,
-               catch_demangler_crashes
-               ? gdb_demangle_signal_handler
-               : nullptr);
+  scoped_segv_handler_restore restore_segv
+    (catch_demangler_crashes
+     ? gdb_demangle_signal_handler
+     : nullptr);
 #endif
 
   bool core_dump_allowed = gdb_demangle_attempt_core_dump;
@@ -1643,7 +1630,7 @@ gdb_demangle (const char *name, int options)
   if (catch_demangler_crashes)
     {
       /* The signal handler may keep the signal blocked when we longjmp out
-         of it.  If we have sigprocmask, we can use it to unblock the signal
+	 of it.  If we have sigprocmask, we can use it to unblock the signal
 	 afterwards and we can avoid the performance overhead of saving the
 	 signal mask just in case the signal gets triggered.  Otherwise, just
 	 tell sigsetjmp to save the mask.  */
@@ -1656,13 +1643,13 @@ gdb_demangle (const char *name, int options)
 #endif
 
   if (crash_signal == 0)
-    result = bfd_demangle (NULL, name, options);
+    result.reset (bfd_demangle (NULL, name, options));
 
 #ifdef HAVE_WORKING_FORK
   if (catch_demangler_crashes)
     {
       if (crash_signal != 0)
-        {
+	{
 #ifdef HAVE_SIGPROCMASK
 	  /* If we got the signal, SIGSEGV may still be blocked; restore it.  */
 	  sigset_t segv_sig_set;
@@ -1674,15 +1661,15 @@ gdb_demangle (const char *name, int options)
 	  /* If there was a failure, we can't report it here, because
 	     we might be in a background thread.  Instead, arrange for
 	     the reporting to happen on the main thread.  */
-          std::string copy = name;
-          run_on_main_thread ([=] ()
-            {
-              report_failed_demangle (copy.c_str (), core_dump_allowed,
-                                      crash_signal);
-            });
+	  std::string copy = name;
+	  run_on_main_thread ([=] ()
+	    {
+	      report_failed_demangle (copy.c_str (), core_dump_allowed,
+				      crash_signal);
+	    });
 
-          result = NULL;
-        }
+	  result = NULL;
+	}
     }
 #endif
 
@@ -2210,7 +2197,7 @@ first_component_command (const char *arg, int from_tty)
   memcpy (prefix, arg, len);
   prefix[len] = '\0';
 
-  printf_unfiltered ("%s\n", prefix);
+  printf_filtered ("%s\n", prefix);
 }
 
 /* Implement "info vtbl".  */
@@ -2228,13 +2215,12 @@ void _initialize_cp_support ();
 void
 _initialize_cp_support ()
 {
-  add_basic_prefix_cmd ("cplus", class_maintenance,
-			_("C++ maintenance commands."),
-			&maint_cplus_cmd_list,
-			"maintenance cplus ",
-			0, &maintenancelist);
-  add_alias_cmd ("cp", "cplus",
-		 class_maintenance, 1,
+  cmd_list_element *maintenance_cplus
+    = add_basic_prefix_cmd ("cplus", class_maintenance,
+			    _("C++ maintenance commands."),
+			    &maint_cplus_cmd_list,
+			    0, &maintenancelist);
+  add_alias_cmd ("cp", maintenance_cplus, class_maintenance, 1,
 		 &maintenancelist);
 
   add_cmd ("first_component",

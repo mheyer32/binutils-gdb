@@ -1,6 +1,6 @@
 /* A more-standard <time.h>.
 
-   Copyright (C) 2007-2020 Free Software Foundation, Inc.
+   Copyright (C) 2007-2021 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -74,13 +74,11 @@ extern "C" {
 #   if !GNULIB_defined_struct_timespec
 #    undef timespec
 #    define timespec rpl_timespec
-#    ifndef AMIGA
 struct timespec
 {
   time_t tv_sec;
   long int tv_nsec;
 };
-#    endif
 #    define GNULIB_defined_struct_timespec 1
 #   endif
 
@@ -101,6 +99,25 @@ struct __time_t_must_be_integral {
   unsigned int __floating_time_t_unsupported : (time_t) 1;
 };
 #  define GNULIB_defined_struct_time_t_must_be_integral 1
+# endif
+
+/* Define TIME_UTC, a positive integer constant used for timespec_get().  */
+# if ! @TIME_H_DEFINES_TIME_UTC@
+#  if !GNULIB_defined_TIME_UTC
+#   define TIME_UTC 1
+#   define GNULIB_defined_TIME_UTC 1
+#  endif
+# endif
+
+/* Set *TS to the current time, and return BASE.
+   Upon failure, return 0.  */
+# if @GNULIB_TIMESPEC_GET@
+#  if ! @HAVE_TIMESPEC_GET@
+_GL_FUNCDECL_SYS (timespec_get, int, (struct timespec *ts, int base)
+                                     _GL_ARG_NONNULL ((1)));
+#  endif
+_GL_CXXALIAS_SYS (timespec_get, int, (struct timespec *ts, int base));
+_GL_CXXALIASWARN (timespec_get);
 # endif
 
 /* Sleep for at least RQTP seconds unless interrupted,  If interrupted,
@@ -137,10 +154,27 @@ _GL_CXXALIASWARN (nanosleep);
 #   endif
 _GL_FUNCDECL_RPL (tzset, void, (void));
 _GL_CXXALIAS_RPL (tzset, void, (void));
-#  else
-#   if ! @HAVE_TZSET@
-_GL_FUNCDECL_SYS (tzset, void, (void));
+#  elif defined _WIN32 && !defined __CYGWIN__
+#   if !(defined __cplusplus && defined GNULIB_NAMESPACE)
+#    undef tzset
+#    define tzset _tzset
 #   endif
+_GL_CXXALIAS_MDA (tzset, void, (void));
+#  else
+_GL_CXXALIAS_SYS (tzset, void, (void));
+#  endif
+_GL_CXXALIASWARN (tzset);
+# elif @GNULIB_MDA_TZSET@
+/* On native Windows, map 'tzset' to '_tzset', so that -loldnames is not
+   required.  In C++ with GNULIB_NAMESPACE, avoid differences between
+   platforms by defining GNULIB_NAMESPACE::tzset always.  */
+#  if defined _WIN32 && !defined __CYGWIN__
+#   if !(defined __cplusplus && defined GNULIB_NAMESPACE)
+#    undef tzset
+#    define tzset _tzset
+#   endif
+_GL_CXXALIAS_MDA (tzset, void, (void));
+#  else
 _GL_CXXALIAS_SYS (tzset, void, (void));
 #  endif
 _GL_CXXALIASWARN (tzset);
@@ -288,14 +322,17 @@ _GL_CXXALIASWARN (ctime);
 #   if !(defined __cplusplus && defined GNULIB_NAMESPACE)
 #    define strftime rpl_strftime
 #   endif
-_GL_FUNCDECL_RPL (strftime, size_t, (char *__buf, size_t __bufsize,
-                                     const char *__fmt, const struct tm *__tp)
-                                    _GL_ARG_NONNULL ((1, 3, 4)));
-_GL_CXXALIAS_RPL (strftime, size_t, (char *__buf, size_t __bufsize,
-                                     const char *__fmt, const struct tm *__tp));
+_GL_FUNCDECL_RPL (strftime, size_t,
+                  (char *restrict __buf, size_t __bufsize,
+                   const char *restrict __fmt, const struct tm *restrict __tp)
+                  _GL_ARG_NONNULL ((1, 3, 4)));
+_GL_CXXALIAS_RPL (strftime, size_t,
+                  (char *restrict __buf, size_t __bufsize,
+                   const char *restrict __fmt, const struct tm *restrict __tp));
 #  else
-_GL_CXXALIAS_SYS (strftime, size_t, (char *__buf, size_t __bufsize,
-                                     const char *__fmt, const struct tm *__tp));
+_GL_CXXALIAS_SYS (strftime, size_t,
+                  (char *restrict __buf, size_t __bufsize,
+                   const char *restrict __fmt, const struct tm *restrict __tp));
 #  endif
 #  if __GLIBC__ >= 2
 _GL_CXXALIASWARN (strftime);
@@ -349,17 +386,17 @@ _GL_WARN_ON_USE (asctime, "asctime can overrun buffers in some cases - "
 # endif
 # if defined GNULIB_POSIXCHECK
 #  undef asctime_r
-_GL_WARN_ON_USE (asctime, "asctime_r can overrun buffers in some cases - "
+_GL_WARN_ON_USE (asctime_r, "asctime_r can overrun buffers in some cases - "
                  "better use strftime (or even sprintf) instead");
 # endif
 # if defined GNULIB_POSIXCHECK
 #  undef ctime
-_GL_WARN_ON_USE (asctime, "ctime can overrun buffers in some cases - "
+_GL_WARN_ON_USE (ctime, "ctime can overrun buffers in some cases - "
                  "better use strftime (or even sprintf) instead");
 # endif
 # if defined GNULIB_POSIXCHECK
 #  undef ctime_r
-_GL_WARN_ON_USE (asctime, "ctime_r can overrun buffers in some cases - "
+_GL_WARN_ON_USE (ctime_r, "ctime_r can overrun buffers in some cases - "
                  "better use strftime (or even sprintf) instead");
 # endif
 

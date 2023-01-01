@@ -1,6 +1,6 @@
 /* Target-dependent code for QNX Neutrino x86.
 
-   Copyright (C) 2003-2020 Free Software Foundation, Inc.
+   Copyright (C) 2003-2022 Free Software Foundation, Inc.
 
    Contributed by QNX Software Systems Ltd.
 
@@ -77,7 +77,7 @@ static void
 i386nto_supply_gregset (struct regcache *regcache, char *gpregs)
 {
   struct gdbarch *gdbarch = regcache->arch ();
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  i386_gdbarch_tdep *tdep = (i386_gdbarch_tdep *) gdbarch_tdep (gdbarch);
 
   gdb_assert (tdep->gregset_reg_offset == i386nto_gregset_reg_offset);
   i386_gregset.supply_regset (&i386_gregset, regcache, -1,
@@ -126,7 +126,7 @@ static int
 i386nto_register_area (struct gdbarch *gdbarch,
 		       int regno, int regset, unsigned *off)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  i386_gdbarch_tdep *tdep = (i386_gdbarch_tdep *) gdbarch_tdep (gdbarch);
 
   *off = 0;
   if (regset == NTO_REG_GENERAL)
@@ -161,7 +161,7 @@ i386nto_register_area (struct gdbarch *gdbarch,
 	  if (first_four)
 	    {
 	      /* fpu_control_word, fpu_status_word, fpu_tag_word, fpu_operand
-	         registers.  */
+		 registers.  */
 	      regsize = 2; /* Two bytes each.  */
 	      off_adjust = 0;
 	      regno_base = I387_FCTRL_REGNUM (tdep);
@@ -315,7 +315,7 @@ init_i386nto_ops (void)
 static void
 i386nto_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  i386_gdbarch_tdep *tdep = (i386_gdbarch_tdep *) gdbarch_tdep (gdbarch);
   static struct target_so_ops nto_svr4_so_ops;
 
   /* Deal with our strange signals.  */
@@ -351,15 +351,15 @@ i386nto_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 
       /* Our loader handles solib relocations differently than svr4.  */
       nto_svr4_so_ops.relocate_section_addresses
-        = nto_relocate_section_addresses;
+	= nto_relocate_section_addresses;
 
       /* Supply a nice function to find our solibs.  */
       nto_svr4_so_ops.find_and_open_solib
-        = nto_find_and_open_solib;
+	= nto_find_and_open_solib;
 
       /* Our linker code is in libc.  */
       nto_svr4_so_ops.in_dynsym_resolve_code
-        = nto_in_dynsym_resolve_code;
+	= nto_in_dynsym_resolve_code;
     }
   set_solib_ops (gdbarch, &nto_svr4_so_ops);
 

@@ -224,10 +224,10 @@ typedef struct amiga_data_struct {
   unsigned long symtab_size;
   unsigned long stringtab_size;
   amiga_symbol_type *symbols;
-  bfd_boolean IsLoadFile; /* If true, this is a load file (for output bfd only) */
+  bool IsLoadFile; /* If true, this is a load file (for output bfd only) */
   unsigned int nb_hunks;
   /* The next two fields are set at final_link time (for the output bfd only) */
-  bfd_boolean baserel;/* true if there is ___init_a4 in the global hash table */
+  bool baserel;/* true if there is ___init_a4 in the global hash table */
   bfd_vma a4init;     /* cache the value for efficiency */
   struct aout_symbol ** stab_symbols;
   struct bfd_hash_table * section_lookup;

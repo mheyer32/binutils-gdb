@@ -2,7 +2,7 @@
 
 # split_x32.sh -- test -fstack-split for x32
 
-# Copyright (C) 2014-2020 Free Software Foundation, Inc.
+# Copyright (C) 2014-2022 Free Software Foundation, Inc.
 # Written by Ian Lance Taylor <iant@google.com>.
 # Modified by H.J. Lu <hongjiu.lu@intel.com>.
 
@@ -40,7 +40,7 @@ nomatch()
 }
 
 match 'cmp.*+%fs:[^,]*,%esp' split_x32_1.stdout
-match 'callq.*__morestack>?$' split_x32_1.stdout
+match 'call.*__morestack>?$' split_x32_1.stdout
 match 'lea.*-0x200\(%rsp\),' split_x32_1.stdout
 
 match 'stc' split_x32_2.stdout
@@ -50,6 +50,6 @@ match 'lea.*-0x100200\(%rsp\),' split_x32_2.stdout
 
 match 'failed to match' split_x32_3.stdout
 
-match 'callq.*__morestack>?$' split_x32_4.stdout
+match 'call.*__morestack>?$' split_x32_4.stdout
 
 match 'cannot mix' split_x32_r.stdout

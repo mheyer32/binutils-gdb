@@ -1,5 +1,5 @@
 /* write.h
-   Copyright (C) 1987-2020 Free Software Foundation, Inc.
+   Copyright (C) 1987-2022 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -187,5 +187,6 @@ extern fixS *fix_new_exp
   (fragS * frag, unsigned long where, unsigned long size, expressionS *exp, int pcrel,
    bfd_reloc_code_real_type r_type, int baserel);
 extern void write_print_statistics (FILE *);
+extern void as_bad_subtract (fixS *);
 
 #endif /* __write_h__ */

@@ -1,6 +1,6 @@
 /* Target dependent code for GDB on TI C6x systems.
 
-   Copyright (C) 2010-2020 Free Software Foundation, Inc.
+   Copyright (C) 2010-2022 Free Software Foundation, Inc.
    Contributed by Andrew Jenner <andrew@codesourcery.com>
    Contributed by Yao Qi <yao@codesourcery.com>
 
@@ -325,7 +325,7 @@ tic6x_breakpoint_kind_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr)
 static const gdb_byte *
 tic6x_sw_breakpoint_from_kind (struct gdbarch *gdbarch, int kind, int *size)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  tic6x_gdbarch_tdep *tdep = (tic6x_gdbarch_tdep *) gdbarch_tdep (gdbarch);
 
   *size = kind;
 
@@ -457,6 +457,7 @@ tic6x_frame_base_address (struct frame_info *this_frame, void **this_cache)
 
 static const struct frame_unwind tic6x_frame_unwind =
 {
+  "tic6x prologue",
   NORMAL_FRAME,
   default_frame_unwind_stop_reason,
   tic6x_frame_this_id,
@@ -519,6 +520,7 @@ tic6x_stub_unwind_sniffer (const struct frame_unwind *self,
 
 static const struct frame_unwind tic6x_stub_unwind =
 {
+  "tic6x stub",
   NORMAL_FRAME,
   default_frame_unwind_stop_reason,
   tic6x_stub_this_id,
@@ -596,7 +598,8 @@ tic6x_get_next_pc (struct regcache *regcache, CORE_ADDR pc)
 
       if (inst == TIC6X_INST_SWE)
 	{
-	  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+	  tic6x_gdbarch_tdep *tdep
+	    = (tic6x_gdbarch_tdep *) gdbarch_tdep (gdbarch);
 
 	  if (tdep->syscall_next_pc != NULL)
 	    return tdep->syscall_next_pc (get_current_frame ());
@@ -889,7 +892,7 @@ tic6x_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
   /* For a variadic C function, the last explicitly declared argument and all
      remaining arguments are passed on the stack.  */
-  if (TYPE_VARARGS (func_type))
+  if (func_type->has_varargs ())
     first_arg_on_stack = func_type->num_fields () - 1;
 
   /* Now make space on the stack for the args.  */
@@ -917,10 +920,10 @@ tic6x_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       int len = TYPE_LENGTH (arg_type);
       enum type_code typecode = arg_type->code ();
 
-      val = value_contents (arg);
+      val = value_contents (arg).data ();
 
       /* Copy the argument to general registers or the stack in
-         register-sized pieces.  */
+	 register-sized pieces.  */
       if (argreg < first_arg_on_stack)
 	{
 	  if (len <= 4)
@@ -960,10 +963,10 @@ tic6x_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 		      || typecode == TYPE_CODE_UNION)
 		    {
 		      /* For a 5-8 byte structure or union in big-endian, the
-		         first byte occupies byte 3 (the MSB) of the upper (odd)
-		         register and the remaining bytes fill the decreasingly
-		         significant bytes.  5-7 byte structures or unions have
-		         padding in the LSBs of the lower (even) register.  */
+			 first byte occupies byte 3 (the MSB) of the upper (odd)
+			 register and the remaining bytes fill the decreasingly
+			 significant bytes.  5-7 byte structures or unions have
+			 padding in the LSBs of the lower (even) register.  */
 		      if (byte_order == BFD_ENDIAN_BIG)
 			{
 			  regcache->cooked_write (arg_regs[argreg] + 1, val);
@@ -980,7 +983,7 @@ tic6x_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 		  else
 		    {
 		      /* The argument is being passed by value in a pair of
-		         registers.  */
+			 registers.  */
 		      ULONGEST regval = extract_unsigned_integer (val, len,
 								  byte_order);
 
@@ -1139,8 +1142,7 @@ static struct gdbarch *
 tic6x_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 {
   struct gdbarch *gdbarch;
-  struct gdbarch_tdep *tdep;
-  struct tdesc_arch_data *tdesc_data = NULL;
+  tdesc_arch_data_up tdesc_data;
   const struct target_desc *tdesc = info.target_desc;
   int has_gp = 0;
 
@@ -1159,20 +1161,17 @@ tic6x_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
       valid_p = 1;
       for (i = 0; i < 32; i++)	/* A0 - A15, B0 - B15 */
-	valid_p &= tdesc_numbered_register (feature, tdesc_data, i,
+	valid_p &= tdesc_numbered_register (feature, tdesc_data.get (), i,
 					    tic6x_register_names[i]);
 
       /* CSR */
-      valid_p &= tdesc_numbered_register (feature, tdesc_data, i++,
+      valid_p &= tdesc_numbered_register (feature, tdesc_data.get (), i++,
 					  tic6x_register_names[TIC6X_CSR_REGNUM]);
-      valid_p &= tdesc_numbered_register (feature, tdesc_data, i++,
+      valid_p &= tdesc_numbered_register (feature, tdesc_data.get (), i++,
 					  tic6x_register_names[TIC6X_PC_REGNUM]);
 
       if (!valid_p)
-	{
-	  tdesc_data_cleanup (tdesc_data);
-	  return NULL;
-	}
+	return NULL;
 
       feature = tdesc_find_feature (tdesc, "org.gnu.gdb.tic6x.gp");
       if (feature)
@@ -1189,28 +1188,25 @@ tic6x_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 	  has_gp = 1;
 	  valid_p = 1;
 	  for (j = 0; j < 32; j++)	/* A16 - A31, B16 - B31 */
-	    valid_p &= tdesc_numbered_register (feature, tdesc_data, i++,
-						gp[j]);
+	    valid_p &= tdesc_numbered_register (feature, tdesc_data.get (),
+						i++, gp[j]);
 
 	  if (!valid_p)
-	    {
-	      tdesc_data_cleanup (tdesc_data);
-	      return NULL;
-	    }
+	    return NULL;
 	}
 
       feature = tdesc_find_feature (tdesc, "org.gnu.gdb.tic6x.c6xp");
       if (feature)
 	{
-	  valid_p &= tdesc_numbered_register (feature, tdesc_data, i++, "TSR");
-	  valid_p &= tdesc_numbered_register (feature, tdesc_data, i++, "ILC");
-	  valid_p &= tdesc_numbered_register (feature, tdesc_data, i++, "RILC");
+	  valid_p &= tdesc_numbered_register (feature, tdesc_data.get (),
+					      i++, "TSR");
+	  valid_p &= tdesc_numbered_register (feature, tdesc_data.get (),
+					      i++, "ILC");
+	  valid_p &= tdesc_numbered_register (feature, tdesc_data.get (),
+					      i++, "RILC");
 
 	  if (!valid_p)
-	    {
-	      tdesc_data_cleanup (tdesc_data);
-	      return NULL;
-	    }
+	    return NULL;
 	}
 
     }
@@ -1220,7 +1216,8 @@ tic6x_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
        arches != NULL;
        arches = gdbarch_list_lookup_by_info (arches->next, &info))
     {
-      tdep = gdbarch_tdep (arches->gdbarch);
+      tic6x_gdbarch_tdep *tdep
+	= (tic6x_gdbarch_tdep *) gdbarch_tdep (arches->gdbarch);
 
       if (has_gp != tdep->has_gp)
 	continue;
@@ -1229,7 +1226,7 @@ tic6x_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 	return arches->gdbarch;
     }
 
-  tdep = XCNEW (struct gdbarch_tdep);
+  tic6x_gdbarch_tdep *tdep = new tic6x_gdbarch_tdep;
 
   tdep->has_gp = has_gp;
   gdbarch = gdbarch_alloc (&info, tdep);
@@ -1295,8 +1292,8 @@ tic6x_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   /* Hook in ABI-specific overrides, if they have been registered.  */
   gdbarch_init_osabi (info, gdbarch);
 
-  if (tdesc_data)
-    tdesc_use_registers (gdbarch, tdesc, tdesc_data);
+  if (tdesc_data != nullptr)
+    tdesc_use_registers (gdbarch, tdesc, std::move (tdesc_data));
 
   return gdbarch;
 }

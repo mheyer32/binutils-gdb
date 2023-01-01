@@ -1,6 +1,6 @@
 /* General utility routines for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2020 Free Software Foundation, Inc.
+   Copyright (C) 1986-2022 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -48,7 +48,7 @@
 #include "annotate.h"
 #include "filenames.h"
 #include "symfile.h"
-#include "gdb_obstack.h"
+#include "gdbsupport/gdb_obstack.h"
 #include "gdbcore.h"
 #include "top.h"
 #include "main.h"
@@ -63,7 +63,7 @@
 #include <chrono>
 
 #include "interps.h"
-#include "gdb_regex.h"
+#include "gdbsupport/gdb_regex.h"
 #include "gdbsupport/job-control.h"
 #include "gdbsupport/selftest.h"
 #include "gdbsupport/gdb_optional.h"
@@ -75,13 +75,15 @@
 #include "gdbarch.h"
 #include "cli-out.h"
 #include "gdbsupport/gdb-safe-ctype.h"
+#include "bt-utils.h"
+#include "gdbsupport/buildargv.h"
 
 void (*deprecated_error_begin_hook) (void);
 
 /* Prototypes for local functions */
 
 static void vfprintf_maybe_filtered (struct ui_file *, const char *,
-				     va_list, bool, bool)
+				     va_list, bool)
   ATTRIBUTE_PRINTF (2, 0);
 
 static void fputs_maybe_filtered (const char *, struct ui_file *, int);
@@ -201,6 +203,11 @@ dump_core (void)
   setrlimit (RLIMIT_CORE, &rlim);
 #endif /* HAVE_SETRLIMIT */
 
+  /* Ensure that the SIGABRT we're about to raise will immediately cause
+     GDB to exit and dump core, we don't want to trigger GDB's printing of
+     a backtrace to the console here.  */
+  signal (SIGABRT, SIG_DFL);
+
   abort ();		/* ARI: abort */
 }
 
@@ -275,17 +282,37 @@ static const char *const internal_problem_modes[] =
   NULL
 };
 
-/* Print a message reporting an internal error/warning.  Ask the user
-   if they want to continue, dump core, or just exit.  Return
-   something to indicate a quit.  */
+/* Data structure used to control how the internal_vproblem function
+   should behave.  An instance of this structure is created for each
+   problem type that GDB supports.  */
 
 struct internal_problem
 {
+  /* The name of this problem type.  This must not contain white space as
+     this string is used to build command names.  */
   const char *name;
-  int user_settable_should_quit;
+
+  /* When this is true then a user command is created (based on NAME) that
+     allows the SHOULD_QUIT field to be modified, otherwise, SHOULD_QUIT
+     can't be changed from its default value by the user.  */
+  bool user_settable_should_quit;
+
+  /* Reference a value from internal_problem_modes to indicate if GDB
+     should quit when it hits a problem of this type.  */
   const char *should_quit;
-  int user_settable_should_dump_core;
+
+  /* Like USER_SETTABLE_SHOULD_QUIT but for SHOULD_DUMP_CORE.  */
+  bool user_settable_should_dump_core;
+
+  /* Like SHOULD_QUIT, but whether GDB should dump core.  */
   const char *should_dump_core;
+
+  /* Like USER_SETTABLE_SHOULD_QUIT but for SHOULD_PRINT_BACKTRACE.  */
+  bool user_settable_should_print_backtrace;
+
+  /* When this is true GDB will print a backtrace when a problem of this
+     type is encountered.  */
+  bool should_print_backtrace;
 };
 
 /* Report a problem, internal to GDB, to the user.  Once the problem
@@ -315,13 +342,13 @@ internal_vproblem (struct internal_problem *problem,
 	abort_with_message (msg);
       default:
 	dejavu = 3;
-        /* Newer GLIBC versions put the warn_unused_result attribute
-           on write, but this is one of those rare cases where
-           ignoring the return value is correct.  Casting to (void)
-           does not fix this problem.  This is the solution suggested
-           at http://gcc.gnu.org/bugzilla/show_bug.cgi?id=25509.  */
+	/* Newer GLIBC versions put the warn_unused_result attribute
+	   on write, but this is one of those rare cases where
+	   ignoring the return value is correct.  Casting to (void)
+	   does not fix this problem.  This is the solution suggested
+	   at http://gcc.gnu.org/bugzilla/show_bug.cgi?id=25509.  */
 	if (write (STDERR_FILENO, msg, sizeof (msg)) != sizeof (msg))
-          abort (); /* ARI: abort */
+	  abort (); /* ARI: abort */
 	exit (1);
       }
   }
@@ -359,8 +386,12 @@ internal_vproblem (struct internal_problem *problem,
   /* Emit the message unless query will emit it below.  */
   if (problem->should_quit != internal_problem_ask
       || !confirm
-      || !filtered_printing_initialized ())
+      || !filtered_printing_initialized ()
+      || problem->should_print_backtrace)
     fprintf_unfiltered (gdb_stderr, "%s\n", reason.c_str ());
+
+  if (problem->should_print_backtrace)
+    gdb_internal_backtrace ();
 
   if (problem->should_quit == internal_problem_ask)
     {
@@ -370,7 +401,7 @@ internal_vproblem (struct internal_problem *problem,
       if (!confirm || !filtered_printing_initialized ())
 	quit_p = 1;
       else
-        quit_p = query (_("%s\nQuit this debugging session? "),
+	quit_p = query (_("%s\nQuit this debugging session? "),
 			reason.c_str ());
     }
   else if (problem->should_quit == internal_problem_yes)
@@ -430,7 +461,8 @@ internal_vproblem (struct internal_problem *problem,
 }
 
 static struct internal_problem internal_error_problem = {
-  "internal-error", 1, internal_problem_ask, 1, internal_problem_ask
+  "internal-error", true, internal_problem_ask, true, internal_problem_ask,
+  true, GDB_PRINT_INTERNAL_BACKTRACE_INIT_ON
 };
 
 void
@@ -441,7 +473,8 @@ internal_verror (const char *file, int line, const char *fmt, va_list ap)
 }
 
 static struct internal_problem internal_warning_problem = {
-  "internal-warning", 1, internal_problem_ask, 1, internal_problem_ask
+  "internal-warning", true, internal_problem_ask, true, internal_problem_ask,
+  true, false
 };
 
 void
@@ -451,7 +484,8 @@ internal_vwarning (const char *file, int line, const char *fmt, va_list ap)
 }
 
 static struct internal_problem demangler_warning_problem = {
-  "demangler-warning", 1, internal_problem_ask, 0, internal_problem_no
+  "demangler-warning", true, internal_problem_ask, false, internal_problem_no,
+  false, false
 };
 
 void
@@ -490,76 +524,83 @@ add_internal_problem_command (struct internal_problem *problem)
 {
   struct cmd_list_element **set_cmd_list;
   struct cmd_list_element **show_cmd_list;
-  char *set_doc;
-  char *show_doc;
 
   set_cmd_list = XNEW (struct cmd_list_element *);
   show_cmd_list = XNEW (struct cmd_list_element *);
   *set_cmd_list = NULL;
   *show_cmd_list = NULL;
 
-  set_doc = xstrprintf (_("Configure what GDB does when %s is detected."),
-			problem->name);
+  /* The add_basic_prefix_cmd and add_show_prefix_cmd functions take
+     ownership of the string passed in, which is why we don't need to free
+     set_doc and show_doc in this function.  */
+  const char *set_doc
+    = xstrprintf (_("Configure what GDB does when %s is detected."),
+		  problem->name).release ();
+  const char *show_doc
+    = xstrprintf (_("Show what GDB does when %s is detected."),
+		  problem->name).release ();
 
-  show_doc = xstrprintf (_("Show what GDB does when %s is detected."),
-			 problem->name);
-
-  add_basic_prefix_cmd (problem->name, class_maintenance, set_doc,
-			set_cmd_list,
-			concat ("maintenance set ", problem->name, " ",
-				(char *) NULL),
-			0/*allow-unknown*/, &maintenance_set_cmdlist);
-
-  add_show_prefix_cmd (problem->name, class_maintenance, show_doc,
-		       show_cmd_list,
-		       concat ("maintenance show ", problem->name, " ",
-			       (char *) NULL),
-		       0/*allow-unknown*/, &maintenance_show_cmdlist);
+  add_setshow_prefix_cmd (problem->name, class_maintenance,
+			  set_doc, show_doc, set_cmd_list, show_cmd_list,
+			  &maintenance_set_cmdlist, &maintenance_show_cmdlist);
 
   if (problem->user_settable_should_quit)
     {
-      set_doc = xstrprintf (_("Set whether GDB should quit "
-			      "when an %s is detected."),
-			    problem->name);
-      show_doc = xstrprintf (_("Show whether GDB will quit "
-			       "when an %s is detected."),
-			     problem->name);
+      std::string set_quit_doc
+	= string_printf (_("Set whether GDB should quit when an %s is "
+			   "detected."), problem->name);
+      std::string show_quit_doc
+	= string_printf (_("Show whether GDB will quit when an %s is "
+			   "detected."), problem->name);
       add_setshow_enum_cmd ("quit", class_maintenance,
 			    internal_problem_modes,
 			    &problem->should_quit,
-			    set_doc,
-			    show_doc,
+			    set_quit_doc.c_str (),
+			    show_quit_doc.c_str (),
 			    NULL, /* help_doc */
 			    NULL, /* setfunc */
 			    NULL, /* showfunc */
 			    set_cmd_list,
 			    show_cmd_list);
-
-      xfree (set_doc);
-      xfree (show_doc);
     }
 
   if (problem->user_settable_should_dump_core)
     {
-      set_doc = xstrprintf (_("Set whether GDB should create a core "
-			      "file of GDB when %s is detected."),
-			    problem->name);
-      show_doc = xstrprintf (_("Show whether GDB will create a core "
-			       "file of GDB when %s is detected."),
-			     problem->name);
+      std::string set_core_doc
+	= string_printf (_("Set whether GDB should create a core file of "
+			   "GDB when %s is detected."), problem->name);
+      std::string show_core_doc
+	= string_printf (_("Show whether GDB will create a core file of "
+			   "GDB when %s is detected."), problem->name);
       add_setshow_enum_cmd ("corefile", class_maintenance,
 			    internal_problem_modes,
 			    &problem->should_dump_core,
-			    set_doc,
-			    show_doc,
+			    set_core_doc.c_str (),
+			    show_core_doc.c_str (),
 			    NULL, /* help_doc */
 			    NULL, /* setfunc */
 			    NULL, /* showfunc */
 			    set_cmd_list,
 			    show_cmd_list);
+    }
 
-      xfree (set_doc);
-      xfree (show_doc);
+  if (problem->user_settable_should_print_backtrace)
+    {
+      std::string set_bt_doc
+	= string_printf (_("Set whether GDB should print a backtrace of "
+			   "GDB when %s is detected."), problem->name);
+      std::string show_bt_doc
+	= string_printf (_("Show whether GDB will print a backtrace of "
+			   "GDB when %s is detected."), problem->name);
+      add_setshow_boolean_cmd ("backtrace", class_maintenance,
+			       &problem->should_print_backtrace,
+			       set_bt_doc.c_str (),
+			       show_bt_doc.c_str (),
+			       NULL, /* help_doc */
+			       gdb_internal_backtrace_set_cmd,
+			       NULL, /* showfunc */
+			       set_cmd_list,
+			       show_cmd_list);
     }
 }
 
@@ -640,7 +681,7 @@ quit (void)
 #else
   if (job_control
       /* If there is no terminal switching for this target, then we can't
-         possibly get screwed by the lack of job control.  */
+	 possibly get screwed by the lack of job control.  */
       || !target_supports_terminal_ours ())
     throw_quit ("Quit");
   else
@@ -709,18 +750,34 @@ myread (int desc, char *addr, int len)
   return orglen;
 }
 
-void
-print_spaces (int n, struct ui_file *file)
-{
-  fputs_unfiltered (n_spaces (n), file);
-}
+/* See utils.h.  */
 
-/* Print a host address.  */
-
-void
-gdb_print_host_address_1 (const void *addr, struct ui_file *stream)
+ULONGEST
+uinteger_pow (ULONGEST v1, LONGEST v2)
 {
-  fprintf_filtered (stream, "%s", host_address_to_string (addr));
+  if (v2 < 0)
+    {
+      if (v1 == 0)
+	error (_("Attempt to raise 0 to negative power."));
+      else
+	return 0;
+    }
+  else
+    {
+      /* The Russian Peasant's Algorithm.  */
+      ULONGEST v;
+
+      v = 1;
+      for (;;)
+	{
+	  if (v2 & 1L)
+	    v *= v1;
+	  v2 >>= 1;
+	  if (v2 == 0)
+	    return v;
+	  v1 *= v1;
+	}
+    }
 }
 
 
@@ -875,15 +932,15 @@ defaulted_query (const char *ctlstr, const char defchar, va_list args)
       if (answer >= 'a')
 	answer -= 040;
       /* Check answer.  For the non-default, the user must specify
-         the non-default explicitly.  */
+	 the non-default explicitly.  */
       if (answer == not_def_answer)
 	{
 	  retval = !def_value;
 	  break;
 	}
       /* Otherwise, if a default was specified, the user may either
-         specify the required input or have it default by entering
-         nothing.  */
+	 specify the required input or have it default by entering
+	 nothing.  */
       if (answer == def_answer
 	  || (defchar != '\0' && answer == '\0'))
 	{
@@ -1073,103 +1130,6 @@ parse_escape (struct gdbarch *gdbarch, const char **string_ptr)
   return target_char;
 }
 
-/* Print the character C on STREAM as part of the contents of a literal
-   string whose delimiter is QUOTER.  Note that this routine should only
-   be called for printing things which are independent of the language
-   of the program being debugged.
-
-   printchar will normally escape backslashes and instances of QUOTER. If
-   QUOTER is 0, printchar won't escape backslashes or any quoting character.
-   As a side effect, if you pass the backslash character as the QUOTER,
-   printchar will escape backslashes as usual, but not any other quoting
-   character. */
-
-static void
-printchar (int c, do_fputc_ftype do_fputc, ui_file *stream, int quoter)
-{
-  c &= 0xFF;			/* Avoid sign bit follies */
-
-  if (c < 0x20 ||		/* Low control chars */
-      (c >= 0x7F && c < 0xA0) ||	/* DEL, High controls */
-      (sevenbit_strings && c >= 0x80))
-    {				/* high order bit set */
-      do_fputc ('\\', stream);
-
-      switch (c)
-	{
-	case '\n':
-	  do_fputc ('n', stream);
-	  break;
-	case '\b':
-	  do_fputc ('b', stream);
-	  break;
-	case '\t':
-	  do_fputc ('t', stream);
-	  break;
-	case '\f':
-	  do_fputc ('f', stream);
-	  break;
-	case '\r':
-	  do_fputc ('r', stream);
-	  break;
-	case '\033':
-	  do_fputc ('e', stream);
-	  break;
-	case '\007':
-	  do_fputc ('a', stream);
-	  break;
-	default:
-	  {
-	    do_fputc ('0' + ((c >> 6) & 0x7), stream);
-	    do_fputc ('0' + ((c >> 3) & 0x7), stream);
-	    do_fputc ('0' + ((c >> 0) & 0x7), stream);
-	    break;
-	  }
-	}
-    }
-  else
-    {
-      if (quoter != 0 && (c == '\\' || c == quoter))
-	do_fputc ('\\', stream);
-      do_fputc (c, stream);
-    }
-}
-
-/* Print the character C on STREAM as part of the contents of a
-   literal string whose delimiter is QUOTER.  Note that these routines
-   should only be call for printing things which are independent of
-   the language of the program being debugged.  */
-
-void
-fputstr_filtered (const char *str, int quoter, struct ui_file *stream)
-{
-  while (*str)
-    printchar (*str++, fputc_filtered, stream, quoter);
-}
-
-void
-fputstr_unfiltered (const char *str, int quoter, struct ui_file *stream)
-{
-  while (*str)
-    printchar (*str++, fputc_unfiltered, stream, quoter);
-}
-
-void
-fputstrn_filtered (const char *str, int n, int quoter,
-		   struct ui_file *stream)
-{
-  for (int i = 0; i < n; i++)
-    printchar (str[i], fputc_filtered, stream, quoter);
-}
-
-void
-fputstrn_unfiltered (const char *str, int n, int quoter,
-		     do_fputc_ftype do_fputc, struct ui_file *stream)
-{
-  for (int i = 0; i < n; i++)
-    printchar (str[i], do_fputc, stream, quoter);
-}
-
 
 /* Number of lines per page or UINT_MAX if paging is disabled.  */
 static unsigned int lines_per_page;
@@ -1259,8 +1219,8 @@ init_page_info (void)
       chars_per_line = cols;
 
       /* Readline should have fetched the termcap entry for us.
-         Only try to use tgetnum function if rl_get_screen_size
-         did not return a useful value. */
+	 Only try to use tgetnum function if rl_get_screen_size
+	 did not return a useful value. */
       if (((rows <= 0) && (tgetnum ((char *) "li") < 0))
 	/* Also disable paging if inside Emacs.  $EMACS was used
 	   before Emacs v25.1, $INSIDE_EMACS is used since then.  */
@@ -1396,12 +1356,15 @@ static void
 emit_style_escape (const ui_file_style &style,
 		   struct ui_file *stream = nullptr)
 {
-  applied_style = style;
+  if (applied_style != style)
+    {
+      applied_style = style;
 
-  if (stream == nullptr)
-    wrap_buffer.append (style.to_ansi ());
-  else
-    stream->puts (style.to_ansi ().c_str ());
+      if (stream == nullptr)
+	wrap_buffer.append (style.to_ansi ());
+      else
+	stream->puts (style.to_ansi ().c_str ());
+    }
 }
 
 /* Set the current output style.  This will affect future uses of the
@@ -1549,6 +1512,14 @@ gdb_flush (struct ui_file *stream)
   stream->flush ();
 }
 
+/* See utils.h.  */
+
+int
+get_chars_per_line ()
+{
+  return chars_per_line;
+}
+
 /* Indicate that if the next sequence of characters overflows the line,
    a newline should be inserted here rather than when it hits the end.
    If INDENT is non-null, it is a string to be printed to indent the
@@ -1682,7 +1653,8 @@ fputs_maybe_filtered (const char *linebuffer, struct ui_file *stream,
     return;
 
   /* Don't do any filtering if it is disabled.  */
-  if (stream != gdb_stdout
+  if (!stream->can_page ()
+      || stream != gdb_stdout
       || !pagination_enabled
       || pagination_disabled_for_command
       || batch_flag
@@ -1726,8 +1698,8 @@ fputs_maybe_filtered (const char *linebuffer, struct ui_file *stream,
 	    {
 	      wrap_buffer.push_back ('\t');
 	      /* Shifting right by 3 produces the number of tab stops
-	         we have already passed, and then adding one and
-	         shifting left 3 advances to the next tab stop.  */
+		 we have already passed, and then adding one and
+		 shifting left 3 advances to the next tab stop.  */
 	      chars_printed = ((chars_printed >> 3) + 1) << 3;
 	      lineptr++;
 	    }
@@ -1738,6 +1710,12 @@ fputs_maybe_filtered (const char *linebuffer, struct ui_file *stream,
 	      /* Note that we don't consider this a character, so we
 		 don't increment chars_printed here.  */
 	      lineptr += skip_bytes;
+	    }
+	  else if (*lineptr == '\r')
+	    {
+	      wrap_buffer.push_back (*lineptr);
+	      chars_printed = 0;
+	      lineptr++;
 	    }
 	  else
 	    {
@@ -1756,14 +1734,20 @@ fputs_maybe_filtered (const char *linebuffer, struct ui_file *stream,
 		 prompt is given; and to avoid emitting style
 		 sequences in the middle of a run of text, we track
 		 this as well.  */
-	      ui_file_style save_style;
+	      ui_file_style save_style = applied_style;
 	      bool did_paginate = false;
 
 	      chars_printed = 0;
 	      lines_printed++;
 	      if (wrap_column)
 		{
-		  save_style = wrap_style;
+		  /* We are about to insert a newline at an historic
+		     location in the WRAP_BUFFER.  Before we do we want to
+		     restore the default style.  To know if we actually
+		     need to insert an escape sequence we must restore the
+		     current applied style to how it was at the WRAP_COLUMN
+		     location.  */
+		  applied_style = wrap_style;
 		  if (stream->can_emit_style_escape ())
 		    emit_style_escape (ui_file_style (), stream);
 		  /* If we aren't actually wrapping, don't output
@@ -1778,10 +1762,7 @@ fputs_maybe_filtered (const char *linebuffer, struct ui_file *stream,
 		  stream->puts ("\n");
 		}
 	      else
-		{
-		  save_style = applied_style;
-		  flush_wrap_buffer (stream);
-		}
+		flush_wrap_buffer (stream);
 
 	      /* Possible new page.  Note that
 		 PAGINATION_DISABLED_FOR_COMMAND might be set during
@@ -1797,8 +1778,19 @@ fputs_maybe_filtered (const char *linebuffer, struct ui_file *stream,
 	      if (wrap_column)
 		{
 		  stream->puts (wrap_indent);
+
+		  /* Having finished inserting the wrapping we should
+		     restore the style as it was at the WRAP_COLUMN.  */
 		  if (stream->can_emit_style_escape ())
-		    emit_style_escape (save_style, stream);
+		    emit_style_escape (wrap_style, stream);
+
+		  /* The WRAP_BUFFER will still contain content, and that
+		     content might set some alternative style.  Restore
+		     APPLIED_STYLE as it was before we started wrapping,
+		     this reflects the current style for the last character
+		     in WRAP_BUFFER.  */
+		  applied_style = save_style;
+
 		  /* FIXME, this strlen is what prevents wrap_indent from
 		     containing tabs.  However, if we recurse to print it
 		     and count its chars, we risk trouble if wrap_indent is
@@ -1851,16 +1843,9 @@ void
 fputs_styled (const char *linebuffer, const ui_file_style &style,
 	      struct ui_file *stream)
 {
-  /* This just makes it so we emit somewhat fewer escape
-     sequences.  */
-  if (style.is_default ())
-    fputs_maybe_filtered (linebuffer, stream, 1);
-  else
-    {
-      set_output_style (stream, style);
-      fputs_maybe_filtered (linebuffer, stream, 1);
-      set_output_style (stream, ui_file_style ());
-    }
+  set_output_style (stream, style);
+  fputs_maybe_filtered (linebuffer, stream, 1);
+  set_output_style (stream, ui_file_style ());
 }
 
 /* See utils.h.  */
@@ -1869,16 +1854,9 @@ void
 fputs_styled_unfiltered (const char *linebuffer, const ui_file_style &style,
 			 struct ui_file *stream)
 {
-  /* This just makes it so we emit somewhat fewer escape
-     sequences.  */
-  if (style.is_default ())
-    fputs_maybe_filtered (linebuffer, stream, 0);
-  else
-    {
-      set_output_style (stream, style);
-      fputs_maybe_filtered (linebuffer, stream, 0);
-      set_output_style (stream, ui_file_style ());
-    }
+  set_output_style (stream, style);
+  fputs_maybe_filtered (linebuffer, stream, 0);
+  set_output_style (stream, ui_file_style ());
 }
 
 /* See utils.h.  */
@@ -1954,91 +1932,6 @@ fputc_filtered (int c, struct ui_file *stream)
   return c;
 }
 
-/* puts_debug is like fputs_unfiltered, except it prints special
-   characters in printable fashion.  */
-
-void
-puts_debug (char *prefix, char *string, char *suffix)
-{
-  int ch;
-
-  /* Print prefix and suffix after each line.  */
-  static int new_line = 1;
-  static int return_p = 0;
-  static const char *prev_prefix = "";
-  static const char *prev_suffix = "";
-
-  if (*string == '\n')
-    return_p = 0;
-
-  /* If the prefix is changing, print the previous suffix, a new line,
-     and the new prefix.  */
-  if ((return_p || (strcmp (prev_prefix, prefix) != 0)) && !new_line)
-    {
-      fputs_unfiltered (prev_suffix, gdb_stdlog);
-      fputs_unfiltered ("\n", gdb_stdlog);
-      fputs_unfiltered (prefix, gdb_stdlog);
-    }
-
-  /* Print prefix if we printed a newline during the previous call.  */
-  if (new_line)
-    {
-      new_line = 0;
-      fputs_unfiltered (prefix, gdb_stdlog);
-    }
-
-  prev_prefix = prefix;
-  prev_suffix = suffix;
-
-  /* Output characters in a printable format.  */
-  while ((ch = *string++) != '\0')
-    {
-      switch (ch)
-	{
-	default:
-	  if (gdb_isprint (ch))
-	    fputc_unfiltered (ch, gdb_stdlog);
-
-	  else
-	    fprintf_unfiltered (gdb_stdlog, "\\x%02x", ch & 0xff);
-	  break;
-
-	case '\\':
-	  fputs_unfiltered ("\\\\", gdb_stdlog);
-	  break;
-	case '\b':
-	  fputs_unfiltered ("\\b", gdb_stdlog);
-	  break;
-	case '\f':
-	  fputs_unfiltered ("\\f", gdb_stdlog);
-	  break;
-	case '\n':
-	  new_line = 1;
-	  fputs_unfiltered ("\\n", gdb_stdlog);
-	  break;
-	case '\r':
-	  fputs_unfiltered ("\\r", gdb_stdlog);
-	  break;
-	case '\t':
-	  fputs_unfiltered ("\\t", gdb_stdlog);
-	  break;
-	case '\v':
-	  fputs_unfiltered ("\\v", gdb_stdlog);
-	  break;
-	}
-
-      return_p = ch == '\r';
-    }
-
-  /* Print suffix if we printed a newline.  */
-  if (new_line)
-    {
-      fputs_unfiltered (suffix, gdb_stdlog);
-      fputs_unfiltered ("\n", gdb_stdlog);
-    }
-}
-
-
 /* Print a variable number of ARGS using format FORMAT.  If this
    information is going to put the amount written (since the last call
    to REINITIALIZE_MORE_FILTER or the last page break) over the page size,
@@ -2054,27 +1947,19 @@ puts_debug (char *prefix, char *string, char *suffix)
 
 static void
 vfprintf_maybe_filtered (struct ui_file *stream, const char *format,
-			 va_list args, bool filter, bool gdbfmt)
+			 va_list args, bool filter)
 {
-  if (gdbfmt)
-    {
-      ui_out_flags flags = disallow_ui_out_field;
-      if (!filter)
-	flags |= unfiltered_output;
-      cli_ui_out (stream, flags).vmessage (applied_style, format, args);
-    }
-  else
-    {
-      std::string str = string_vprintf (format, args);
-      fputs_maybe_filtered (str.c_str (), stream, filter);
-    }
+  ui_out_flags flags = disallow_ui_out_field;
+  if (!filter)
+    flags |= unfiltered_output;
+  cli_ui_out (stream, flags).vmessage (applied_style, format, args);
 }
 
 
 void
 vfprintf_filtered (struct ui_file *stream, const char *format, va_list args)
 {
-  vfprintf_maybe_filtered (stream, format, args, true, true);
+  vfprintf_maybe_filtered (stream, format, args, true);
 }
 
 void
@@ -2082,35 +1967,39 @@ vfprintf_unfiltered (struct ui_file *stream, const char *format, va_list args)
 {
   if (debug_timestamp && stream == gdb_stdlog)
     {
-      using namespace std::chrono;
-      int len, need_nl;
+      static bool needs_timestamp = true;
 
+      /* Print timestamp if previous print ended with a \n.  */
+      if (needs_timestamp)
+	{
+	  using namespace std::chrono;
+
+	  steady_clock::time_point now = steady_clock::now ();
+	  seconds s = duration_cast<seconds> (now.time_since_epoch ());
+	  microseconds us = duration_cast<microseconds> (now.time_since_epoch () - s);
+	  std::string timestamp = string_printf ("%ld.%06ld ",
+						 (long) s.count (),
+						 (long) us.count ());
+	  fputs_unfiltered (timestamp.c_str (), stream);
+	}
+
+      /* Print the message.  */
       string_file sfile;
       cli_ui_out (&sfile, 0).vmessage (ui_file_style (), format, args);
       std::string linebuffer = std::move (sfile.string ());
+      fputs_unfiltered (linebuffer.c_str (), stream);
 
-      steady_clock::time_point now = steady_clock::now ();
-      seconds s = duration_cast<seconds> (now.time_since_epoch ());
-      microseconds us = duration_cast<microseconds> (now.time_since_epoch () - s);
-
-      len = linebuffer.size ();
-      need_nl = (len > 0 && linebuffer[len - 1] != '\n');
-
-      std::string timestamp = string_printf ("%ld.%06ld %s%s",
-					     (long) s.count (),
-					     (long) us.count (),
-					     linebuffer.c_str (),
-					     need_nl ? "\n": "");
-      fputs_unfiltered (timestamp.c_str (), stream);
+      size_t len = linebuffer.length ();
+      needs_timestamp = (len > 0 && linebuffer[len - 1] == '\n');
     }
   else
-    vfprintf_maybe_filtered (stream, format, args, false, true);
+    vfprintf_maybe_filtered (stream, format, args, false);
 }
 
 void
 vprintf_filtered (const char *format, va_list args)
 {
-  vfprintf_maybe_filtered (gdb_stdout, format, args, true, false);
+  vfprintf_filtered (gdb_stdout, format, args);
 }
 
 void
@@ -2136,22 +2025,6 @@ fprintf_unfiltered (struct ui_file *stream, const char *format, ...)
 
   va_start (args, format);
   vfprintf_unfiltered (stream, format, args);
-  va_end (args);
-}
-
-/* Like fprintf_filtered, but prints its result indented.
-   Called as fprintfi_filtered (spaces, stream, format, ...);  */
-
-void
-fprintfi_filtered (int spaces, struct ui_file *stream, const char *format,
-		   ...)
-{
-  va_list args;
-
-  va_start (args, format);
-  print_spaces_filtered (spaces, stream);
-
-  vfprintf_filtered (stream, format, args);
   va_end (args);
 }
 
@@ -2190,11 +2063,9 @@ vfprintf_styled_no_gdbfmt (struct ui_file *stream, const ui_file_style &style,
   std::string str = string_vprintf (format, args);
   if (!str.empty ())
     {
-      if (!style.is_default ())
-	set_output_style (stream, style);
+      set_output_style (stream, style);
       fputs_maybe_filtered (str.c_str (), stream, filter);
-      if (!style.is_default ())
-	set_output_style (stream, ui_file_style ());
+      set_output_style (stream, ui_file_style ());
     }
 }
 
@@ -2219,20 +2090,6 @@ printf_unfiltered (const char *format, ...)
   va_end (args);
 }
 
-/* Like printf_filtered, but prints it's result indented.
-   Called as printfi_filtered (spaces, format, ...);  */
-
-void
-printfi_filtered (int spaces, const char *format, ...)
-{
-  va_list args;
-
-  va_start (args, format);
-  print_spaces_filtered (spaces, gdb_stdout);
-  vfprintf_filtered (gdb_stdout, format, args);
-  va_end (args);
-}
-
 /* Easy -- but watch out!
 
    This routine is *not* a replacement for puts()!  puts() appends a newline.
@@ -2252,7 +2109,7 @@ puts_unfiltered (const char *string)
 
 /* Return a pointer to N spaces and a null.  The pointer is good
    until the next call to here.  */
-char *
+const char *
 n_spaces (int n)
 {
   char *t;
@@ -2290,8 +2147,6 @@ void
 fprintf_symbol_filtered (struct ui_file *stream, const char *name,
 			 enum language lang, int arg_mode)
 {
-  char *demangled;
-
   if (name != NULL)
     {
       /* If user wants to see raw output, no problem.  */
@@ -2301,12 +2156,9 @@ fprintf_symbol_filtered (struct ui_file *stream, const char *name,
 	}
       else
 	{
-	  demangled = language_demangle (language_def (lang), name, arg_mode);
-	  fputs_filtered (demangled ? demangled : name, stream);
-	  if (demangled != NULL)
-	    {
-	      xfree (demangled);
-	    }
+	  gdb::unique_xmalloc_ptr<char> demangled
+	    = language_demangle (language_def (lang), name, arg_mode);
+	  fputs_filtered (demangled ? demangled.get () : name, stream);
 	}
     }
 }
@@ -2799,14 +2651,6 @@ streq (const char *lhs, const char *rhs)
   return !strcmp (lhs, rhs);
 }
 
-/* See utils.h.  */
-
-int
-streq_hash (const void *lhs, const void *rhs)
-{
-  return streq ((const char *) lhs, (const char *) rhs);
-}
-
 
 
 /*
@@ -2898,27 +2742,6 @@ print_core_address (struct gdbarch *gdbarch, CORE_ADDR address)
     return hex_string_custom (address, 16);
 }
 
-/* Callback hash_f for htab_create_alloc or htab_create_alloc_ex.  */
-
-hashval_t
-core_addr_hash (const void *ap)
-{
-  const CORE_ADDR *addrp = (const CORE_ADDR *) ap;
-
-  return *addrp;
-}
-
-/* Callback eq_f for htab_create_alloc or htab_create_alloc_ex.  */
-
-int
-core_addr_eq (const void *ap, const void *bp)
-{
-  const CORE_ADDR *addr_ap = (const CORE_ADDR *) ap;
-  const CORE_ADDR *addr_bp = (const CORE_ADDR *) bp;
-
-  return *addr_ap == *addr_bp;
-}
-
 /* Convert a string back into a CORE_ADDR.  */
 CORE_ADDR
 string_to_core_addr (const char *my_string)
@@ -2991,31 +2814,32 @@ gdb_realpath_tests ()
   gdb_realpath_check_trailer ("", "");
 }
 
+/* Test the gdb_argv::as_array_view method.  */
+
+static void
+gdb_argv_as_array_view_test ()
+{
+  {
+    gdb_argv argv;
+
+    gdb::array_view<char *> view = argv.as_array_view ();
+
+    SELF_CHECK (view.data () == nullptr);
+    SELF_CHECK (view.size () == 0);
+  }
+  {
+    gdb_argv argv ("une bonne 50");
+
+    gdb::array_view<char *> view = argv.as_array_view ();
+
+    SELF_CHECK (view.size () == 3);
+    SELF_CHECK (strcmp (view[0], "une") == 0);
+    SELF_CHECK (strcmp (view[1], "bonne") == 0);
+    SELF_CHECK (strcmp (view[2], "50") == 0);
+  }
+}
+
 #endif /* GDB_SELF_TEST */
-
-/* Allocation function for the libiberty hash table which uses an
-   obstack.  The obstack is passed as DATA.  */
-
-void *
-hashtab_obstack_allocate (void *data, size_t size, size_t count)
-{
-  size_t total = size * count;
-  void *ptr = obstack_alloc ((struct obstack *) data, total);
-
-  memset (ptr, 0, total);
-  return ptr;
-}
-
-/* Trivial deallocation function for the libiberty splay tree and hash
-   table - don't deallocate anything.  Rely on later deletion of the
-   obstack.  DATA will be the obstack, although it is not needed
-   here.  */
-
-void
-dummy_obstack_deallocate (void *object, void *data)
-{
-  return;
-}
 
 /* Simple, portable version of dirname that does not modify its
    argument.  */
@@ -3041,45 +2865,6 @@ ldirname (const char *filename)
     dirname[base++ - filename] = '.';
 
   return dirname;
-}
-
-/* See utils.h.  */
-
-void
-gdb_argv::reset (const char *s)
-{
-  char **argv = buildargv (s);
-
-  freeargv (m_argv);
-  m_argv = argv;
-}
-
-#define AMBIGUOUS_MESS1	".\nMatching formats:"
-#define AMBIGUOUS_MESS2	\
-  ".\nUse \"set gnutarget format-name\" to specify the format."
-
-std::string
-gdb_bfd_errmsg (bfd_error_type error_tag, char **matching)
-{
-  char **p;
-
-  /* Check if errmsg just need simple return.  */
-  if (error_tag != bfd_error_file_ambiguously_recognized || matching == NULL)
-    return bfd_errmsg (error_tag);
-
-  std::string ret (bfd_errmsg (error_tag));
-  ret += AMBIGUOUS_MESS1;
-
-  for (p = matching; *p; p++)
-    {
-      ret += " ";
-      ret += *p;
-    }
-  ret += AMBIGUOUS_MESS2;
-
-  xfree (matching);
-
-  return ret;
 }
 
 /* Return ARGS parsed as a valid pid, or throw an error.  */
@@ -3122,7 +2907,7 @@ substitute_path_component (char **stringp, const char *from, const char *to)
 
       if ((s == string || IS_DIR_SEPARATOR (s[-1])
 	   || s[-1] == DIRNAME_SEPARATOR)
-          && (s[from_len] == '\0' || IS_DIR_SEPARATOR (s[from_len])
+	  && (s[from_len] == '\0' || IS_DIR_SEPARATOR (s[from_len])
 	      || s[from_len] == DIRNAME_SEPARATOR))
 	{
 	  char *string_new;
@@ -3489,5 +3274,6 @@ When set, debugging messages will be marked with seconds and microseconds."),
 
 #if GDB_SELF_TEST
   selftests::register_test ("gdb_realpath", gdb_realpath_tests);
+  selftests::register_test ("gdb_argv_array_view", gdb_argv_as_array_view_test);
 #endif
 }

@@ -1,6 +1,6 @@
 /* Definitions for values of C expressions, for GDB.
 
-   Copyright (C) 1986-2020 Free Software Foundation, Inc.
+   Copyright (C) 1986-2022 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,6 +23,7 @@
 #include "frame.h"		/* For struct frame_id.  */
 #include "extension.h"
 #include "gdbsupport/gdb_ref_ptr.h"
+#include "gmp-utils.h"
 
 struct block;
 struct expression;
@@ -263,6 +264,12 @@ struct lval_funcs
      TOVAL is not considered as an lvalue.  */
   void (*write) (struct value *toval, struct value *fromval);
 
+  /* Return true if any part of V is optimized out, false otherwise.
+     This will only be called for lazy values -- if the value has been
+     fetched, then the value's optimized-out bits are consulted
+     instead.  */
+  bool (*is_optimized_out) (struct value *v);
+
   /* If non-NULL, this is used to implement pointer indirection for
      this value.  This method may return NULL, in which case value_ind
      will fall back to ordinary indirection.  */
@@ -301,20 +308,6 @@ struct lval_funcs
 extern struct value *allocate_computed_value (struct type *type,
 					      const struct lval_funcs *funcs,
 					      void *closure);
-
-/* Helper function to check the validity of some bits of a value.
-
-   If TYPE represents some aggregate type (e.g., a structure), return 1.
-   
-   Otherwise, any of the bytes starting at OFFSET and extending for
-   TYPE_LENGTH(TYPE) bytes are invalid, print a message to STREAM and
-   return 0.  The checking is done using FUNCS.
-   
-   Otherwise, return 1.  */
-
-extern int valprint_check_validity (struct ui_file *stream, struct type *type,
-				    LONGEST embedded_offset,
-				    const struct value *val);
 
 extern struct value *allocate_optimized_out_value (struct type *type);
 
@@ -367,7 +360,7 @@ extern void error_value_optimized_out (void);
    get to the real subobject, if the value happens to represent
    something embedded in a larger run-time object.  */
 
-extern gdb_byte *value_contents_raw (struct value *);
+extern gdb::array_view<gdb_byte> value_contents_raw (struct value *);
 
 /* Actual contents of the value.  For use of this value; setting it
    uses the stuff above.  Not valid if lazy is nonzero.  Target
@@ -375,24 +368,24 @@ extern gdb_byte *value_contents_raw (struct value *);
    value.  Note that a value therefore extends beyond what is
    declared here.  */
 
-extern const gdb_byte *value_contents (struct value *);
-extern gdb_byte *value_contents_writeable (struct value *);
+extern gdb::array_view<const gdb_byte> value_contents (struct value *);
+extern gdb::array_view<gdb_byte> value_contents_writeable (struct value *);
 
 /* The ALL variants of the above two macros do not adjust the returned
    pointer by the embedded_offset value.  */
 
-extern gdb_byte *value_contents_all_raw (struct value *);
-extern const gdb_byte *value_contents_all (struct value *);
+extern gdb::array_view<gdb_byte> value_contents_all_raw (struct value *);
+extern gdb::array_view<const gdb_byte> value_contents_all (struct value *);
 
 /* Like value_contents_all, but does not require that the returned
    bits be valid.  This should only be used in situations where you
    plan to check the validity manually.  */
-extern const gdb_byte *value_contents_for_printing (struct value *value);
+extern gdb::array_view<const gdb_byte> value_contents_for_printing (struct value *value);
 
 /* Like value_contents_for_printing, but accepts a constant value
    pointer.  Unlike value_contents_for_printing however, the pointed
    value must _not_ be lazy.  */
-extern const gdb_byte *
+extern gdb::array_view<const gdb_byte>
   value_contents_for_printing_const (const struct value *value);
 
 extern void value_fetch_lazy (struct value *val);
@@ -434,7 +427,7 @@ extern void set_value_initialized (struct value *, int);
 /* Set COMPONENT's location as appropriate for a component of WHOLE
    --- regardless of what kind of lvalue WHOLE is.  */
 extern void set_value_component_location (struct value *component,
-                                          const struct value *whole);
+					  const struct value *whole);
 
 /* While the following fields are per- VALUE .CONTENT .PIECE (i.e., a
    single value might have multiple LVALs), this hacked interface is
@@ -471,12 +464,6 @@ extern struct internalvar **deprecated_value_internalvar_hack (struct value *);
 extern struct frame_id *deprecated_value_next_frame_id_hack (struct value *);
 #define VALUE_NEXT_FRAME_ID(val) (*deprecated_value_next_frame_id_hack (val))
 
-/* Frame ID of frame to which a register value is relative.  This is
-   similar to VALUE_NEXT_FRAME_ID, above, but may not be assigned to. 
-   Note that VALUE_FRAME_ID effectively undoes the "next" operation
-   that was performed during the assignment to VALUE_NEXT_FRAME_ID.  */
-#define VALUE_FRAME_ID(val) (get_prev_frame_id_by_id (VALUE_NEXT_FRAME_ID (val)))
-
 /* Register number if the value is from a register.  */
 extern int *deprecated_value_regnum_hack (struct value *);
 #define VALUE_REGNUM(val) (*deprecated_value_regnum_hack (val))
@@ -488,7 +475,9 @@ extern struct value *coerce_ref_if_computed (const struct value *arg);
 
 /* Setup a new value type and enclosing value type for dereferenced value VALUE.
    ENC_TYPE is the new enclosing type that should be set.  ORIGINAL_TYPE and
-   ORIGINAL_VAL are the type and value of the original reference or pointer.
+   ORIGINAL_VAL are the type and value of the original reference or
+   pointer.  ORIGINAL_VALUE_ADDRESS is the address within VALUE, that is
+   the address that was dereferenced.
 
    Note, that VALUE is modified by this function.
 
@@ -497,7 +486,8 @@ extern struct value *coerce_ref_if_computed (const struct value *arg);
 extern struct value * readjust_indirect_value_type (struct value *value,
 						    struct type *enc_type,
 						    const struct type *original_type,
-						    const struct value *original_val);
+						    struct value *original_val,
+						    CORE_ADDR original_value_address);
 
 /* Convert a REF to the object referenced.  */
 
@@ -749,9 +739,6 @@ extern struct value *allocate_value_lazy (struct type *type);
 extern void value_contents_copy (struct value *dst, LONGEST dst_offset,
 				 struct value *src, LONGEST src_offset,
 				 LONGEST length);
-extern void value_contents_copy_raw (struct value *dst, LONGEST dst_offset,
-				     struct value *src, LONGEST src_offset,
-				     LONGEST length);
 
 extern struct value *allocate_repeat_value (struct type *type, int count);
 
@@ -839,7 +826,7 @@ extern struct value *value_neg (struct value *arg1);
 extern struct value *value_complement (struct value *arg1);
 
 extern struct value *value_struct_elt (struct value **argp,
-				       struct value **args,
+				       gdb::optional<gdb::array_view <value *>> args,
 				       const char *name, int *static_memfuncp,
 				       const char *err);
 
@@ -916,16 +903,16 @@ extern int using_struct_return (struct gdbarch *gdbarch,
 				struct value *function,
 				struct type *value_type);
 
-extern struct value *evaluate_expression (struct expression *exp);
+/* Evaluate the expression EXP.  If set, EXPECT_TYPE is passed to the
+   outermost operation's evaluation.  This is ignored by most
+   operations, but may be used, e.g., to determine the type of an
+   otherwise untyped symbol.  The caller should not assume that the
+   returned value has this type.  */
+
+extern struct value *evaluate_expression (struct expression *exp,
+					  struct type *expect_type = nullptr);
 
 extern struct value *evaluate_type (struct expression *exp);
-
-extern struct value *evaluate_subexp (struct type *expect_type,
-				      struct expression *exp,
-				      int *pos, enum noside noside);
-
-extern struct value *evaluate_subexpression_type (struct expression *exp,
-						  int subexp);
 
 extern value *evaluate_var_value (enum noside noside, const block *blk,
 				  symbol *var);
@@ -934,23 +921,18 @@ extern value *evaluate_var_msym_value (enum noside noside,
 				       struct objfile *objfile,
 				       minimal_symbol *msymbol);
 
-extern value *eval_skip_value (expression *exp);
-
-extern void fetch_subexp_value (struct expression *exp, int *pc,
+namespace expr { class operation; };
+extern void fetch_subexp_value (struct expression *exp,
+				expr::operation *op,
 				struct value **valp, struct value **resultp,
 				std::vector<value_ref_ptr> *val_chain,
-				int preserve_errors);
-
-extern const char *extract_field_op (struct expression *exp, int *subexp);
-
-extern struct value *evaluate_subexp_with_coercion (struct expression *,
-						    int *, enum noside);
+				bool preserve_errors);
 
 extern struct value *parse_and_eval (const char *exp);
 
 extern struct value *parse_to_comma_and_eval (const char **expp);
 
-extern struct type *parse_and_eval_type (char *p, int length);
+extern struct type *parse_and_eval_type (const char *p, int length);
 
 extern CORE_ADDR parse_and_eval_address (const char *exp);
 
@@ -1046,7 +1028,15 @@ extern int value_equal_contents (struct value *arg1, struct value *arg2);
 
 extern int value_less (struct value *arg1, struct value *arg2);
 
-extern int value_logical_not (struct value *arg1);
+/* Simulate the C operator ! -- return true if ARG1 contains zero.  */
+extern bool value_logical_not (struct value *arg1);
+
+/* Returns true if the value VAL represents a true value.  */
+static inline bool
+value_true (struct value *val)
+{
+  return !value_logical_not (val);
+}
 
 /* C++ */
 
@@ -1133,7 +1123,7 @@ extern void print_variable_and_value (const char *name,
 extern void typedef_print (struct type *type, struct symbol *news,
 			   struct ui_file *stream);
 
-extern char *internalvar_name (const struct internalvar *var);
+extern const char *internalvar_name (const struct internalvar *var);
 
 extern void preserve_values (struct objfile *);
 
@@ -1175,10 +1165,6 @@ extern struct value *find_function_in_inferior (const char *,
 
 extern struct value *value_allocate_space_in_inferior (int);
 
-extern struct value *value_subscripted_rvalue (struct value *array,
-					       LONGEST index,
-					       LONGEST lowerbound);
-
 /* User function handler.  */
 
 typedef struct value *(*internal_function_fn) (struct gdbarch *gdbarch,
@@ -1209,7 +1195,7 @@ struct value *call_internal_function (struct gdbarch *gdbarch,
 				      struct value *function,
 				      int argc, struct value **argv);
 
-char *value_internal_function_name (struct value *);
+const char *value_internal_function_name (struct value *);
 
 /* Build a value wrapping and representing WORKER.  The value takes ownership
    of the xmethod_worker object.  */
@@ -1225,5 +1211,9 @@ extern struct value *call_xmethod (struct value *method,
 /* Destroy the values currently allocated.  This is called when GDB is
    exiting (e.g., on quit_force).  */
 extern void finalize_values ();
+
+/* Convert VALUE to a gdb_mpq.  The caller must ensure that VALUE is
+   of floating-point, fixed-point, or integer type.  */
+extern gdb_mpq value_to_gdb_mpq (struct value *value);
 
 #endif /* !defined (VALUE_H) */

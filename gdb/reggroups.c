@@ -1,6 +1,6 @@
 /* Register groupings for GDB, the GNU debugger.
 
-   Copyright (C) 2002-2020 Free Software Foundation, Inc.
+   Copyright (C) 2002-2022 Free Software Foundation, Inc.
 
    Contributed by Red Hat.
 
@@ -26,7 +26,7 @@
 #include "regcache.h"
 #include "command.h"
 #include "gdbcmd.h"		/* For maintenanceprintlist.  */
-#include "gdb_obstack.h"
+#include "gdbsupport/gdb_obstack.h"
 
 /* Individual register groups.  */
 
@@ -201,7 +201,7 @@ default_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
     return 0;
   if (group == all_reggroup)
     return 1;
-  vector_p = TYPE_VECTOR (register_type (gdbarch, regnum));
+  vector_p = register_type (gdbarch, regnum)->is_vector ();
   float_p = (register_type (gdbarch, regnum)->code () == TYPE_CODE_FLT
 	     || (register_type (gdbarch, regnum)->code ()
 		 == TYPE_CODE_DECFLOAT));
@@ -251,7 +251,7 @@ reggroups_dump (struct gdbarch *gdbarch, struct ui_file *file)
 	  name = "Group";
 	else
 	  name = reggroup_name (group);
-	fprintf_unfiltered (file, " %-10s", name);
+	fprintf_filtered (file, " %-10s", name);
       }
       
       /* Group type.  */
@@ -274,13 +274,13 @@ reggroups_dump (struct gdbarch *gdbarch, struct ui_file *file)
 		internal_error (__FILE__, __LINE__, _("bad switch"));
 	      }
 	  }
-	fprintf_unfiltered (file, " %-10s", type);
+	fprintf_filtered (file, " %-10s", type);
       }
 
       /* Note: If you change this, be sure to also update the
-         documentation.  */
+	 documentation.  */
       
-      fprintf_unfiltered (file, "\n");
+      fprintf_filtered (file, "\n");
 
       group = reggroup_next (gdbarch, group);
     }

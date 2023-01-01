@@ -1,6 +1,6 @@
 /* varobj support for Ada.
 
-   Copyright (C) 2012-2020 Free Software Foundation, Inc.
+   Copyright (C) 2012-2022 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -63,10 +63,10 @@ static void
 ada_varobj_decode_var (struct value **value_ptr, struct type **type_ptr)
 {
   if (*value_ptr)
-    {
-      *value_ptr = ada_get_decoded_value (*value_ptr);
-      *type_ptr = ada_check_typedef (value_type (*value_ptr));
-    }
+    *value_ptr = ada_get_decoded_value (*value_ptr);
+
+  if (*value_ptr != nullptr)
+    *type_ptr = ada_check_typedef (value_type (*value_ptr));
   else
     *type_ptr = ada_get_decoded_type (*type_ptr);
 }
@@ -208,7 +208,9 @@ ada_varobj_adjust_for_child_access (struct value **value,
       the (value, type) couple.  */
   if ((*type)->code () == TYPE_CODE_PTR
       && (TYPE_TARGET_TYPE (*type)->code () == TYPE_CODE_STRUCT
-          || TYPE_TARGET_TYPE (*type)->code () == TYPE_CODE_UNION)
+	  || TYPE_TARGET_TYPE (*type)->code () == TYPE_CODE_UNION)
+      && *value != nullptr
+      && value_as_address (*value) != 0
       && !ada_is_array_descriptor_type (TYPE_TARGET_TYPE (*type))
       && !ada_is_constrained_packed_array_type (TYPE_TARGET_TYPE (*type)))
     ada_varobj_ind (*value, *type, value, type);
@@ -331,6 +333,10 @@ ada_varobj_get_ptr_number_of_children (struct value *parent_value,
      you cannot print what they point to.  */
   if (child_type->code () == TYPE_CODE_FUNC
       || child_type->code () == TYPE_CODE_VOID)
+    return 0;
+
+  /* Only show children for non-null pointers.  */
+  if (parent_value == nullptr || value_as_address (parent_value) == 0)
     return 0;
 
   /* All other types have 1 child.  */
@@ -496,7 +502,7 @@ ada_varobj_describe_struct_child (struct value *parent_value,
 		 name, except that we need to strip suffixes from it.
 		 For instance, fields with alignment constraints will
 		 have an __XVA suffix added to them.  */
-	      const char *field_name = TYPE_FIELD_NAME (parent_type, fieldno);
+	      const char *field_name = parent_type->field (fieldno).name ();
 	      int child_name_len = ada_name_prefix_len (field_name);
 
 	      *child_name = string_printf ("%.*s", child_name_len, field_name);
@@ -516,7 +522,7 @@ ada_varobj_describe_struct_child (struct value *parent_value,
 		 name, except that we need to strip suffixes from it.
 		 For instance, fields with alignment constraints will
 		 have an __XVA suffix added to them.  */
-	      const char *field_name = TYPE_FIELD_NAME (parent_type, fieldno);
+	      const char *field_name = parent_type->field (fieldno).name ();
 	      int child_name_len = ada_name_prefix_len (field_name);
 
 	      *child_path_expr =
