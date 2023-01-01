@@ -33,6 +33,7 @@ POTFILES
 TAGS
 TAGS.sub
 
+
 .local.vimrc
 .lvimrc
 
@@ -62,3 +63,6 @@ stamp-*
 /mpc*
 /gmp*
 /isl*
+
+# eclipse
+.settings
