@@ -1801,7 +1801,7 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
 	}
 
       if (do_demangle)
-      (*inf->fprintf_styled_func) (inf->stream, dis_style_text, ">");
+	(*inf->fprintf_styled_func) (inf->stream, dis_style_text, ">");
     }
   else
     {
@@ -1834,7 +1834,8 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
 	  objdump_print_value (vma - bfd_asymbol_value (sym), inf, true);
 	}
 
-      (*inf->fprintf_styled_func) (inf->stream, dis_style_text, ">");
+      if (do_demangle)
+	(*inf->fprintf_styled_func) (inf->stream, dis_style_text, ">");
     }
 
   if (display_file_offsets)
