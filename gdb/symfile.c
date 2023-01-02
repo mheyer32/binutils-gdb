@@ -2849,19 +2849,19 @@ allocate_compunit_symtab (struct objfile *objfile, const char *name)
 void
 add_compunit_symtab_to_objfile (struct compunit_symtab *cu)
 {
-  cu->next = cu->objfile->compunit_symtabs;
-  cu->objfile->compunit_symtabs = cu;
+  cu->next = cu->objfile()->compunit_symtabs;
+  cu->objfile()->compunit_symtabs = cu;
 #if (DEFAULT_BFD_VEC == amiga_vec)
-  unsigned long text_offset = cu->objfile->section_offsets[0];
+  unsigned long text_offset = cu->objfile()->section_offsets[0];
   if (text_offset)
     {
       struct symtab *s;
       struct linetable *l;
       int i;
 
-      for ((s) = (cu)->filetabs; (s) != NULL; (s) = (s)->next)
+      for ((s) = (cu)->m_filetabs; (s) != NULL; (s) = (s)->next)
 	{
-	  l = SYMTAB_LINETABLE(s);
+	  l = s->linetable();
 	  if (l)
 	    for (i = 0; i < l->nitems; ++i)
 	      if (l->item[i].pc < text_offset)

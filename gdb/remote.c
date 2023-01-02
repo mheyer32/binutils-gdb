@@ -4392,10 +4392,6 @@ remote_target::get_offsets ()
         offs[SECT_OFF_BSS (objf)] = bss_addr ? bss_addr : data_addr;
     }
 
-#if (DEFAULT_BFD_VEC == amiga_vec)
-  text_offset = offs[SECT_OFF_TEXT (objf)];
-#endif
-
   objfile_relocate (objf, offs);
 }
 
