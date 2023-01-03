@@ -604,19 +604,18 @@ get_relocated_section_contents (
 			   input_section,
 			   relocateable ? abfd : (bfd *) NULL,
 			   &error_message);
-	  if (relocateable)
-	    {
-	      asection *os = input_section->output_section;
-
-	      DPRINT(5,("Keeping reloc\n"));
-	      /* A partial link, so keep the relocs.  */
-	      os->orelocation[os->reloc_count] = *parent;
-	      os->reloc_count++;
-	    }
-
 	  if (r != bfd_reloc_ok)
 	    {
-	      switch (r)
+	      if (relocateable)
+		{
+		  asection *os = input_section->output_section;
+
+		  DPRINT(5,("Keeping reloc\n"));
+		  /* A partial link, so keep the relocs.  */
+		  os->orelocation[os->reloc_count] = *parent;
+		  os->reloc_count++;
+		}
+	      else switch (r)
 		{
 		case bfd_reloc_undefined:
 		  ((*link_info->callbacks->undefined_symbol)
@@ -647,7 +646,6 @@ get_relocated_section_contents (
 //		  abort ();
 		  break;
 		}
-
 	    }
 	}
     }
@@ -790,7 +788,9 @@ amiga_perform_reloc (
   sec_ptr target_section; /* reloc is relative to this section */
   bfd_reloc_status_type ret;
   bool copy;
-   int flags;
+  int flags;
+  bool hard_reloc = AMIGA_DATA(sec->output_section->owner)->vma_reloc;
+
   DPRINT(5,("Entering APR\nflavour is %d (amiga_flavour=%d, aout_flavour=%d)\n",
 	    bfd_get_flavour (sec->owner), bfd_target_amiga_flavour,
 	    bfd_target_aout_flavour));
@@ -827,7 +827,9 @@ amiga_perform_reloc (
     {
     case H_ABS16:
     case H_ABS32:
-      if (bfd_is_abs_section(target_section)) /* Ref to absolute hunk */
+      if (hard_reloc)
+	relocation= sym->value + target_section->output_offset + target_section->output_section->vma;
+      else if (bfd_is_abs_section(target_section)) /* Ref to absolute hunk */
 	relocation=sym->value;
       else if (bfd_is_com_section(target_section)) /* ref to common */
 	{
@@ -1276,6 +1278,14 @@ amiga_final_link (
 
   DPRINT(10,("Got all relocs\n"));
 
+  /* SBF: check if some offset is given, then all relocs are resolved using output_section->vma. */
+  for (o = abfd->sections->output_section; o != NULL; o = o->next)
+    if (o->vma != 0)
+      {
+	AMIGA_DATA(abfd)->vma_reloc = true;
+	break;
+      }
+
   /* Handle all the link order information for the sections.  */
   for (o = abfd->sections;
        o != (asection *) NULL;
@@ -1306,7 +1316,7 @@ amiga_final_link (
     }
 
   if (bfd_get_flavour(abfd)==bfd_target_amiga_flavour
-//      &&!info->relocateable
+      && !bfd_link_relocatable (info)
       )
     AMIGA_DATA(abfd)->IsLoadFile = true;
 
@@ -1379,15 +1389,8 @@ amiga_reloc_link_order (
   /* Store the addend */
   r->addend = link_order->u.reloc.p->addend;
 
-//  /* If we are generating relocateable output, just add the reloc */
-//  if (info->relocateable)
-//    {
-//      DPRINT(5,("Adding reloc\n"));
-//      sec->orelocation[sec->reloc_count] = r;
-//      ++sec->reloc_count;
-//      sec->flags|=SEC_RELOC;
-//    }
-//  else /* Try to apply the reloc */
+  /* If we are generating relocateable output, just add the reloc */
+  /* Try to apply the reloc */
     {
       void * data=(void *)sec->contents;
       bfd_reloc_status_type ret;
@@ -1406,8 +1409,18 @@ amiga_reloc_link_order (
 
       if (ret!=bfd_reloc_ok)
 	{
-	  DPRINT(5,("Leaving amiga_reloc_link, value false\n"));
-	  return false;
+	  if (bfd_link_relocatable (info))
+	    {
+	      DPRINT(5,("Adding reloc\n"));
+	      sec->orelocation[sec->reloc_count] = r;
+	      ++sec->reloc_count;
+	      sec->flags|=SEC_RELOC;
+	    }
+	  else
+	    {
+	      DPRINT(5,("Leaving amiga_reloc_link, value false\n"));
+	      return false;
+	    }
 	}
     }
   DPRINT(5,("Leaving amiga_reloc_link\n"));

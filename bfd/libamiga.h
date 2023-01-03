@@ -215,7 +215,6 @@ struct amiga_data {
 
   carsym *symdefs;		/* the symdef entries */
   symindex symdef_count;	/* how many there are */
-
 };
 
 struct aout_symbol;
@@ -231,6 +230,8 @@ typedef struct amiga_data_struct {
   bfd_vma a4init;     /* cache the value for efficiency */
   struct aout_symbol ** stab_symbols;
   struct bfd_hash_table * section_lookup;
+
+  bool vma_reloc; /* SBF: relocate using vma addresses. */
 } amiga_data_type;
 
 #define adata(bfd)	((bfd)->tdata.amiga_data->a)
