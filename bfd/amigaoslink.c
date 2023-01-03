@@ -1280,7 +1280,7 @@ amiga_final_link (
 
   /* SBF: check if some offset is given, then all relocs are resolved using output_section->vma. */
   for (o = abfd->sections->output_section; o != NULL; o = o->next)
-    if (o->vma != 0)
+    if (o->vma != 0 && (o->prev == NULL || o->prev->size != o->vma))
       {
 	AMIGA_DATA(abfd)->vma_reloc = true;
 	break;
