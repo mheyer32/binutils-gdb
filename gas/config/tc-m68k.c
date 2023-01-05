@@ -36,7 +36,9 @@ static void m68k_elf_gnu_attribute (int);
 
 #endif
 
+#ifdef TE_AMIGA
 extern const bfd_target amiga_vec;
+#endif
 long
 md_pcrel_from_m68k (fixS *fixP, segT current_section);
 
@@ -1409,7 +1411,7 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
 			unsigned.  */
 		     + ((fixp->fx_pcrel_adjust & 0xff) ^ 0x80) - 0x80
 		     + fixp->fx_addnumber
-		     + md_pcrel_from (fixp, section));
+		     + md_pcrel_from_m68k (fixp, section));
 #endif
 
   reloc->howto = bfd_reloc_type_lookup (stdoutput, code);
@@ -8018,6 +8020,7 @@ md_pcrel_from_m68k (fixS *fixP, segT current_section)
   if (adjust == 64)
     adjust = -1;
 
+#ifdef TE_AMIGA
   /* Amiga Hunk adjusts to current address. */
   if (stdoutput->xvec == &amiga_vec)
     {
@@ -8030,6 +8033,7 @@ md_pcrel_from_m68k (fixS *fixP, segT current_section)
 
       // fall through
     }
+#endif
 
   return fixP->fx_where + fixP->fx_frag->fr_address - adjust;
 }
@@ -8210,7 +8214,7 @@ m68k_elf_cons (int nbytes /* 4=.long */)
 	      if (target_big_endian)
 		offset = nbytes - size;
 	      fix_new_exp (frag_now, p - frag_now->fr_literal + offset, size,
-			   &exp, 0, reloc);
+			   &exp, 0, reloc, 0);
 	    }
 	}
       else

@@ -84,8 +84,10 @@
 #define TC_FINALIZE_SYMS_BEFORE_SIZE_SEG 1
 #endif
 
+extern long
+md_pcrel_from_m68k (fixS *fixP, segT current_section);
 #ifndef	MD_PCREL_FROM_SECTION
-#define MD_PCREL_FROM_SECTION(FIX, SEC) md_pcrel_from (FIX)
+#define MD_PCREL_FROM_SECTION(FIX, SEC) md_pcrel_from_m68k (FIX, SEC)
 #endif
 
 #ifndef TC_FAKE_LABEL
