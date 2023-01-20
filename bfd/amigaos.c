@@ -280,7 +280,7 @@ enum {R_ABS32=0,R_ABS16,R_ABS8,R_PC32,R_PC16,R_PC8,R_SD32,R_SD16,R_SD8,R_PC26,R_
 reloc_howto_type howto_table[R__MAX] =
 {
   {H_ABS32,   /* type */
-      2,          /* size */
+      4,          /* size */
       32,         /* bitsize */
       0,          /* rightshift */
       0,          /* bitpos */
@@ -294,15 +294,15 @@ reloc_howto_type howto_table[R__MAX] =
       0,          /* special_function */
       "RELOC32"  /* textual name */
   },
-  {H_ABS16,  1, 16, 0, 0, complain_overflow_bitfield, false, false, false, false, 0x0000ffff, 0x0000ffff, 0, "RELOC16"   },
-  {H_ABS8,   0,  8, 0, 0, complain_overflow_bitfield, false, false, false, false, 0x000000ff, 0x000000ff, 0, "RELOC8"    },
-  {H_PC32,   2, 32, 0, 0, complain_overflow_signed,   false, true,  false, true , 0xffffffff, 0xffffffff, 0, "RELRELOC32"},
-  {H_PC16,   1, 16, 0, 0, complain_overflow_signed,   false, true,  false, true , 0x0000ffff, 0x0000ffff, 0, "RELRELOC16"},
-  {H_PC8,    0,  8, 0, 0, complain_overflow_signed,   false, true,  false, true , 0x000000ff, 0x000000ff, 0, "RELRELOC8" },
-  {H_SD32,   2, 32, 0, 0, complain_overflow_bitfield, false, false, false, false, 0xffffffff, 0xffffffff, 0, "DREL32"    },
-  {H_SD16,   1, 16, 0, 0, complain_overflow_bitfield, false, false, false, false, 0x0000ffff, 0x0000ffff, 0, "DREL16"    },
-  {H_SD8,    0,  8, 0, 0, complain_overflow_bitfield, false, false, false, false, 0x000000ff, 0x000000ff, 0, "DREL8"     },
-  {H_PC26,   2, 26, 0, 0, complain_overflow_signed,   false, true,  false, true , 0x03fffffc, 0x03fffffc, 0, "RELRELOC26"},
+  {H_ABS16,  2, 16, 0, 0, complain_overflow_bitfield, false, false, false, false, 0x0000ffff, 0x0000ffff, 0, "RELOC16"   },
+  {H_ABS8,   1,  8, 0, 0, complain_overflow_bitfield, false, false, false, false, 0x000000ff, 0x000000ff, 0, "RELOC8"    },
+  {H_PC32,   4, 32, 0, 0, complain_overflow_signed,   false, true,  false, true , 0xffffffff, 0xffffffff, 0, "RELRELOC32"},
+  {H_PC16,   2, 16, 0, 0, complain_overflow_signed,   false, true,  false, true , 0x0000ffff, 0x0000ffff, 0, "RELRELOC16"},
+  {H_PC8,    1,  8, 0, 0, complain_overflow_signed,   false, true,  false, true , 0x000000ff, 0x000000ff, 0, "RELRELOC8" },
+  {H_SD32,   4, 32, 0, 0, complain_overflow_bitfield, false, false, false, false, 0xffffffff, 0xffffffff, 0, "DREL32"    },
+  {H_SD16,   2, 16, 0, 0, complain_overflow_bitfield, false, false, false, false, 0x0000ffff, 0x0000ffff, 0, "DREL16"    },
+  {H_SD8,    1,  8, 0, 0, complain_overflow_bitfield, false, false, false, false, 0x000000ff, 0x000000ff, 0, "DREL8"     },
+  {H_PC26,   4, 26, 0, 0, complain_overflow_signed,   false, true,  false, true , 0x03fffffc, 0x03fffffc, 0, "RELRELOC26"},
 };
 
 /* Determine the on-disk relocation size.
@@ -2301,17 +2301,17 @@ amiga_write_section_contents (
 
       switch (r->howto->size)
 	{
-	case 0: /* adjust byte */
+	case 1: /* adjust byte */
 	  x = ((char *)values)[0] + r->addend;
 	  values[0] = x & 0xff;
 	  break;
-	case 1: /* adjust word */
+	case 2: /* adjust word */
 	  k = values[1] | (values[0] << 8);
 	  x = (int)k + r->addend;
 	  values[0] = (x & 0xff00) >> 8;
 	  values[1] = x & 0xff;
 	  break;
-	case 2: /* adjust long */
+	case 4: /* adjust long */
 	  k = values[3] | (values[2] << 8) | (values[1] << 16) | (values[0] << 24);
 	  x = (int)k + r->addend;
 	  values[3] = x & 0xff;

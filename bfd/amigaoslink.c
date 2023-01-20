@@ -677,7 +677,7 @@ my_add_to (
 
   switch (r->howto->size)
     {
-    case 0: /* byte size */
+    case 1: /* byte size */
       if ((flags & ADDEND_UNSIGNED) == 0)
 	val = ((*p & 0xff) ^ 0x80) - 0x80 + add;
       else
@@ -695,7 +695,7 @@ my_add_to (
       *p = val & 0xff;
       break;
 
-    case 1: /* word size */
+    case 2: /* word size */
       if ((flags & ADDEND_UNSIGNED) == 0)
 	val = bfd_getb_signed_16 (p);
       else
@@ -717,7 +717,7 @@ my_add_to (
       bfd_putb16 (val, p);
       break;
 
-    case 2: /* long word */
+    case 4: /* long word */
       val = bfd_getb_signed_32 (p) + add;
       /* If we are linking a resident program, then we limit the reloc size
 	 to about +/- 1 GB.
