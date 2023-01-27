@@ -987,6 +987,13 @@ handle_fatal_signal (int sig)
 
 static thread_local void (*thread_local_segv_handler) (int);
 
+#ifdef __CYGWIN__ 
+void set_segv_handler(void* hdl)
+{
+  thread_local_segv_handler = (void (*)(int))hdl;
+}
+#endif
+
 static void handle_sigsegv (int sig);
 
 /* Install the SIGSEGV handler.  */
