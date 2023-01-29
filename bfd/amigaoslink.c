@@ -500,7 +500,7 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
       while (s && s->next != input_section)
 	  s = s->next;
 
-      if (s) {
+      if (s && s->output_section->contents) {
 	  unsigned char * start = s->output_section->contents + s->output_offset;
 	  unsigned char * end = start + s->rawsize;
 	  while (start < end)
@@ -810,9 +810,9 @@ amiga_perform_reloc (
 
   sym=*(r->sym_ptr_ptr);
 
-  target_section=sym->section;
-  if ((target_section->flags & SEC_EXCLUDE) && target_section->kept_section)
-    target_section = target_section->kept_section;
+  target_section = sym->section;
+  if (target_section->kept_section)
+      sym->section = target_section = target_section->kept_section;
 
   if (bfd_is_und_section(target_section)) /* Error */
     {

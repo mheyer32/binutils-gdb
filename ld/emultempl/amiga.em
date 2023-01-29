@@ -164,6 +164,9 @@ amiga_handle_option (optc)
 void 
 amiga_after_parse ()
 {
+  extern struct bfd_link_info link_info;
+  extern void amiga_set_link_info(struct bfd_link_info * link_info);
+  amiga_set_link_info(&link_info);
   ldfile_sort_flavors();
 }
 

@@ -139,6 +139,13 @@ extern void * alloca PARAMS ((size_t));
 #endif
 
 
+extern void amiga_set_link_info(struct bfd_link_info * link_info);
+static struct bfd_link_info * plink_info;
+void amiga_set_link_info(struct bfd_link_info * link_info)
+{
+  plink_info = link_info;
+}
+
 #define bfd_is_special_section(sec) \
   (bfd_is_abs_section(sec)||bfd_is_com_section(sec)||bfd_is_und_section(sec)||bfd_is_ind_section(sec))
 
@@ -2963,14 +2970,27 @@ amiga_slurp_symbol_table (
 	}
       {
 	unsigned i = 0;
+	bool all_weak = true;
 	for (i = 0; i < asect->amiga_symbol_count; ++i)
-	  if (asect->amiga_symbols[i].symbol.value == 0)
 	  {
-	    section->symbol->name = asect->amiga_symbols[i].symbol.name;
-	    section->symbol->flags |= BSF_GLOBAL;
+	    if (asect->amiga_symbols[i].symbol.value == 0)
+	    {
+	      section->symbol->name = asect->amiga_symbols[i].symbol.name;
+	      section->symbol->flags |= BSF_GLOBAL;
+	    }
+	    if (0 == (asect->amiga_symbols[i].symbol.flags & BSF_WEAK))
+	      all_weak = false;
 	  }
 	if (i == asect->amiga_symbol_count)
 	  section->symbol->name = section->name;
+	if (i && all_weak)
+	  {
+	    /* SBF: mark the section optional */
+	    section->flags |= SEC_LINK_ONCE | SEC_LINK_DUPLICATES_DISCARD | SEC_LINK_DUPLICATES_SAME_CONTENTS;
+	    /* SBF: but clear the flags for the first found section .*/
+	    if (!bfd_section_already_linked (abfd, section, plink_info))
+	      section->flags &= ~(SEC_LINK_ONCE | SEC_LINK_DUPLICATES_DISCARD | SEC_LINK_DUPLICATES_SAME_CONTENTS);
+	  }
       }
     }
 
