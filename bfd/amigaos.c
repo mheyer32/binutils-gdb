@@ -1273,7 +1273,8 @@ amiga_handle_cdb_hunk (
 	 This will change in the future */
     case HUNK_DEBUG:
       /* handle .stab and .stabs as real sections. */
-      if (current_name && (0 == strcmp (current_name, ".stab") || 0 == strcmp (current_name, ".stabstr")))
+      if (current_name && (0 == strcmp (current_name, ".stab") || 0 == strcmp (current_name, ".stabstr")
+	  || 0 == strncmp (current_name, ".debug_", 7)))
 	{
 	  secflags = SEC_HAS_CONTENTS;
 	  goto do_section;
@@ -2183,6 +2184,8 @@ amiga_write_section_contents (
       if (!write_longs (n, 1, abfd) || !write_name (abfd, section->name, 0))
 	return false;
     }
+  if (0 == strncmp(section->name, ".debug_", 7))
+    section->flags = (section->flags & ~(SEC_CODE | SEC_DATA | SEC_ALLOC | SEC_LOAD)) | SEC_DEBUGGING;
 
   /* Depending on the type of the section, write out HUNK_{CODE|DATA|BSS} */
   if (section->flags & SEC_CODE) /* Code section */
