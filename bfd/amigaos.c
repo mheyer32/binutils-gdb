@@ -1748,8 +1748,8 @@ amiga_write_object_contents (
 	      && !(amiga_base_relative && !strcmp (p->name, ".bss")))
 	    {
 	      /* don't count debug sections. */
-	      if (strcmp (p->name, ".stab"))
-	  n[2]++;
+	      if (strcmp (p->name, ".stab") && strncmp(p->name, ".debug_", 7))
+		n[2]++;
 	    }
 	else
 	  remove_section_index (p, index_map);
@@ -1786,7 +1786,7 @@ amiga_write_object_contents (
 	    continue;
 
 	  /* don't add debug sections. */
-	  if (!strcmp (p->name, ".stab") || !strcmp (p->name, ".stabstr"))
+	  if (!strcmp (p->name, ".stab") || !strcmp (p->name, ".stabstr") || !strncmp(p->name, ".debug_", 7))
 	    continue;
 
 	  if (datadata_relocs && !strcmp(p->name,".text"))
