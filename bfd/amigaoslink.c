@@ -1150,8 +1150,8 @@ amiga_final_link (
   struct bfd_link_order *p;
   size_t outsymalloc;
   struct generic_write_global_symbol_info wginfo;
-  struct bfd_link_hash_entry *h =
-    bfd_link_hash_lookup (info->hash, "___a4_init", false, false, true);
+  struct bfd_link_hash_entry *h = bfd_link_hash_lookup (info->hash, "___a4_init", false, false, true);
+  struct bfd_link_hash_entry *h2 = bfd_link_hash_lookup (info->hash, "___a4_init2", false, false, true);
 
   /**
    * insert an empty data section if bss exists.
@@ -1161,15 +1161,12 @@ amiga_final_link (
       asection * ds = NULL;
       asection * bs = NULL;
       asection * s;
-      int hno = 0;
       for (s = abfd->sections; s != NULL; s = s->next)
 	{
 	  if (!strcmp(s->name, ".data"))
 	    ds = s;
 	  if (!strcmp(s->name, ".bss"))
 	    bs = s;
-	  if (s->target_index >= hno)
-	    hno = s->target_index + 1;
 	}
       if (bs && !ds)
 	{
@@ -1180,13 +1177,13 @@ amiga_final_link (
 	  amiga_per_section(section)->disk_size = 0;
 	}
     }
-
-  if (amiga_base_relative && h && h->type == bfd_link_hash_defined) {
-    AMIGA_DATA(abfd)->baserel = true;
-    AMIGA_DATA(abfd)->a4init = h->u.def.value;
-  }
+  if (amiga_base_relative && h2 && h2->type == bfd_link_hash_defined)
+    AMIGA_DATA(abfd)->a4init = h2->u.def.value;
   else
-    AMIGA_DATA(abfd)->baserel = false;
+    AMIGA_DATA(abfd)->a4init = 0x7ffe;
+
+  AMIGA_DATA(abfd)->baserel = amiga_base_relative;
+//  printf("br=%d, off=%d %p %p\n", amiga_base_relative, AMIGA_DATA(abfd)->a4init, h ? h->u.def.value : 0, h2 ? h2->u.def.value : 0);
 
   DPRINT(5,("Entering final_link\n"));
 

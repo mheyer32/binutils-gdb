@@ -40,7 +40,6 @@ SECTIONS
     *(.data)
     *(.data.*)
     *(.gnu.linkonce.d.*)
-    ${RELOCATING+___a4_init = 0x7ffe;}
     ${RELOCATING+__edata = .;}
   }
   ${RELOCATING+___data_size = SIZEOF(.data);}

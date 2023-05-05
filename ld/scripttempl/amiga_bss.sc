@@ -31,7 +31,6 @@ SECTIONS
   }
   ${RELOCATING+___text_size = SIZEOF(.text);}
   ${RELOCATING+. = ${DATA_ALIGNMENT};}
-  ${RELOCATING+___a4_init = 0x7ffe;}
   .data :
   {
     ${RELOCATING+__sdata = .;}
@@ -39,13 +38,15 @@ SECTIONS
     *(SORT_BY_NAME(.dlist_*))
     *(.end_of_dlists)
     *(.data)
-    *(.data.*)    
+    *(.data.*)
     *(.gnu.linkonce.d.*)
+    ${RELOCATING+___a4_init = 0x7ffe;}
     ${RELOCATING+__edata = .;}
   }
   .bss :
   {
     ${RELOCATING+__bss_start = .;}
+    ${RELOCATING+___a4_init2 = 0x7ffe;}
     *(.bss)
     *(.bss.*)
     *(COMMON)
