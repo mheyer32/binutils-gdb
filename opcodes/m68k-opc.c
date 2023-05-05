@@ -272,6 +272,7 @@ const struct m68k_opcode m68k_opcodes[] =
 {"cmpiw", 4,	one(0006100),	one(0177700), "#w$s", m68000 | m68010 },
 {"cmpiw", 4,	one(0006100),	one(0177700), "#w@s", m68020up | cpu32 | fido_a },
 {"cmpiw", 4,	one(0006100),	one(0177700), "#wDs", mcfisa_b | mcfisa_c },
+{"cmpiwl",4,    one(0047000),   one(0177700), "#w@s", m68080 }, // 68080 APOLLO
 {"cmpil", 6,	one(0006200),	one(0177700), "#l$s", m68000 | m68010 },
 {"cmpil", 6,	one(0006200),	one(0177700), "#l@s", m68020up | cpu32 | fido_a },
 {"cmpil", 6,	one(0006200),	one(0177700), "#lDs", mcfisa_a },
