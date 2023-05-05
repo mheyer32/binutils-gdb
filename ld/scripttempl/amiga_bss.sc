@@ -16,6 +16,7 @@ SECTIONS
     *(.text)
     *(.text.main)
     *(.text*)
+    *(_*)
     *(.rodata*)
     *(.data.rel.ro*)
     *(.gnu.linkonce.t.*)
@@ -30,6 +31,7 @@ SECTIONS
   }
   ${RELOCATING+___text_size = SIZEOF(.text);}
   ${RELOCATING+. = ${DATA_ALIGNMENT};}
+  ${RELOCATING+___a4_init = 0x7ffe;}
   .data :
   {
     ${RELOCATING+__sdata = .;}
@@ -39,7 +41,6 @@ SECTIONS
     *(.data)
     *(.data.*)    
     *(.gnu.linkonce.d.*)
-    ${RELOCATING+___a4_init = 0x7ffe;}
     ${RELOCATING+__edata = .;}
   }
   .bss :

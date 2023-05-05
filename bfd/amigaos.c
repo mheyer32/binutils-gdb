@@ -204,7 +204,7 @@ static bfd_cleanup amiga_object_p PARAMS ((bfd *));
 static sec_ptr amiga_get_section_by_hunk_number PARAMS ((bfd *, long));
 static bool amiga_add_reloc PARAMS ((bfd *, sec_ptr, bfd_size_type,
 	amiga_symbol_type *, reloc_howto_type *, long));
-static sec_ptr amiga_make_unique_section PARAMS ((bfd *, const char *));
+sec_ptr amiga_make_unique_section PARAMS ((bfd *, const char *));
 static bool parse_archive_units PARAMS ((bfd *, int *, file_ptr,
  	bool, struct arch_syms **, symindex *));
 static bool amiga_digest_file PARAMS ((bfd *));
@@ -538,7 +538,7 @@ amiga_add_reloc (
 
 /* BFD doesn't currently allow multiple sections with the same
    name, so we try a little harder to get a unique name.  */
-static sec_ptr
+sec_ptr
 amiga_make_unique_section (
      bfd *abfd,
      const char *name)
@@ -1770,7 +1770,8 @@ amiga_write_object_contents (
 		datadata_relocs = determine_datadata_relocs (abfd, p);
 		data_sec = p;
 	      }
-	    else if (!strcmp(p->name,".bss"))
+	    //else  // really???
+	    if (!strcmp(p->name,".bss"))
 	      {
 		/* Get size for header */
 		  bss_size = p->rawsize;

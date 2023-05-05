@@ -116,6 +116,8 @@ aout_amiga_final_link PARAMS ((bfd *, struct bfd_link_info *));
 
 bool amiga_slurp_relocs PARAMS ((bfd *, sec_ptr, asymbol **));
 
+sec_ptr amiga_make_unique_section PARAMS ((bfd *, const char *));
+
 static bfd_reloc_status_type
 my_add_to PARAMS ((arelent *, void *, int, int));
 static void amiga_update_target_section PARAMS ((sec_ptr));
@@ -1150,6 +1152,34 @@ amiga_final_link (
   struct generic_write_global_symbol_info wginfo;
   struct bfd_link_hash_entry *h =
     bfd_link_hash_lookup (info->hash, "___a4_init", false, false, true);
+
+  /**
+   * insert an empty data section if bss exists.
+   */
+  if (amiga_base_relative)
+    {
+      asection * ds = NULL;
+      asection * bs = NULL;
+      asection * s;
+      int hno = 0;
+      for (s = abfd->sections; s != NULL; s = s->next)
+	{
+	  if (!strcmp(s->name, ".data"))
+	    ds = s;
+	  if (!strcmp(s->name, ".bss"))
+	    bs = s;
+	  if (s->target_index >= hno)
+	    hno = s->target_index + 1;
+	}
+      if (bs && !ds)
+	{
+	  asection * section = bs->output_section;
+	  section->name = ".data";
+	  section->flags |= SEC_ALLOC | SEC_LOAD | SEC_DATA | SEC_HAS_CONTENTS | SEC_IN_MEMORY;
+	  section->contents = (unsigned char *)bfd_malloc(8); // for empty data_data_relocs
+	  amiga_per_section(section)->disk_size = 0;
+	}
+    }
 
   if (amiga_base_relative && h && h->type == bfd_link_hash_defined) {
     AMIGA_DATA(abfd)->baserel = true;

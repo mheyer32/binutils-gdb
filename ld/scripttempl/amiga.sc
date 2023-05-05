@@ -16,6 +16,7 @@ SECTIONS
     *(.text)
     *(.text.main)
     *(.text*)
+    *(_*)
     *(.rodata*)
     *(.data.rel.ro*)
     *(.gnu.linkonce.t.*)
