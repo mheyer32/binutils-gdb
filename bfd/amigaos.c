@@ -1770,7 +1770,7 @@ amiga_write_object_contents (
 		datadata_relocs = determine_datadata_relocs (abfd, p);
 		data_sec = p;
 	      }
-	    //else  // really???
+	    else  // really!!!
 	    if (!strcmp(p->name,".bss"))
 	      {
 		/* Get size for header */
