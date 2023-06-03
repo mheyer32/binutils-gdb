@@ -47,11 +47,6 @@ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  */
 #define NULL 0
 #endif
 
-#ifndef alloca
-extern PTR alloca PARAMS ((size_t));
-#endif
-
-
 bool
 MY(final_link) PARAMS ((bfd *, struct bfd_link_info *));
 
