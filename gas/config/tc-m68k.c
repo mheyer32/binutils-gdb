@@ -5060,7 +5060,8 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
      in write.c may have clobbered fx_pcrel, so we need to examine the
      reloc type.  */
   if ((fixP->fx_pcrel
-       || fixP->fx_r_type == BFD_RELOC_8_PCREL)
+       || fixP->fx_r_type == BFD_RELOC_8_PCREL
+       || fixP->fx_r_type == BFD_RELOC_NONE)
       && fixP->fx_size == 1
       && (fixP->fx_addsy == NULL
 	  || S_IS_DEFINED (fixP->fx_addsy))
