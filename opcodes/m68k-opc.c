@@ -2148,9 +2148,9 @@ const struct m68k_opcode m68k_opcodes[] =
 {"subil", 6,	one(0002200),	one(0177700), "#l$s", m68000up },
 {"subil", 6,	one(0002200),	one(0177700), "#lDs", mcfisa_a },
 
-{"subqb", 2,	one(0050400),	one(0170700), "Qd%s", m68000up },
-{"subqw", 2,	one(0050500),	one(0170700), "Qd%s", m68000up },
-{"subql", 2,	one(0050600),	one(0170700), "Qd%s", m68000up | mcfisa_a },
+{"subqb", 2,	one(0050400),	one(0170700), "Qd$b", m68000up },
+{"subqw", 2,	one(0050500),	one(0170700), "Qd%w", m68000up },
+{"subql", 2,	one(0050600),	one(0170700), "Qd%l", m68000up | mcfisa_a },
 
 /* The sub opcode can generate the suba, subi, and subq instructions.  */
 {"subb", 2,	one(0050400),	one(0170700), "Qd%s", m68000up },
