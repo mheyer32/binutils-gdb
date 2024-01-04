@@ -342,6 +342,8 @@ const struct m68k_opcode m68k_opcodes[] =
 {"dbvc", 2,	one(0054310),	one(0177770), "DsBw", m68000up },
 {"dbvs", 2,	one(0054710),	one(0177770), "DsBw", m68000up },
 
+{"dbral", 2, one(0050710), one(0177770), "DsB~", m68080 },   // APOLLO 68080 DBRAL
+
 {"divsw", 2,	one(0100700),	one(0170700), ";wDd", m68000up | mcfhwdiv },
 
 {"divsl", 4, 	two(0046100,0006000),two(0177700,0107770),";lD3D1", m68020up | cpu32 | fido_a },
