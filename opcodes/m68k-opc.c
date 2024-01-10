@@ -1676,6 +1676,13 @@ const struct m68k_opcode m68k_opcodes[] =
 {"mvzb", 2,	one(0070600),	one(0170700), "*bDd", mcfisa_b | mcfisa_c },
 {"mvzw", 2,	one(0070700),	one(0170700), "*wDd", mcfisa_b | mcfisa_c },
 
+{"moviwl",4,    one(0121000),   one(0177700), "#w$s", m68080 }, // Apollo 68080
+{"mov3ql", 2,   one(0120100),   one(0170700), "xd%s", m68080 }, // Apollo 68080
+{"mvsb", 2,     one(0120400),   one(0170700), "*bDd", m68080 }, // Apollo 68080
+{"mvsw", 2,     one(0120500),   one(0170700), "*wDd", m68080 }, // Apollo 68080
+{"mvzb", 2,     one(0120600),   one(0170700), "*bDd", m68080 }, // Apollo 68080
+{"mvzw", 2,     one(0120700),   one(0170700), "*wDd", m68080 }, // Apollo 68080
+
 {"movesb", 4,	two(0007000, 0),     two(0177700, 07777), "~sR1", m68010up },
 {"movesb", 4,	two(0007000, 04000), two(0177700, 07777), "R1~s", m68010up },
 {"movesw", 4,	two(0007100, 0),     two(0177700, 07777), "~sR1", m68010up },
