@@ -344,6 +344,8 @@ struct m68k_it
   int numo;			/* Number of shorts in opcode.  */
   short opcode[11];
 
+  short bank;
+
   struct m68k_op operands[6];
 
   int nexp;			/* Number of exprs in use.  */
