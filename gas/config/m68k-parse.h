@@ -61,6 +61,40 @@ enum m68k_register
   ADDR6,
   ADDR7,
 
+  DATA8,	/* additional data regs of the 68080. */
+  DATA9,
+  DATA10,
+  DATA11,
+  DATA12,
+  DATA13,
+  DATA14,
+  DATA15,
+  DATA16,
+  DATA17,
+  DATA18,
+  DATA19,
+  DATA20,
+  DATA21,
+  DATA22,
+  DATA23,
+  DATA24,
+  DATA25,
+  DATA26,
+  DATA27,
+  DATA28,
+  DATA29,
+  DATA30,
+  DATA31,
+
+  ADDR8,	/* additional address regs of the 68080. */
+  ADDR9,
+  ADDR10,
+  ADDR11,
+  ADDR12,
+  ADDR13,
+  ADDR14,
+  ADDR15,
+
   FP0,				/* Eight FP registers */
   FP1,
   FP2,
@@ -322,6 +356,10 @@ enum m68k_operand_type
   REGLST
 };
 
+enum m68080_bank {
+  BANK0, BANK1, BANK2, BANK3
+};
+
 /* The structure used to hold a parsed operand.  */
 
 struct m68k_op
@@ -331,6 +369,8 @@ struct m68k_op
 
   /* The main register.  */
   enum m68k_register reg;
+
+  enum m68080_bank bank;
 
   /* The register mask for mode REGLST.  */
   unsigned long mask;

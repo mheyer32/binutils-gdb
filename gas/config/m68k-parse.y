@@ -221,7 +221,7 @@ motorola_operand:
 		{
 		  op->reg = $4;
 		  op->disp = $2;
-		  if (($4 >= ZADDR0 && $4 <= ZADDR7)
+		  if (($4 >= ZADDR0 && $4 <= ZADDR7) || ($4 >= ZADDR8 && $4 <= ZADDR15)
 		      || $4 == ZPC)
 		    op->mode = BASE;
 		  else
@@ -231,7 +231,7 @@ motorola_operand:
 		{
 		  op->reg = $2;
 		  op->disp = $4;
-		  if (($2 >= ZADDR0 && $2 <= ZADDR7)
+		  if (($2 >= ZADDR0 && $2 <= ZADDR7) || ($2 >= ZADDR8 && $2 <= ZADDR15)
 		      || $2 == ZPC)
 		    op->mode = BASE;
 		  else
@@ -241,7 +241,7 @@ motorola_operand:
 		{
 		  op->reg = $3;
 		  op->disp = $1;
-		  if (($3 >= ZADDR0 && $3 <= ZADDR7)
+		  if (($3 >= ZADDR0 && $3 <= ZADDR7) || ($3 >= ZADDR8 && $3 <= ZADDR15)
 		      || $3 == ZPC)
 		    op->mode = BASE;
 		  else
@@ -422,7 +422,7 @@ mit_operand:
 	  optzapc '@'
 		{
 		  /* We use optzapc to avoid a shift/reduce conflict.  */
-		  if ($1 < ADDR0 || $1 > ADDR7)
+		  if (($1 < ADDR0 || $1 > ADDR7) && ($1 < ADDR8 || $1 > ADDR15))
 		    yyerror (_("syntax error"));
 		  op->mode = AINDR;
 		  op->reg = $1;
@@ -430,7 +430,7 @@ mit_operand:
 	| optzapc '@' '+'
 		{
 		  /* We use optzapc to avoid a shift/reduce conflict.  */
-		  if ($1 < ADDR0 || $1 > ADDR7)
+		  if (($1 < ADDR0 || $1 > ADDR7) && ($1 < ADDR8 || $1 > ADDR15))
 		    yyerror (_("syntax error"));
 		  op->mode = AINC;
 		  op->reg = $1;
@@ -438,7 +438,7 @@ mit_operand:
 	| optzapc '@' '-'
 		{
 		  /* We use optzapc to avoid a shift/reduce conflict.  */
-		  if ($1 < ADDR0 || $1 > ADDR7)
+		  if (($1 < ADDR0 || $1 > ADDR7) && ($1 < ADDR8 || $1 > ADDR15))
 		    yyerror (_("syntax error"));
 		  op->mode = ADEC;
 		  op->reg = $1;
@@ -447,7 +447,7 @@ mit_operand:
 		{
 		  op->reg = $1;
 		  op->disp = $4;
-		  if (($1 >= ZADDR0 && $1 <= ZADDR7)
+		  if (($1 >= ZADDR0 && $1 <= ZADDR7) || ($1 >= ZADDR8 && $1 <= ZADDR15)
 		      || $1 == ZPC)
 		    op->mode = BASE;
 		  else
@@ -650,11 +650,11 @@ reglistpair:
 reglistreg:
 	  DR
 		{
-		  $$ = $1 - DATA0;
+		  $$ = $1 < DATA8 ? $1 - DATA0 : $1 - DATA8 + 256;
 		}
 	| AR
 		{
-		  $$ = $1 - ADDR0 + 8;
+		  $$ = $1 < ADDR8 ? $1 - ADDR0 + 8 : $1 - ADDR8 + 128 + 8;
 		}
 	| FPR
 		{
@@ -850,7 +850,11 @@ yylex (void)
 
       if (reg >= DATA0 && reg <= DATA7)
 	ret = DR;
+	  else if (reg >= DATA8 && reg <= DATA23)
+	ret = DR;	
       else if (reg >= ADDR0 && reg <= ADDR7)
+	ret = AR;
+      else if (reg >= ADDR8 && reg <= ADDR15)
 	ret = AR;
       else if (reg >= FP0 && reg <= FP7)
 	return FPR;
@@ -860,9 +864,9 @@ yylex (void)
 	return FPCR;
       else if (reg == PC)
 	return LPC;
-      else if (reg >= ZDATA0 && reg <= ZDATA7)
+      else if ((reg >= ZDATA0 && reg <= ZDATA7) || (reg >= ZDATA8 && reg <= ZDATA31)) 
 	ret = ZDR;
-      else if (reg >= ZADDR0 && reg <= ZADDR7)
+      else if ((reg >= ZADDR0 && reg <= ZADDR7) || (reg >= ZADDR8 && reg <= ZADDR15)) 
 	ret = ZAR;
       else if (reg == ZPC)
 	return LZPC;
@@ -1093,6 +1097,7 @@ yylex (void)
 int
 m68k_ip_op (char *s, struct m68k_op *oparg)
 {
+  int r;
   memset (oparg, 0, sizeof *oparg);
   oparg->error = NULL;
   oparg->index.reg = ZDATA0;
@@ -1103,7 +1108,24 @@ m68k_ip_op (char *s, struct m68k_op *oparg)
   str = strorig = s;
   op = oparg;
 
-  return yyparse ();
+  r = yyparse ();
+  if (oparg->reg >= DATA8 && oparg->reg <= DATA31)
+    {
+      oparg->mode = DREG;
+      oparg->bank = (oparg->reg - DATA8 + 8) >> 3;
+      oparg->reg = ((oparg->reg - DATA8) & 7) + DATA0; 
+    }
+  else if (oparg->reg >= ADDR8 && oparg->reg <= ADDR15)
+    {
+      oparg->bank = BANK1;
+      oparg->reg = oparg->reg - ADDR8 + ADDR0;
+    }
+  if (oparg->index.reg >= DATA8 && oparg->index.reg <= ADDR15)
+    {
+      oparg->error = "invalid index register";
+      r = 1;
+    } 
+  return r;
 }
 
 /* The error handler.  */

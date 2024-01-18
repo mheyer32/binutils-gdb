@@ -1933,8 +1933,8 @@ m68k_ip (char *instring)
 		case '4':
 		  if (opP->mode != AINDR && opP->mode != AINC && opP->mode != ADEC
 		      && (opP->mode != DISP
-			   || opP->reg < ADDR0
-			   || opP->reg > ADDR7))
+			   || (!(opP->reg >= ADDR0 && opP->reg <= ADDR7) &&
+			       !(opP->reg >= ADDR8 && opP->reg <= ADDR15))))
 		    ++losing;
 		  break;
 
@@ -1970,8 +1970,8 @@ m68k_ip (char *instring)
 
 		case 'd':
 		  if (opP->mode != DISP
-		      || opP->reg < ADDR0
-		      || opP->reg > ADDR7)
+			   || (!(opP->reg >= ADDR0 && opP->reg <= ADDR7) &&
+			       !(opP->reg >= ADDR8 && opP->reg <= ADDR15)))
 		    losing++;
 		  break;
 
@@ -2497,6 +2497,22 @@ m68k_ip (char *instring)
   the_ins.numo = opcode->m_codenum;
   the_ins.opcode[0] = getone (opcode);
   the_ins.opcode[1] = gettwo (opcode);
+
+  {
+    // 68080 support
+    int k;
+    int bank = 0xf7100;
+    for (k = 0, opP = &the_ins.operands[0]; k < opsfound; ++k, ++opP) {
+	bank |= (int)opP->bank << (2 - k*2);
+    }
+    if (bank != 0xf7100)
+      {
+	/* For a single operand instruction, both AA and BB should be the same. */
+	if (opsfound == 1)
+	  bank |= (bank >> 2) & 3;
+	the_ins.bank = bank;
+      } else
+	the_ins.bank = 0;
 
   for (s = the_ins.args, opP = &the_ins.operands[0]; *s; s += 2, opP++)
     {
@@ -3795,7 +3811,7 @@ m68k_ip (char *instring)
 	  abort ();
 	}
     }
-
+  }
   /* By the time when get here (FINALLY) the_ins contains the complete
      instruction, ready to be emitted. . .  */
 }
@@ -4162,6 +4178,39 @@ static const struct init_entry init_table[] =
   { "status", FPS },
   { "iaddr", FPI },
 
+  { "b0", ADDR8 },
+  { "b1", ADDR9 },
+  { "b2", ADDR10 },
+  { "b3", ADDR11 },
+  { "b4", ADDR12 },
+  { "b5", ADDR13 },
+  { "b6", ADDR14 },
+  { "b7", ADDR15 },
+  { "e0", DATA8 },
+  { "e1", DATA9 },
+  { "e2", DATA10 },
+  { "e3", DATA11 },
+  { "e4", DATA12 },
+  { "e5", DATA13 },
+  { "e6", DATA14 },
+  { "e7", DATA15 },
+  { "e8", DATA16 },
+  { "e9", DATA17 },
+  { "e10", DATA19 },
+  { "e11", DATA19 },
+  { "e12", DATA20 },
+  { "e13", DATA21 },
+  { "e14", DATA22 },
+  { "e15", DATA23 },
+  { "e16", DATA24 },
+  { "e17", DATA25 },
+  { "e18", DATA26 },
+  { "e19", DATA27 },
+  { "e20", DATA28 },
+  { "e21", DATA29 },
+  { "e22", DATA30 },
+  { "e23", DATA31 },
+
   { "cop0", COP0 },
   { "cop1", COP1 },
   { "cop2", COP2 },
@@ -4469,7 +4518,20 @@ md_assemble (char *str)
   if (the_ins.nfrag == 0)
     {
       /* No frag hacking involved; just put it out.  */
-      toP = frag_more (2 * the_ins.numo);
+      int numc = 2 * the_ins.numo;
+
+      if (the_ins.bank)
+        numc += 2;
+
+      toP = frag_more (numc);
+
+      if (the_ins.bank)
+	{
+  	  the_ins.bank |= (numc / 2 - 2) << 6;
+	  md_number_to_chars (toP, (long) the_ins.bank, 2);
+	  toP += 2;
+	}
+
       fromP = &the_ins.opcode[0];
       for (m = the_ins.numo; m; --m)
 	{
@@ -4529,6 +4591,10 @@ md_assemble (char *str)
       wid += 2 * (the_ins.numo - the_ins.fragb[n - 1].fragoff);
     /* frag_var part.  */
     wid += FRAG_VAR_SIZE;
+
+    if (the_ins.bank)
+      wid += 2;
+
     /* Make sure the whole insn fits in one chunk, in particular that
        the var part is attached, as we access one byte before the
        variable frag for byte branches.  */
@@ -4543,7 +4609,19 @@ md_assemble (char *str)
 	wid = 2 * the_ins.fragb[n].fragoff;
       else
 	wid = 2 * (the_ins.numo - the_ins.fragb[n - 1].fragoff);
+
+      if (the_ins.bank)
+        wid += 2;
+
       toP = frag_more (wid);
+
+      if (the_ins.bank)
+  	{
+  	  the_ins.bank |= (wid / 2 - 2) << 6;
+  	  md_number_to_chars (toP, (long) the_ins.bank, 2);
+  	  toP += 2;
+  	}
+
       to_beg_P = toP;
       shorts_this_frag = 0;
       for (m = wid / 2; m; --m)
