@@ -221,7 +221,7 @@ motorola_operand:
 		{
 		  op->reg = $4;
 		  op->disp = $2;
-		  if (($4 >= ZADDR0 && $4 <= ZADDR7) || ($4 >= ZADDR8 && $4 <= ZADDR15)
+		  if (($4 >= ZADDR0 && $4 <= ZADDR7)
 		      || $4 == ZPC)
 		    op->mode = BASE;
 		  else
@@ -231,7 +231,7 @@ motorola_operand:
 		{
 		  op->reg = $2;
 		  op->disp = $4;
-		  if (($2 >= ZADDR0 && $2 <= ZADDR7) || ($2 >= ZADDR8 && $2 <= ZADDR15)
+		  if (($2 >= ZADDR0 && $2 <= ZADDR7)
 		      || $2 == ZPC)
 		    op->mode = BASE;
 		  else
@@ -241,7 +241,7 @@ motorola_operand:
 		{
 		  op->reg = $3;
 		  op->disp = $1;
-		  if (($3 >= ZADDR0 && $3 <= ZADDR7) || ($3 >= ZADDR8 && $3 <= ZADDR15)
+		  if (($3 >= ZADDR0 && $3 <= ZADDR7)
 		      || $3 == ZPC)
 		    op->mode = BASE;
 		  else
@@ -447,7 +447,7 @@ mit_operand:
 		{
 		  op->reg = $1;
 		  op->disp = $4;
-		  if (($1 >= ZADDR0 && $1 <= ZADDR7) || ($1 >= ZADDR8 && $1 <= ZADDR15)
+		  if (($1 >= ZADDR0 && $1 <= ZADDR7)
 		      || $1 == ZPC)
 		    op->mode = BASE;
 		  else
@@ -864,9 +864,9 @@ yylex (void)
 	return FPCR;
       else if (reg == PC)
 	return LPC;
-      else if ((reg >= ZDATA0 && reg <= ZDATA7) || (reg >= ZDATA8 && reg <= ZDATA31)) 
+      else if (reg >= ZDATA0 && reg <= ZDATA7)
 	ret = ZDR;
-      else if ((reg >= ZADDR0 && reg <= ZADDR7) || (reg >= ZADDR8 && reg <= ZADDR15)) 
+      else if (reg >= ZADDR0 && reg <= ZADDR7) 
 	ret = ZAR;
       else if (reg == ZPC)
 	return LZPC;
@@ -1120,11 +1120,21 @@ m68k_ip_op (char *s, struct m68k_op *oparg)
       oparg->bank = BANK1;
       oparg->reg = oparg->reg - ADDR8 + ADDR0;
     }
-  if (oparg->index.reg >= DATA8 && oparg->index.reg <= ADDR15)
+  if (oparg->index.reg >= DATA16 && oparg->index.reg <= DATA23)
     {
-      oparg->error = "invalid index register";
+      oparg->error = "invalid index register, e8-e15 are not supported";
       r = 1;
-    } 
+    }
+  else if (oparg->index.reg >= DATA8 && oparg->index.reg <= DATA15)
+    {
+      oparg->bank |= BANK2;
+      oparg->index.reg += DATA0 - DATA8;
+    }
+  else if (oparg->index.reg >= ADDR8 && oparg->index.reg <= ADDR15)
+    {
+      oparg->bank |= BANK2;
+      oparg->index.reg += ADDR0 - ADDR8;
+    }
   return r;
 }
 
