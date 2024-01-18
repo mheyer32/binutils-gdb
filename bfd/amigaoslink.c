@@ -186,7 +186,7 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
 	  if (lol->type != bfd_indirect_link_order)
 	    continue;
 	  asection *s = lol->u.indirect.section;
-	  if (s->owner->xvec->flavour != bfd_target_amiga_flavour)
+	  if (s->owner->xvec->flavour != bfd_target_amiga_flavour && s->owner->xvec->flavour != bfd_target_aout_flavour)
 	    continue;
 
 //	  printf("%s:%p:%d:%d=%d -> %s:%d:%d\n", s->name, s, (int)s->output_offset, (int)s->rawsize, (int)(s->output_offset + s->rawsize),
