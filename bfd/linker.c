@@ -2976,6 +2976,9 @@ _bfd_generic_section_already_linked (bfd *abfd ATTRIBUTE_UNUSED,
 
   name = bfd_section_name (sec);
 
+  if (!_bfd_section_already_linked_table.size)
+    bfd_section_already_linked_table_init();
+
   already_linked_list = bfd_section_already_linked_table_lookup (name);
 
   l = already_linked_list->entry;
