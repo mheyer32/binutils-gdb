@@ -8116,14 +8116,9 @@ md_pcrel_from_m68k (fixS *fixP, segT current_section)
 	return -adjust;
 
       asymbol * sym = symbol_get_bfdsym (fixP->fx_addsy);
-      if (adjust != -1 && sym->section != current_section)
-	{
-	  if (strcmp(sym->section->name, "*UND*") && strcmp(sym->section->name, current_section->name))
-	    {
-	      return -adjust + fixP->fx_frag->fr_address;
-	    }
+      if (adjust != -1 && sym->section != current_section &&
+	  (!strcmp(sym->section->name, "*UND*") || !strcmp(sym->section->name, current_section->name)))
 	  return -adjust;
-	}
 
       // fall through
     }
