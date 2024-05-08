@@ -22,7 +22,6 @@ SECTIONS
     *(.gnu.linkonce.t.*)
     *(.gnu.linkonce.r.*)
     *(.gcc_except_table*)
-    ${CONSTRUCTING+CONSTRUCTORS}    
     *(SORT_BY_NAME(.list___EH_FRAME*))
     *(SORT_BY_NAME(.list_*))
     *(.end_of_lists)
@@ -35,12 +34,13 @@ SECTIONS
   .data :
   {
     ${RELOCATING+__sdata = .;}
+    *(.data)
+    *(.data.*)
+    ${CONSTRUCTING+CONSTRUCTORS}    
     *(SORT_BY_NAME(.dlist___EH_FRAME_OBJECT*))
     *(SORT_BY_NAME(.dlist_*))
     *(.end_of_dlists)
     *(.data.__EH_FRAME_OBJECT__*)    
-    *(.data)
-    *(.data.*)
     *(.gnu.linkonce.d.*)
     ${RELOCATING+___a4_init = 0x7ffe;}
     ${RELOCATING+__edata = .;}
@@ -64,6 +64,27 @@ SECTIONS
   .bsschip :
   {
     *(.bsschip)
+  }  
+  .dwarf :
+  {
+    ${RELOCATING+__debug_frame_start = .;}
+    *(.debug_frame)
+    ${RELOCATING+__debug_info_start = .;}
+    *(.debug_info)
+    ${RELOCATING+__debug_abbrev_start = .;}
+    *(.debug_abbrev)
+      ${RELOCATING+__debug_loclists_start = .;}
+    *(.debug_loclists)
+    ${RELOCATING+__debug_aranges_start = .;}
+    *(.debug_aranges)
+    ${RELOCATING+__debug_rgnlists_start = .;}
+    *(.debug_rnglists)
+    ${RELOCATING+__debug_line_start = .;}
+    *(.debug_line)
+    ${RELOCATING+__debug_str_start = .;}
+    *(.debug_str)
+    ${RELOCATING+__debug_line_str_start = .;}
+    *(.debug_line_str)
   }  
 }
 EOF
