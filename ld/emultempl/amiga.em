@@ -204,6 +204,7 @@ gld${EMULATION_NAME}_before_parse ()
 
 #if defined(TARGET_IS_amiga_bss)
   amiga_base_relative = 1;
+  config.has_shared = true;
 #endif
 
 #ifndef TARGET_ /* I.e., if not generic.  */
