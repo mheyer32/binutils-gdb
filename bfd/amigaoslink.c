@@ -67,6 +67,7 @@ the original routines from @file{linker.c} and @file{reloc.c}.
 #include "bfdlink.h"
 #include "genlink.h"
 #include "libamiga.h"
+#include <time.h>
 
 #ifndef alloca
 extern void * alloca PARAMS ((size_t));
@@ -571,6 +572,89 @@ get_relocated_section_contents (
 				 (bfd_vma) 0,
 				 input_section->rawsize))
     goto error_return;
+
+  // hack to patch the version and the name into the library
+  if (link_info->type == type_dll && input_bfd->my_archive == NULL)
+    {
+      static bool gotValues;
+      static bool textDone;
+      static bool dataDone;
+      static char const * libName;
+      static int major;
+      static int minor;
+
+      if (!gotValues)
+	{
+          struct bfd_sym_chain *sym;
+          for (sym = link_info->gc_sym_list; sym != NULL; sym = sym->next)
+            {
+              if (0 == strncmp("libName=", sym->name, 8))
+        	  libName = sym->name + 8;
+              else if (0 == strncmp("libVersionMajor=", sym->name, 16))
+        	major = strtoul(sym->name + 16, 0, 10);
+              else if (0 == strncmp("libVersionMinor=", sym->name, 16))
+        	minor = strtoul(sym->name + 16, 0, 10);
+            }
+          if (!libName)
+            {
+              libName = strdup(input_section->output_section->owner->filename);
+              char * dot = strchr(libName, '.');
+              *dot = 0;
+            }
+	  gotValues = true;
+	}
+
+      if (!textDone && 0 == strcmp(".text", input_section->name))
+	{
+          unsigned oi = 0;
+	  for (; oi < input_bfd->symcount; ++oi)
+	    {
+	      asymbol *asym = input_bfd->outsymbols[oi];
+	      if (0 == strcmp("___libName", asym->name))
+		{
+		  char * to = (char *)data + asym->value;
+		  strncpy(to, libName, 20); // leave room for .library
+		  strcat(to, ".library");
+		  int l = strlen(to);
+		  to += l + 1;
+		  time_t t = time(NULL);
+		  struct tm * tm = localtime(&t);
+		  snprintf(to, 40, "%s %d.%d (%d-%02d-%02d)", libName, major, minor,
+			   tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday);
+		  to += strlen(to) + 1;
+		  // insert an ID
+		  *to++ = 0x0b;
+		  *to++ = 0xeb;
+		  *to   = 0xb0;
+		}
+	      else if (0 == strcmp("___RomTag", asym->name))
+		{
+		  data[asym->value + 11] = major;
+		  int addr = bfd_getb32(data + asym->value + 18);
+		  addr += strlen(libName) + 9; // .library\0
+		  bfd_putb32(addr, data + asym->value + 18);
+		}
+            }
+          textDone = true;
+	}
+      if (!dataDone && 0 == strcmp(".data", input_section->name))
+	{
+          unsigned oi = 0;
+	  for (; oi < input_bfd->symcount; ++oi)
+	    {
+	      asymbol *asym = input_bfd->outsymbols[oi];
+	      if (0 == strcmp("___lib", asym->name))
+		{
+		  // 16, 18
+		  data[asym->value + 16] = major >> 8;
+		  data[asym->value + 17] = major;
+		  data[asym->value + 18] = minor >> 8;
+		  data[asym->value + 19] = minor;
+		}
+            }
+	  dataDone = true;
+	}
+    }
 
   insert_long_jumps(abfd, input_bfd, input_section, link_order, &data);
 
