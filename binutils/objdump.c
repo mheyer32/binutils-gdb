@@ -732,6 +732,9 @@ sanitize_string (const char * in)
 
 
 
+
+static void dummy_error_func (int status, bfd_vma memaddr, struct disassemble_info *dinfo) {
+}
 static int dummy_fprintf(void * v ATTRIBUTE_UNUSED, char const *f ATTRIBUTE_UNUSED, ...) {
   return 0;
 }
@@ -4193,7 +4196,7 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
   dinf->fprintf_func = tmp_fprintf;
   rel_pp = tmp_rel_pp;
 
-  dinf->memory_error_func = dummy_fprintf;
+  dinf->memory_error_func = dummy_error_func;
     }
 #endif
 
