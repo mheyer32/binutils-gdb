@@ -35,7 +35,7 @@ SECTIONS
   {
     ${RELOCATING+__sdata = .;}
     *(.data)
-    *(.data.*)
+    *(SORT_BY_NAME(.data.*))
     ${CONSTRUCTING+CONSTRUCTORS}    
     *(SORT_BY_NAME(.dlist___EH_FRAME_OBJECT*))
     *(SORT_BY_NAME(.dlist_*))
