@@ -16987,6 +16987,8 @@ build_warnings="-Wall -Wpointer-arith \
 -Wredundant-move \
 -Wmissing-declarations \
 -Wstrict-null-sentinel \
+-Wno-error=deprecated-declarations \
+-Wno-error=self-move \
 "
 
 # The -Wmissing-prototypes flag will be accepted by GCC, but results
